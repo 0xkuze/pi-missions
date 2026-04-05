@@ -1,28 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import { transitionState } from "../../extensions/state/transitions.js";
-import type { MissionState, MissionStatus } from "../../extensions/types.js";
-
-const BASE_STATE: MissionState = {
-	missionId: "mission-001",
-	status: "planning",
-	progressLog: [],
-	startedAt: "2024-01-01T00:00:00.000Z",
-	totalFeaturesCompleted: 0,
-	totalFeaturesFailed: 0,
-	totalFeaturesSkipped: 0,
-	totalFixFeaturesCreated: 0,
-};
-
-function makeState(status: MissionStatus, overrides: Partial<MissionState> = {}): MissionState {
-	return { ...BASE_STATE, status, ...overrides };
-}
+import type { MissionStatus } from "../../extensions/types.js";
+import { makeState } from "../helpers/index.js";
 
 const FIXED_TS = "2024-01-01T12:00:00.000Z";
 
 describe("transitionState", () => {
 	describe("forward transitions", () => {
 		it("planning -> draft_review", () => {
-			const state = makeState("planning");
+			const state = makeState({ status: "planning" });
 			const next = transitionState(state, "draft_review", FIXED_TS);
 			expect(next.status).toBe("draft_review");
 			expect(next.progressLog).toHaveLength(1);
@@ -32,7 +18,7 @@ describe("transitionState", () => {
 		});
 
 		it("draft_review -> approved", () => {
-			const state = makeState("draft_review");
+			const state = makeState({ status: "draft_review" });
 			const next = transitionState(state, "approved", FIXED_TS);
 			expect(next.status).toBe("approved");
 			expect(next.progressLog).toHaveLength(1);
@@ -41,7 +27,7 @@ describe("transitionState", () => {
 		});
 
 		it("approved -> executing", () => {
-			const state = makeState("approved");
+			const state = makeState({ status: "approved" });
 			const next = transitionState(state, "executing", FIXED_TS);
 			expect(next.status).toBe("executing");
 			expect(next.progressLog).toHaveLength(1);
@@ -49,7 +35,7 @@ describe("transitionState", () => {
 		});
 
 		it("executing -> validating", () => {
-			const state = makeState("executing");
+			const state = makeState({ status: "executing" });
 			const next = transitionState(state, "validating", FIXED_TS);
 			expect(next.status).toBe("validating");
 			expect(next.progressLog).toHaveLength(1);
@@ -57,7 +43,7 @@ describe("transitionState", () => {
 		});
 
 		it("validating -> executing", () => {
-			const state = makeState("validating");
+			const state = makeState({ status: "validating" });
 			const next = transitionState(state, "executing", FIXED_TS);
 			expect(next.status).toBe("executing");
 			expect(next.progressLog).toHaveLength(1);
@@ -65,7 +51,7 @@ describe("transitionState", () => {
 		});
 
 		it("executing -> completed", () => {
-			const state = makeState("executing");
+			const state = makeState({ status: "executing" });
 			const next = transitionState(state, "completed", FIXED_TS);
 			expect(next.status).toBe("completed");
 			expect(next.completedAt).toBe(FIXED_TS);
@@ -74,7 +60,7 @@ describe("transitionState", () => {
 		});
 
 		it("full lifecycle: planning -> draft_review -> approved -> executing -> validating -> executing -> completed", () => {
-			let state = makeState("planning");
+			let state = makeState({ status: "planning" });
 			state = transitionState(state, "draft_review", FIXED_TS);
 			state = transitionState(state, "approved", FIXED_TS);
 			state = transitionState(state, "executing", FIXED_TS);
@@ -87,7 +73,8 @@ describe("transitionState", () => {
 		});
 
 		it("preserves existing progressLog entries", () => {
-			const state = makeState("planning", {
+			const state = makeState({
+				status: "planning",
 				progressLog: [{ timestamp: "2024-01-01T10:00:00.000Z", type: "mission_started", detail: "Started" }],
 			});
 			const next = transitionState(state, "draft_review", FIXED_TS);
@@ -97,7 +84,8 @@ describe("transitionState", () => {
 		});
 
 		it("preserves all tracking counters across forward transitions", () => {
-			const state = makeState("planning", {
+			const state = makeState({
+				status: "planning",
 				totalFeaturesCompleted: 3,
 				totalFeaturesFailed: 1,
 				totalFeaturesSkipped: 2,
@@ -116,7 +104,7 @@ describe("transitionState", () => {
 
 		it("uses current timestamp when none provided", () => {
 			const before = Date.now();
-			const state = makeState("planning");
+			const state = makeState({ status: "planning" });
 			const next = transitionState(state, "draft_review");
 			const after = Date.now();
 			const ts = new Date(next.progressLog[0].timestamp).getTime();
@@ -127,42 +115,42 @@ describe("transitionState", () => {
 
 	describe("invalid transitions", () => {
 		it("throws on planning -> executing (skipping states)", () => {
-			const state = makeState("planning");
+			const state = makeState({ status: "planning" });
 			expect(() => transitionState(state, "executing")).toThrow();
 		});
 
 		it("throws on planning -> approved (skipping states)", () => {
-			const state = makeState("planning");
+			const state = makeState({ status: "planning" });
 			expect(() => transitionState(state, "approved")).toThrow();
 		});
 
 		it("throws on planning -> completed (skipping states)", () => {
-			const state = makeState("planning");
+			const state = makeState({ status: "planning" });
 			expect(() => transitionState(state, "completed")).toThrow();
 		});
 
 		it("throws on draft_review -> executing (skipping states)", () => {
-			const state = makeState("draft_review");
+			const state = makeState({ status: "draft_review" });
 			expect(() => transitionState(state, "executing")).toThrow();
 		});
 
 		it("throws on approved -> completed (skipping executing)", () => {
-			const state = makeState("approved");
+			const state = makeState({ status: "approved" });
 			expect(() => transitionState(state, "completed")).toThrow();
 		});
 
 		it("throws on approved -> validating (skipping executing)", () => {
-			const state = makeState("approved");
+			const state = makeState({ status: "approved" });
 			expect(() => transitionState(state, "validating")).toThrow();
 		});
 
 		it("throws on validating -> completed (must go through executing)", () => {
-			const state = makeState("validating");
+			const state = makeState({ status: "validating" });
 			expect(() => transitionState(state, "completed")).toThrow();
 		});
 
 		it("throws descriptive error for invalid transitions", () => {
-			const state = makeState("planning");
+			const state = makeState({ status: "planning" });
 			expect(() => transitionState(state, "executing")).toThrow(/planning.*executing|executing.*planning/);
 		});
 	});
@@ -184,7 +172,7 @@ describe("transitionState", () => {
 		for (const terminal of terminalStates) {
 			for (const target of allTargets) {
 				it(`throws when transitioning from terminal '${terminal}' to '${target}'`, () => {
-					const state = makeState(terminal, { completedAt: FIXED_TS });
+					const state = makeState({ status: terminal, completedAt: FIXED_TS });
 					expect(() => transitionState(state, target)).toThrow();
 				});
 			}
@@ -196,7 +184,7 @@ describe("transitionState", () => {
 
 		for (const active of activeStates) {
 			it(`${active} -> failed`, () => {
-				const state = makeState(active);
+				const state = makeState({ status: active });
 				const next = transitionState(state, "failed", FIXED_TS);
 				expect(next.status).toBe("failed");
 				expect(next.completedAt).toBe(FIXED_TS);
@@ -219,8 +207,10 @@ describe("transitionState", () => {
 
 		for (const active of activeAndPaused) {
 			it(`${active} -> aborted`, () => {
-				const stateOverride = active === "paused" ? { resumeTargetState: "executing" as const } : {};
-				const state = makeState(active, stateOverride);
+				const state = makeState({
+					status: active,
+					...(active === "paused" ? { resumeTargetState: "executing" as const } : {}),
+				});
 				const next = transitionState(state, "aborted", FIXED_TS);
 				expect(next.status).toBe("aborted");
 				expect(next.completedAt).toBe(FIXED_TS);
@@ -234,21 +224,21 @@ describe("transitionState", () => {
 
 	describe("failed and aborted set completedAt", () => {
 		it("failed sets completedAt", () => {
-			const state = makeState("executing");
+			const state = makeState({ status: "executing" });
 			expect(state.completedAt).toBeUndefined();
 			const next = transitionState(state, "failed", FIXED_TS);
 			expect(next.completedAt).toBe(FIXED_TS);
 		});
 
 		it("aborted sets completedAt", () => {
-			const state = makeState("executing");
+			const state = makeState({ status: "executing" });
 			expect(state.completedAt).toBeUndefined();
 			const next = transitionState(state, "aborted", FIXED_TS);
 			expect(next.completedAt).toBe(FIXED_TS);
 		});
 
 		it("completed sets completedAt", () => {
-			const state = makeState("executing");
+			const state = makeState({ status: "executing" });
 			expect(state.completedAt).toBeUndefined();
 			const next = transitionState(state, "completed", FIXED_TS);
 			expect(next.completedAt).toBe(FIXED_TS);
@@ -257,7 +247,7 @@ describe("transitionState", () => {
 
 	describe("pause/resume", () => {
 		it("pausing from executing stores resumeTargetState", () => {
-			const state = makeState("executing");
+			const state = makeState({ status: "executing" });
 			const next = transitionState(state, "paused", FIXED_TS);
 			expect(next.status).toBe("paused");
 			expect(next.resumeTargetState).toBe("executing");
@@ -267,33 +257,33 @@ describe("transitionState", () => {
 		});
 
 		it("pausing from validating stores resumeTargetState", () => {
-			const state = makeState("validating");
+			const state = makeState({ status: "validating" });
 			const next = transitionState(state, "paused", FIXED_TS);
 			expect(next.status).toBe("paused");
 			expect(next.resumeTargetState).toBe("validating");
 		});
 
 		it("pausing from planning stores resumeTargetState", () => {
-			const state = makeState("planning");
+			const state = makeState({ status: "planning" });
 			const next = transitionState(state, "paused", FIXED_TS);
 			expect(next.status).toBe("paused");
 			expect(next.resumeTargetState).toBe("planning");
 		});
 
 		it("pausing from draft_review stores resumeTargetState", () => {
-			const state = makeState("draft_review");
+			const state = makeState({ status: "draft_review" });
 			const next = transitionState(state, "paused", FIXED_TS);
 			expect(next.status).toBe("paused");
 			expect(next.resumeTargetState).toBe("draft_review");
 		});
 
 		it("cannot pause from idle/approved (not in pausable set)", () => {
-			const state = makeState("approved");
+			const state = makeState({ status: "approved" });
 			expect(() => transitionState(state, "paused")).toThrow(/pause/);
 		});
 
 		it("resuming from paused to executing restores state", () => {
-			const state = makeState("paused", { resumeTargetState: "executing" });
+			const state = makeState({ status: "paused", resumeTargetState: "executing" });
 			const next = transitionState(state, "executing", FIXED_TS);
 			expect(next.status).toBe("executing");
 			expect(next.resumeTargetState).toBeUndefined();
@@ -303,45 +293,46 @@ describe("transitionState", () => {
 		});
 
 		it("resuming from paused to validating restores state", () => {
-			const state = makeState("paused", { resumeTargetState: "validating" });
+			const state = makeState({ status: "paused", resumeTargetState: "validating" });
 			const next = transitionState(state, "validating", FIXED_TS);
 			expect(next.status).toBe("validating");
 			expect(next.resumeTargetState).toBeUndefined();
 		});
 
 		it("resuming from paused to planning restores state", () => {
-			const state = makeState("paused", { resumeTargetState: "planning" });
+			const state = makeState({ status: "paused", resumeTargetState: "planning" });
 			const next = transitionState(state, "planning", FIXED_TS);
 			expect(next.status).toBe("planning");
 			expect(next.resumeTargetState).toBeUndefined();
 		});
 
 		it("resuming from paused to draft_review restores state", () => {
-			const state = makeState("paused", { resumeTargetState: "draft_review" });
+			const state = makeState({ status: "paused", resumeTargetState: "draft_review" });
 			const next = transitionState(state, "draft_review", FIXED_TS);
 			expect(next.status).toBe("draft_review");
 			expect(next.resumeTargetState).toBeUndefined();
 		});
 
 		it("throws when resuming to wrong state", () => {
-			const state = makeState("paused", { resumeTargetState: "executing" });
+			const state = makeState({ status: "paused", resumeTargetState: "executing" });
 			expect(() => transitionState(state, "planning", FIXED_TS)).toThrow(/executing/);
 		});
 
 		it("throws when resuming with no resumeTargetState", () => {
-			const state = makeState("paused");
+			const state = makeState({ status: "paused" });
 			expect(() => transitionState(state, "executing", FIXED_TS)).toThrow(/resumeTargetState/);
 		});
 
 		it("throws when trying to pause from a terminal state (covered by terminal check)", () => {
-			const state = makeState("completed", { completedAt: FIXED_TS });
+			const state = makeState({ status: "completed", completedAt: FIXED_TS });
 			expect(() => transitionState(state, "paused")).toThrow();
 		});
 	});
 
 	describe("pause/resume round-trip preserves tracking fields", () => {
 		it("round-trip from executing preserves all counters and ids", () => {
-			const original = makeState("executing", {
+			const original = makeState({
+				status: "executing",
 				currentMilestoneId: "milestone-1",
 				currentFeatureId: "feature-2",
 				totalFeaturesCompleted: 5,
@@ -369,7 +360,8 @@ describe("transitionState", () => {
 		});
 
 		it("round-trip from validating preserves all counters and ids", () => {
-			const original = makeState("validating", {
+			const original = makeState({
+				status: "validating",
 				currentMilestoneId: "milestone-2",
 				currentFeatureId: "feature-5",
 				totalFeaturesCompleted: 10,
@@ -386,7 +378,7 @@ describe("transitionState", () => {
 		});
 
 		it("pause and resume both append progress events", () => {
-			const original = makeState("executing", { progressLog: [] });
+			const original = makeState({ status: "executing", progressLog: [] });
 			const paused = transitionState(original, "paused", FIXED_TS);
 			expect(paused.progressLog).toHaveLength(1);
 			expect(paused.progressLog[0].type).toBe("pause");
@@ -397,7 +389,7 @@ describe("transitionState", () => {
 		});
 
 		it("aborting from paused works directly without resuming", () => {
-			const state = makeState("paused", { resumeTargetState: "executing" });
+			const state = makeState({ status: "paused", resumeTargetState: "executing" });
 			const aborted = transitionState(state, "aborted", FIXED_TS);
 			expect(aborted.status).toBe("aborted");
 			expect(aborted.completedAt).toBe(FIXED_TS);
@@ -408,7 +400,7 @@ describe("transitionState", () => {
 
 	describe("state immutability", () => {
 		it("does not mutate the original state", () => {
-			const state = makeState("planning");
+			const state = makeState({ status: "planning" });
 			const originalStatus = state.status;
 			const originalLog = state.progressLog.length;
 			transitionState(state, "draft_review", FIXED_TS);
@@ -419,7 +411,7 @@ describe("transitionState", () => {
 
 	describe("event details", () => {
 		it("each transition appends a ProgressEvent with correct type and timestamp", () => {
-			const state = makeState("draft_review");
+			const state = makeState({ status: "draft_review" });
 			const next = transitionState(state, "approved", FIXED_TS);
 			expect(next.progressLog[0]).toMatchObject({
 				type: "plan_approved",
@@ -430,14 +422,14 @@ describe("transitionState", () => {
 		});
 
 		it("failed event has correct type and non-empty detail", () => {
-			const state = makeState("executing");
+			const state = makeState({ status: "executing" });
 			const next = transitionState(state, "failed", FIXED_TS);
 			expect(next.progressLog[0].type).toBe("mission_failed");
 			expect(next.progressLog[0].detail.length).toBeGreaterThan(0);
 		});
 
 		it("aborted event has correct type and non-empty detail", () => {
-			const state = makeState("executing");
+			const state = makeState({ status: "executing" });
 			const next = transitionState(state, "aborted", FIXED_TS);
 			expect(next.progressLog[0].type).toBe("mission_aborted");
 			expect(next.progressLog[0].detail.length).toBeGreaterThan(0);
@@ -446,27 +438,27 @@ describe("transitionState", () => {
 
 	describe("cannot pause from non-pausable active states", () => {
 		it("throws on approved -> paused", () => {
-			const state = makeState("approved");
+			const state = makeState({ status: "approved" });
 			expect(() => transitionState(state, "paused")).toThrow();
 		});
 	});
 
 	describe("cannot resume from non-paused state", () => {
 		it("planning -> executing throws (not from paused)", () => {
-			const state = makeState("planning");
+			const state = makeState({ status: "planning" });
 			expect(() => transitionState(state, "executing")).toThrow();
 		});
 	});
 
 	describe("progress event timestamps", () => {
 		it("pause event has the provided timestamp", () => {
-			const state = makeState("executing");
+			const state = makeState({ status: "executing" });
 			const next = transitionState(state, "paused", "2024-06-15T08:30:00.000Z");
 			expect(next.progressLog[0].timestamp).toBe("2024-06-15T08:30:00.000Z");
 		});
 
 		it("resume event has the provided timestamp", () => {
-			const state = makeState("paused", { resumeTargetState: "executing" });
+			const state = makeState({ status: "paused", resumeTargetState: "executing" });
 			const next = transitionState(state, "executing", "2024-06-15T09:00:00.000Z");
 			expect(next.progressLog[0].timestamp).toBe("2024-06-15T09:00:00.000Z");
 		});

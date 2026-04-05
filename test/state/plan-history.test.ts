@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { savePlan } from "../../extensions/state/manager.js";
 import { appendMutation, readHistory } from "../../extensions/state/plan-history.js";
-import type { MissionPlan, PlanMutation } from "../../extensions/types.js";
+import type { Feature, PlanMutation } from "../../extensions/types.js";
+import type { TempDir } from "../helpers/index.js";
+import { createTempDir, makeFeature, makeMilestone, makePlan } from "../helpers/index.js";
 
-const TMP_DIR = join(import.meta.dir, "../../.test-tmp-plan-history");
+let tmp: TempDir;
 
 function makeTmpDir(): string {
-	const dir = join(TMP_DIR, `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const dir = join(tmp.path, `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	mkdirSync(dir, { recursive: true });
 	return dir;
 }
@@ -24,22 +26,12 @@ function makeMutation(planVersion: number, kind: PlanMutation["kind"] = "plan-cr
 	};
 }
 
-const minimalPlan: MissionPlan = {
-	id: "plan-1",
-	description: "Test plan",
-	planVersion: 1,
-	milestones: [],
-	validationCommands: [],
-	modelAssignment: {},
-	createdAt: "2024-01-01T00:00:00.000Z",
-};
-
 beforeEach(() => {
-	mkdirSync(TMP_DIR, { recursive: true });
+	tmp = createTempDir("pi-missions-plan-history-");
 });
 
 afterEach(() => {
-	rmSync(TMP_DIR, { recursive: true, force: true });
+	tmp.cleanup();
 });
 
 describe("readHistory", () => {
@@ -132,7 +124,7 @@ describe("appendMutation", () => {
 	});
 
 	it("creates parent directory on first use", () => {
-		const dir = join(TMP_DIR, "deeply", "nested", "new-dir");
+		const dir = join(tmp.path, "deeply", "nested", "new-dir");
 		expect(existsSync(dir)).toBe(false);
 		appendMutation(dir, makeMutation(1));
 		expect(existsSync(join(dir, "plan-history.jsonl"))).toBe(true);
@@ -187,6 +179,7 @@ describe("appendMutation", () => {
 		const dir = makeTmpDir();
 		appendMutation(dir, makeMutation(1));
 		appendMutation(dir, makeMutation(2));
+		appendMutation(dir, makeMutation(3));
 		const file = join(dir, "plan-history.jsonl");
 		const lines = (require("node:fs").readFileSync(file, "utf8") as string)
 			.split("\n")
@@ -198,31 +191,16 @@ describe("appendMutation", () => {
 });
 
 describe("completed feature protection", () => {
-	function makePlanWithFeature(featureId: string, status: string): MissionPlan {
-		return {
-			...minimalPlan,
+	function makePlanWithFeature(featureId: string, status: Feature["status"]) {
+		return makePlan({
 			milestones: [
-				{
+				makeMilestone({
 					id: "m1",
-					name: "Milestone 1",
-					description: "First milestone",
 					status: "active",
-					features: [
-						{
-							id: featureId,
-							name: "Feature A",
-							description: "A feature",
-							acceptanceCriteria: ["Criterion 1"],
-							relevantFiles: [],
-							dependencies: [],
-							estimatedComplexity: "low" as const,
-							status: status as "pending" | "active" | "done" | "failed" | "skipped" | "blocked",
-							attempts: [],
-						},
-					],
-				},
+					features: [makeFeature({ id: featureId, status })],
+				}),
 			],
-		};
+		});
 	}
 
 	it("rejects remove-feature mutation for a done feature", () => {

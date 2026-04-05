@@ -1,44 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig, loadPlan, loadState, saveConfig, savePlan, saveState } from "../../extensions/state/manager.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../../extensions/types.js";
+import type { TempDir } from "../helpers/index.js";
+import { createTempDir, makeFeature, makeMilestone, makePlan, makeState } from "../helpers/index.js";
 
-const TMP_DIR = join(import.meta.dir, "../../.test-tmp-manager");
+let tmp: TempDir;
+
+const minimalState = makeState({ status: "planning" });
+const minimalPlan = makePlan();
 
 function makeTmpDir(): string {
-	const dir = join(TMP_DIR, `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+	const dir = join(tmp.path, `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 	mkdirSync(dir, { recursive: true });
 	return dir;
 }
 
-const minimalState: MissionState = {
-	missionId: "test-mission-1",
-	status: "planning",
-	progressLog: [],
-	startedAt: "2024-01-01T00:00:00.000Z",
-	totalFeaturesCompleted: 0,
-	totalFeaturesFailed: 0,
-	totalFeaturesSkipped: 0,
-	totalFixFeaturesCreated: 0,
-};
-
-const minimalPlan: MissionPlan = {
-	id: "plan-1",
-	description: "Test plan",
-	planVersion: 1,
-	milestones: [],
-	validationCommands: [],
-	modelAssignment: {},
-	createdAt: "2024-01-01T00:00:00.000Z",
-};
-
 beforeEach(() => {
-	mkdirSync(TMP_DIR, { recursive: true });
+	tmp = createTempDir("pi-missions-manager-");
 });
 
 afterEach(() => {
-	rmSync(TMP_DIR, { recursive: true, force: true });
+	tmp.cleanup();
 });
 
 describe("saveState / loadState", () => {
@@ -71,7 +55,7 @@ describe("saveState / loadState", () => {
 	});
 
 	it("creates directories on demand", () => {
-		const dir = join(TMP_DIR, "deeply", "nested", "dir");
+		const dir = join(tmp.path, "deeply", "nested", "dir");
 		saveState(dir, minimalState);
 		expect(existsSync(join(dir, "state.json"))).toBe(true);
 	});
@@ -118,8 +102,8 @@ describe("saveState / loadState", () => {
 
 	it("preserves all optional fields when present", () => {
 		const dir = makeTmpDir();
-		const stateWithOptionals: MissionState = {
-			...minimalState,
+		const stateWithOptionals = makeState({
+			status: "planning",
 			resumeTargetState: "executing",
 			currentMilestoneId: "m1",
 			currentFeatureId: "f1",
@@ -137,7 +121,7 @@ describe("saveState / loadState", () => {
 				dirtyFiles: ["file.ts"],
 				autoCommitEnabled: true,
 			},
-		};
+		});
 		saveState(dir, stateWithOptionals);
 		expect(loadState(dir)).toEqual(stateWithOptionals);
 	});
@@ -172,7 +156,7 @@ describe("savePlan / loadPlan", () => {
 	});
 
 	it("creates directories on demand", () => {
-		const dir = join(TMP_DIR, "deep", "plan", "dir");
+		const dir = join(tmp.path, "deep", "plan", "dir");
 		savePlan(dir, minimalPlan);
 		expect(existsSync(join(dir, "plan.json"))).toBe(true);
 	});
@@ -211,31 +195,27 @@ describe("savePlan / loadPlan", () => {
 
 	it("preserves a full plan with milestones and features", () => {
 		const dir = makeTmpDir();
-		const fullPlan: MissionPlan = {
-			...minimalPlan,
+		const fullPlan: MissionPlan = makePlan({
 			approvedAt: "2024-01-01T01:00:00.000Z",
 			milestones: [
-				{
+				makeMilestone({
 					id: "m1",
 					name: "Foundation",
 					description: "Foundation milestone",
 					status: "active",
 					features: [
-						{
+						makeFeature({
 							id: "f1",
 							name: "User model",
 							description: "Create user model",
 							acceptanceCriteria: ["User table exists"],
 							relevantFiles: ["src/models/user.ts"],
-							dependencies: [],
-							estimatedComplexity: "low",
 							status: "done",
-							attempts: [],
-						},
+						}),
 					],
-				},
+				}),
 			],
-		};
+		});
 		savePlan(dir, fullPlan);
 		expect(loadPlan(dir)).toEqual(fullPlan);
 	});
@@ -277,7 +257,7 @@ describe("saveConfig / loadConfig", () => {
 	});
 
 	it("creates directories on demand", () => {
-		const dir = join(TMP_DIR, "deep", "config", "dir");
+		const dir = join(tmp.path, "deep", "config", "dir");
 		saveConfig(dir, {});
 		expect(existsSync(join(dir, "config.json"))).toBe(true);
 	});
