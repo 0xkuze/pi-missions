@@ -18,8 +18,7 @@ import { registerSpawnWorkerTool } from "./tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
 import type { Feature, MissionPlan, MissionState, WorkerResult } from "./types.js";
-import { handleDraftReviewKey, renderDraftReview } from "./ui/draft-review.js";
-import { themeFrameStyle } from "./ui/frame.js";
+import { DraftReviewComponent } from "./ui/draft-review.js";
 import { MissionControlComponent } from "./ui/mission-control.js";
 import { QuestionsOverlayComponent } from "./ui/questions-overlay.js";
 import type { ThemeStyler } from "./ui/widget.js";
@@ -410,12 +409,13 @@ export default function (pi: ExtensionAPI): void {
 			const ctx = latestCtx;
 			if (!ctx) return;
 			ctx.ui.custom<void>(
-				(_tui, theme, _kb, done) => {
-					const style = themeFrameStyle(theme);
-					return {
-						handleInput(data: string) {
-							const action = handleDraftReviewKey(data);
-							if (action.kind === "approve") {
+				(tui, theme, _kb, done) =>
+					new DraftReviewComponent(
+						tui,
+						done,
+						plan,
+						{
+							onApprove: () => {
 								const state = loadState(basePath);
 								const currentPlan = loadPlan(basePath);
 								if (state && currentPlan) {
@@ -442,17 +442,10 @@ export default function (pi: ExtensionAPI): void {
 										"I have approved the mission plan. Please begin execution by calling spawn_worker for the first feature.",
 									);
 								}
-								done();
-							} else if (action.kind === "close") {
-								done();
-							}
+							},
 						},
-						render(width: number) {
-							return renderDraftReview(plan, width, style);
-						},
-						invalidate() {},
-					};
-				},
+						theme,
+					),
 				{ overlay: true },
 			);
 		}, 0);

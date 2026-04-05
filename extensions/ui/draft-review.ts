@@ -1,9 +1,16 @@
+import type { TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../types.js";
 import type { FrameStyle } from "./frame.js";
-import { footerBar, panel, section, titleBar } from "./frame.js";
+import { footerBar, panel, section, themeFrameStyle, titleBar } from "./frame.js";
 
-export type DraftReviewAction = { kind: "approve" } | { kind: "close" } | { kind: "noop" };
+export type DraftReviewAction =
+	| { kind: "approve" }
+	| { kind: "close" }
+	| { kind: "scroll"; delta: number }
+	| { kind: "noop" };
+
+const PAGE_SIZE = 10;
 
 function countTotalFeatures(plan: MissionPlan): number {
 	return plan.milestones.reduce((sum, m) => sum + m.features.length, 0);
@@ -34,7 +41,13 @@ function renderValidationCommands(plan: MissionPlan): string[] {
 	return lines;
 }
 
-export function renderDraftReview(plan: MissionPlan, width = 80, style?: FrameStyle, height = 40): string[] {
+export function renderDraftReview(
+	plan: MissionPlan,
+	width = 80,
+	style?: FrameStyle,
+	height = 40,
+	scrollOffset = 0,
+): string[] {
 	const contentWidth = width - 4;
 	const tf = style?.textFn ?? ((t: string) => t);
 	const bf = style?.boldFn ?? ((t: string) => t);
@@ -82,13 +95,61 @@ export function renderDraftReview(plan: MissionPlan, width = 80, style?: FrameSt
 	const panelHeight = Math.max(5, height - 7);
 	return [
 		titleBar("Draft Mission Plan", width, style),
-		...panel("Plan Details", lines, width, panelHeight, 0, style),
-		...footerBar("A: approve   Esc: back to chat (continue planning)", width, style),
+		...panel("Plan Details", lines, width, panelHeight, scrollOffset, style),
+		...footerBar("A: approve  Esc: back to chat  ↑↓: scroll  PgUp/PgDn: page", width, style),
 	];
 }
 
 export function handleDraftReviewKey(key: string): DraftReviewAction {
 	if (matchesKey(key, "escape")) return { kind: "close" };
 	if (key.toUpperCase() === "A") return { kind: "approve" };
+	if (matchesKey(key, "up")) return { kind: "scroll", delta: -1 };
+	if (matchesKey(key, "down")) return { kind: "scroll", delta: 1 };
+	if (matchesKey(key, "pageUp")) return { kind: "scroll", delta: -PAGE_SIZE };
+	if (matchesKey(key, "pageDown")) return { kind: "scroll", delta: PAGE_SIZE };
 	return { kind: "noop" };
+}
+
+export interface DraftReviewDeps {
+	onApprove: () => void;
+}
+
+export class DraftReviewComponent {
+	private style: FrameStyle | undefined;
+	private scrollOffset = 0;
+
+	constructor(
+		private tui: TUI,
+		private done: () => void,
+		private plan: MissionPlan,
+		private deps: DraftReviewDeps,
+		theme?: { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string },
+	) {
+		this.style = theme ? themeFrameStyle(theme) : undefined;
+	}
+
+	handleInput(data: string): void {
+		const action = handleDraftReviewKey(data);
+		if (action.kind === "approve") {
+			this.deps.onApprove();
+			this.done();
+			return;
+		}
+		if (action.kind === "close") {
+			this.done();
+			return;
+		}
+		if (action.kind === "scroll") {
+			this.scrollOffset = Math.max(0, this.scrollOffset + action.delta);
+		}
+	}
+
+	render(width: number): string[] {
+		const height = this.tui.terminal.rows - 5;
+		return renderDraftReview(this.plan, width, this.style, height, this.scrollOffset);
+	}
+
+	invalidate(): void {}
+
+	dispose(): void {}
 }
