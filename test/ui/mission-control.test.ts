@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Feature, Milestone, MissionConfig, MissionPlan, MissionState, ProgressEvent } from "../../extensions/types.js";
@@ -854,6 +854,65 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const { readFileSync } = await import("node:fs");
 			const saved = JSON.parse(readFileSync(configPath, "utf8"));
 			expect(saved.models?.orchestrator).toBe("claude-opus");
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("MissionControlComponent draft_review approve", () => {
+	it("transitions state to approved, updates plan, appends mutation, updates widget, and sends message", () => {
+		const tmpDir = join(tmpdir(), `mc-draft-test-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const draftState = makeState("draft_review");
+			const plan = makePlan([makeMilestone("m1", [makeFeature("f1", "pending")])]);
+
+			const messages: string[] = [];
+			const widgetCalls: Array<{ state: MissionState; plan?: MissionPlan }> = [];
+			let doneCalled = false;
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => draftState,
+				loadPlan: () => plan,
+				sendUserMessage: (msg) => messages.push(msg),
+				updateWidget: (s, p) => widgetCalls.push({ state: s, plan: p }),
+			});
+
+			const tui = makeTUI();
+			const component = new MissionControlComponent(tui, () => { doneCalled = true; }, deps);
+
+			component["currentSubView"] = { kind: "draft_review" };
+			component.handleInput("A");
+
+			expect(doneCalled).toBe(true);
+
+			expect(messages).toHaveLength(1);
+			expect(messages[0]).toContain("approved the mission plan");
+			expect(messages[0]).toContain("spawn_worker");
+
+			expect(widgetCalls).toHaveLength(1);
+			expect(widgetCalls[0]!.state.status).toBe("approved");
+			expect(widgetCalls[0]!.plan?.approvedAt).toBeDefined();
+			expect(widgetCalls[0]!.plan?.planVersion).toBe(2);
+
+			const savedState = JSON.parse(readFileSync(join(tmpDir, "state.json"), "utf8"));
+			expect(savedState.status).toBe("approved");
+
+			const savedPlan = JSON.parse(readFileSync(join(tmpDir, "plan.json"), "utf8"));
+			expect(savedPlan.approvedAt).toBeDefined();
+			expect(savedPlan.planVersion).toBe(2);
+
+			const historyFile = join(tmpDir, "plan-history.jsonl");
+			expect(existsSync(historyFile)).toBe(true);
+			const historyLine = readFileSync(historyFile, "utf8").trim();
+			const mutation = JSON.parse(historyLine);
+			expect(mutation.kind).toBe("plan-approved");
+			expect(mutation.planVersion).toBe(2);
+			expect(mutation.actor).toBe("user");
+
+			expect(component["state"]?.status).toBe("approved");
+			expect(component["plan"]?.approvedAt).toBeDefined();
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}

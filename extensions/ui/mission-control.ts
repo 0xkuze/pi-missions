@@ -1,7 +1,7 @@
 import type { TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import { saveConfig, savePlan, saveState } from "../state/manager.js";
-import { readHistory } from "../state/plan-history.js";
+import { appendMutation, readHistory } from "../state/plan-history.js";
 import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionConfig, MissionPlan, MissionState, PlanMutation, ProgressEvent } from "../types.js";
 import { nowISO } from "../utils.js";
@@ -452,7 +452,34 @@ export class MissionControlComponent {
 			case "draft_review": {
 				const action = handleDraftReviewKey(data);
 				if (action.kind === "approve") {
-					this.deps.sendUserMessage("I approve the plan. Please proceed with execution.");
+					const currentState = this.deps.loadState(this.deps.basePath);
+					const currentPlan = this.deps.loadPlan(this.deps.basePath);
+					if (currentState && currentPlan) {
+						const now = nowISO();
+						const newPlanVersion = currentPlan.planVersion + 1;
+						const updatedPlan: MissionPlan = {
+							...currentPlan,
+							approvedAt: now,
+							planVersion: newPlanVersion,
+						};
+						savePlan(this.deps.basePath, updatedPlan);
+						appendMutation(this.deps.basePath, {
+							planVersion: newPlanVersion,
+							timestamp: now,
+							actor: "user",
+							kind: "plan-approved",
+							summary: "Plan approved by user",
+							payload: {},
+						});
+						const newState = transitionState(currentState, "approved");
+						saveState(this.deps.basePath, newState);
+						this.state = newState;
+						this.plan = updatedPlan;
+						this.deps.updateWidget(newState, updatedPlan);
+						this.deps.sendUserMessage(
+							"I have approved the mission plan. Please begin execution by calling spawn_worker for the first feature.",
+						);
+					}
 					this.currentSubView = null;
 					this.done();
 				} else if (action.kind === "close") {
