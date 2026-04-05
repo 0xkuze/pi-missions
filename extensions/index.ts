@@ -394,10 +394,13 @@ export default function (pi: ExtensionAPI): void {
 				basePath,
 				loadState,
 				loadPlan,
+				loadConfig,
 				sendUserMessage: (content: string) => pi.sendUserMessage(content),
 				getInput: (title: string, placeholder?: string) => ctx.ui.input(title, placeholder),
 				notify: (message: string, type?: "info" | "warning" | "error") => ctx.ui.notify(message, type),
 				updateWidget,
+				availableModels: [] as string[],
+				openFile: (_path: string) => {},
 			};
 			await ctx.ui.custom<void>((tui, _theme, _kb, done) => new MissionControlComponent(tui, done, deps), {
 				overlay: true,

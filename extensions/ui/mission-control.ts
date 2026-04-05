@@ -2,8 +2,19 @@ import type { TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import { savePlan, saveState } from "../state/manager.js";
 import { transitionState } from "../state/transitions.js";
-import type { Feature, MissionPlan, MissionState, ProgressEvent } from "../types.js";
+import type { Feature, MissionConfig, MissionPlan, MissionState, ProgressEvent } from "../types.js";
 import { nowISO } from "../utils.js";
+import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
+import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
+import { handleProgressLogKey, renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
+import {
+	handleModelViewKey,
+	handleReportViewKey,
+	type ModelViewState,
+	renderModelView,
+	renderReportView,
+} from "./report-view.js";
+import { type CommandDisplayEntry, handleValidationViewKey, renderValidationView } from "./validation-view.js";
 
 const ICON_DONE = "\u2713";
 const ICON_ACTIVE = "\u25cf";
@@ -248,19 +259,53 @@ export function handleKeyboardAction(key: string, state: MissionState | null): O
 
 const POLL_INTERVAL_MS = 2_000;
 
+export type SubView =
+	| { kind: "model" }
+	| { kind: "validation" }
+	| { kind: "logs" }
+	| { kind: "draft_review" }
+	| { kind: "blocked"; featureId: string }
+	| { kind: "report" };
+
+export function resolveStateView(state: MissionState, plan: MissionPlan | null): SubView | null {
+	if (state.status === "completed") return { kind: "report" };
+	if (state.status === "draft_review") return { kind: "draft_review" };
+
+	if (state.currentFeatureId && plan) {
+		for (const milestone of plan.milestones) {
+			for (const feature of milestone.features) {
+				if (
+					feature.id === state.currentFeatureId &&
+					(feature.status === "failed" || feature.status === "blocked")
+				) {
+					return { kind: "blocked", featureId: feature.id };
+				}
+			}
+		}
+	}
+
+	return null;
+}
+
 export interface MissionControlDeps {
 	basePath: string;
 	loadState: (basePath: string) => MissionState | null;
 	loadPlan: (basePath: string) => MissionPlan | null;
+	loadConfig: (basePath: string) => MissionConfig;
 	sendUserMessage: (content: string) => void;
 	getInput: (title: string, placeholder?: string) => Promise<string | undefined>;
 	notify: (message: string, type?: "info" | "warning" | "error") => void;
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
+	availableModels: string[];
+	openFile: (path: string) => void;
 }
 
 export class MissionControlComponent {
 	private state: MissionState | null;
 	private plan: MissionPlan | null;
+	private config: MissionConfig;
+	private currentSubView: SubView | null = null;
+	private modelViewState: ModelViewState = { selectedRoleIndex: null };
 	private pollInterval: ReturnType<typeof setInterval> | null = null;
 
 	constructor(
@@ -270,25 +315,105 @@ export class MissionControlComponent {
 	) {
 		this.state = deps.loadState(deps.basePath);
 		this.plan = deps.loadPlan(deps.basePath);
+		this.config = deps.loadConfig(deps.basePath);
 		this.pollInterval = setInterval(() => this.poll(), POLL_INTERVAL_MS);
 	}
 
 	private poll(): void {
 		const nextState = this.deps.loadState(this.deps.basePath);
 		const nextPlan = this.deps.loadPlan(this.deps.basePath);
+		let nextConfig: MissionConfig;
+		try {
+			nextConfig = this.deps.loadConfig(this.deps.basePath);
+		} catch {
+			nextConfig = this.config;
+		}
 		if (
 			JSON.stringify(nextState) !== JSON.stringify(this.state) ||
-			JSON.stringify(nextPlan) !== JSON.stringify(this.plan)
+			JSON.stringify(nextPlan) !== JSON.stringify(this.plan) ||
+			JSON.stringify(nextConfig) !== JSON.stringify(this.config)
 		) {
 			this.state = nextState;
 			this.plan = nextPlan;
+			this.config = nextConfig;
 			this.tui.requestRender();
 		}
 	}
 
 	handleInput(data: string): void {
+		const activeView = this.resolveActiveView();
+		if (activeView !== null) {
+			this.handleSubViewInput(data, activeView);
+			return;
+		}
 		const action = handleKeyboardAction(data, this.state);
 		this.dispatchAction(action);
+	}
+
+	private handleSubViewInput(data: string, subView: SubView): void {
+		switch (subView.kind) {
+			case "model": {
+				const result = handleModelViewKey(data, this.modelViewState, this.deps.availableModels);
+				this.modelViewState = result.nextViewState;
+				if (result.action.kind === "close") {
+					this.currentSubView = null;
+				}
+				this.tui.requestRender();
+				return;
+			}
+			case "validation": {
+				const action = handleValidationViewKey(data);
+				if (action.kind === "close") {
+					this.currentSubView = null;
+					this.tui.requestRender();
+				}
+				return;
+			}
+			case "logs": {
+				const action = handleProgressLogKey(data);
+				if (action.kind === "close") {
+					this.currentSubView = null;
+					this.tui.requestRender();
+				}
+				return;
+			}
+			case "draft_review": {
+				const action = handleDraftReviewKey(data);
+				if (action.kind === "approve") {
+					this.deps.sendUserMessage("I approve the plan. Please proceed with execution.");
+					this.currentSubView = null;
+					this.done();
+				} else if (action.kind === "close") {
+					this.currentSubView = null;
+					this.done();
+				}
+				this.tui.requestRender();
+				return;
+			}
+			case "blocked": {
+				const action = handleBlockedViewKey(data);
+				if (action.kind === "close") {
+					this.done();
+				} else if (action.kind === "retry") {
+					this.deps.sendUserMessage(
+						`Please retry the blocked feature '${subView.featureId}' with additional guidance.`,
+					);
+					this.done();
+				} else if (action.kind === "skip") {
+					this.applySkip();
+				}
+				return;
+			}
+			case "report": {
+				const action = handleReportViewKey(data);
+				if (action.kind === "close") {
+					this.done();
+				} else if (action.kind === "open_report") {
+					this.deps.openFile(`${this.deps.basePath}/report.md`);
+				}
+				return;
+			}
+		}
 	}
 
 	private dispatchAction(action: OverlayAction): void {
@@ -318,13 +443,17 @@ export class MissionControlComponent {
 				this.applyRedirect();
 				return;
 			case "open_model_view":
-				this.deps.notify("Model view not yet available. Use /mission config to change models.", "info");
+				this.modelViewState = { selectedRoleIndex: null };
+				this.currentSubView = { kind: "model" };
+				this.tui.requestRender();
 				return;
 			case "open_validation_view":
-				this.deps.notify("Validation view not yet available.", "info");
+				this.currentSubView = { kind: "validation" };
+				this.tui.requestRender();
 				return;
 			case "open_logs_view":
-				this.deps.notify("Logs view not yet available.", "info");
+				this.currentSubView = { kind: "logs" };
+				this.tui.requestRender();
 				return;
 		}
 	}
@@ -443,6 +572,12 @@ export class MissionControlComponent {
 		});
 	}
 
+	private resolveActiveView(): SubView | null {
+		if (this.currentSubView !== null) return this.currentSubView;
+		if (!this.state) return null;
+		return resolveStateView(this.state, this.plan);
+	}
+
 	render(width: number): string[] {
 		const state = this.state;
 		const plan = this.plan;
@@ -451,6 +586,58 @@ export class MissionControlComponent {
 			return [" No active mission.", " Press Esc to close."];
 		}
 
+		const activeView = this.resolveActiveView();
+		if (activeView !== null) {
+			return this.renderSubView(activeView, state, plan, width);
+		}
+
+		return this.renderMainOverlay(state, plan, width);
+	}
+
+	private renderSubView(view: SubView, state: MissionState, plan: MissionPlan | null, _width: number): string[] {
+		switch (view.kind) {
+			case "model": {
+				const effectivePlan = plan ?? {
+					id: "",
+					description: "",
+					planVersion: 0,
+					milestones: [],
+					validationCommands: [],
+					modelAssignment: {},
+					createdAt: "",
+				};
+				return renderModelView(this.config, effectivePlan, this.modelViewState);
+			}
+			case "validation": {
+				const milestone = plan?.milestones.find((m) => m.id === state.currentMilestoneId);
+				const milestoneName = milestone?.name ?? "Current Milestone";
+				const commands: CommandDisplayEntry[] = (milestone?.validationCommands ?? []).map((cmd) => ({
+					label: cmd,
+					status: "pending" as const,
+				}));
+				return renderValidationView(milestoneName, commands, false);
+			}
+			case "logs":
+				return renderProgressLogStandalone(state.progressLog);
+			case "draft_review":
+				if (!plan) return ["No plan to review.", "", "Esc: close"];
+				return renderDraftReview(plan);
+			case "blocked": {
+				const feature = plan?.milestones.flatMap((m) => m.features).find((f) => f.id === view.featureId);
+				if (!feature) return ["Feature not found.", "", "Esc: close"];
+				const lastAttempt = feature.attempts[feature.attempts.length - 1];
+				const lastFailure: LastFailureDetails | undefined = lastAttempt
+					? { errorMessage: `Exit code: ${lastAttempt.exitCode ?? "unknown"}` }
+					: undefined;
+				return renderBlockedView(feature, 3, lastFailure);
+			}
+			case "report":
+				if (!plan) return ["No report available.", "", "Esc: close"];
+				return renderReportView(state, plan, this.deps.basePath);
+		}
+	}
+
+	private renderMainOverlay(state: MissionState, plan: MissionPlan | null, width: number): string[] {
 		const leftWidth = Math.floor(width / 2) - 1;
 		const rightWidth = width - leftWidth - 1;
 

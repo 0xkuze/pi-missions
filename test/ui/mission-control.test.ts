@@ -8,6 +8,7 @@ import {
 	renderKeyboardShortcuts,
 	renderMissionOutline,
 	renderProgressLog,
+	resolveStateView,
 } from "../../extensions/ui/mission-control.js";
 
 function makeState(status: MissionState["status"], overrides: Partial<MissionState> = {}): MissionState {
@@ -622,6 +623,98 @@ describe("handleKeyboardAction (VAL-UI-006)", () => {
 		it("returns noop for numeric key", () => {
 			const action = handleKeyboardAction("1", makeState("executing"));
 			expect(action.kind).toBe("noop");
+		});
+	});
+});
+
+describe("resolveStateView (VAL-WIRE-001..006)", () => {
+	describe("state-triggered views", () => {
+		it("returns report view when mission is completed (VAL-WIRE-006)", () => {
+			const state = makeState("completed");
+			const view = resolveStateView(state, null);
+			expect(view).not.toBeNull();
+			expect(view?.kind).toBe("report");
+		});
+
+		it("returns draft_review view when in draft_review state (VAL-WIRE-004)", () => {
+			const state = makeState("draft_review");
+			const view = resolveStateView(state, null);
+			expect(view).not.toBeNull();
+			expect(view?.kind).toBe("draft_review");
+		});
+
+		it("returns blocked view when current feature is failed (VAL-WIRE-005)", () => {
+			const feature = makeFeature("f1", "failed");
+			const milestone = makeMilestone("m1", [feature]);
+			const plan = makePlan([milestone]);
+			const state = makeState("executing", { currentFeatureId: "f1" });
+			const view = resolveStateView(state, plan);
+			expect(view).not.toBeNull();
+			expect(view?.kind).toBe("blocked");
+			if (view?.kind === "blocked") {
+				expect(view.featureId).toBe("f1");
+			}
+		});
+
+		it("returns blocked view when current feature is blocked (VAL-WIRE-005)", () => {
+			const feature = makeFeature("f1", "blocked");
+			const milestone = makeMilestone("m1", [feature]);
+			const plan = makePlan([milestone]);
+			const state = makeState("executing", { currentFeatureId: "f1" });
+			const view = resolveStateView(state, plan);
+			expect(view).not.toBeNull();
+			expect(view?.kind).toBe("blocked");
+		});
+
+		it("returns null for executing state with active feature", () => {
+			const feature = makeFeature("f1", "active");
+			const plan = makePlan([makeMilestone("m1", [feature])]);
+			const state = makeState("executing", { currentFeatureId: "f1" });
+			const view = resolveStateView(state, plan);
+			expect(view).toBeNull();
+		});
+
+		it("returns null for executing state with no current feature", () => {
+			const state = makeState("executing");
+			const view = resolveStateView(state, null);
+			expect(view).toBeNull();
+		});
+
+		it("returns null for planning state", () => {
+			const state = makeState("planning");
+			const view = resolveStateView(state, null);
+			expect(view).toBeNull();
+		});
+
+		it("returns null for paused state", () => {
+			const state = makeState("paused");
+			const view = resolveStateView(state, null);
+			expect(view).toBeNull();
+		});
+
+		it("completed takes priority over blocked feature", () => {
+			const feature = makeFeature("f1", "failed");
+			const plan = makePlan([makeMilestone("m1", [feature])]);
+			const state = makeState("completed", { currentFeatureId: "f1" });
+			const view = resolveStateView(state, plan);
+			expect(view?.kind).toBe("report");
+		});
+	});
+
+	describe("M/V/L key actions produce open_* overlay actions (VAL-WIRE-001/002/003)", () => {
+		it("M key returns open_model_view action (VAL-WIRE-001)", () => {
+			const action = handleKeyboardAction("m", makeState("executing"));
+			expect(action.kind).toBe("open_model_view");
+		});
+
+		it("V key returns open_validation_view action (VAL-WIRE-002)", () => {
+			const action = handleKeyboardAction("v", makeState("executing"));
+			expect(action.kind).toBe("open_validation_view");
+		});
+
+		it("L key returns open_logs_view action (VAL-WIRE-003)", () => {
+			const action = handleKeyboardAction("l", makeState("executing"));
+			expect(action.kind).toBe("open_logs_view");
 		});
 	});
 });
