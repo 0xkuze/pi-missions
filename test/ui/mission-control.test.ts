@@ -794,7 +794,7 @@ function makeDeps(tmpDir: string, overrides: Partial<MissionControlDeps> = {}): 
 function makeTUI(rows = 50) {
 	return {
 		requestRender: () => {},
-		terminal: { rows, columns: 120 },
+		terminal: { rows, columns: 120, write: () => {} },
 	} as unknown as import("@mariozechner/pi-tui").TUI;
 }
 
@@ -1090,7 +1090,7 @@ describe("MissionControlComponent scroll and height clamping", () => {
 			const lines = component.render(120);
 			const text = lines.join(" ");
 
-			expect(text).not.toContain("Up/Down: Scroll");
+			expect(text).not.toContain("Scroll: arrows/mouse");
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
@@ -1116,8 +1116,8 @@ describe("MissionControlComponent scroll and height clamping", () => {
 			const lines = component.render(120);
 			const text = lines.join(" ");
 
-			expect(text).toContain("Up/Down");
 			expect(text).toContain("Scroll");
+			expect(text).toContain("arrows/mouse");
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
@@ -1213,6 +1213,117 @@ describe("MissionControlComponent scroll and height clamping", () => {
 			const restored = component.render(120);
 
 			expect(restored).toEqual(original);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("footer is always visible in rendered output", () => {
+		const tmpDir = join(tmpdir(), `mc-footer-visible-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const plan = makeLargePlan();
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f0",
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(20);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+			const lines = component.render(120);
+			const lastLine = lines[lines.length - 1]!;
+
+			expect(lastLine).toContain("P: Pause");
+			expect(lastLine).toContain("\u2518");
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("total rendered lines never exceed terminal rows minus margin", () => {
+		const tmpDir = join(tmpdir(), `mc-linecount-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const plan = makeLargePlan();
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f0",
+				progressLog: [
+					makeEvent("feature_start", "started feature-0", 60_000),
+					makeEvent("worker_spawn", "spawned worker", 50_000),
+				],
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const terminalRows = 20;
+			const tui = makeTUI(terminalRows);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+			const lines = component.render(120);
+
+			expect(lines.length).toBeLessThanOrEqual(terminalRows - 2);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("MissionControlComponent parseMouseScroll", () => {
+	it("returns -3 for scroll up (button 64)", () => {
+		const tmpDir = join(tmpdir(), `mc-mouse-up-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const deps = makeDeps(tmpDir);
+			const tui = makeTUI();
+			const component = new MissionControlComponent(tui, () => {}, deps);
+			expect(component.parseMouseScroll("\x1b[<64;1;1M")).toBe(-3);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("returns 3 for scroll down (button 65)", () => {
+		const tmpDir = join(tmpdir(), `mc-mouse-down-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const deps = makeDeps(tmpDir);
+			const tui = makeTUI();
+			const component = new MissionControlComponent(tui, () => {}, deps);
+			expect(component.parseMouseScroll("\x1b[<65;1;1M")).toBe(3);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("returns 0 for mouse click (button 0)", () => {
+		const tmpDir = join(tmpdir(), `mc-mouse-click-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const deps = makeDeps(tmpDir);
+			const tui = makeTUI();
+			const component = new MissionControlComponent(tui, () => {}, deps);
+			expect(component.parseMouseScroll("\x1b[<0;1;1M")).toBe(0);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("returns 0 for non-mouse input", () => {
+		const tmpDir = join(tmpdir(), `mc-mouse-nomouse-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const deps = makeDeps(tmpDir);
+			const tui = makeTUI();
+			const component = new MissionControlComponent(tui, () => {}, deps);
+			expect(component.parseMouseScroll("A")).toBe(0);
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}

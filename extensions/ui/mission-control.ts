@@ -508,6 +508,7 @@ export class MissionControlComponent {
 		this.planHistory = readHistory(deps.basePath);
 		this.pollInterval = setInterval(() => this.poll(), POLL_INTERVAL_MS);
 		this.style = theme ? themeFrameStyle(theme) : undefined;
+		this.enableMouse();
 	}
 
 	private poll(): void {
@@ -538,6 +539,13 @@ export class MissionControlComponent {
 	}
 
 	handleInput(data: string): void {
+		const mouseScroll = this.parseMouseScroll(data);
+		if (mouseScroll !== 0) {
+			this.applyScroll(mouseScroll);
+			this.tui.requestRender();
+			return;
+		}
+
 		const activeView = this.resolveActiveView();
 		if (activeView !== null) {
 			this.handleSubViewInput(data, activeView);
@@ -551,26 +559,51 @@ export class MissionControlComponent {
 		this.dispatchAction(action);
 	}
 
-	private handleScroll(data: string): boolean {
-		const availableHeight = Math.max(5, this.tui.terminal.rows - 6);
+	parseMouseScroll(data: string): number {
+		const match = data.match(/^\x1b\[<(\d+);\d+;\d+[Mm]$/);
+		if (!match) return 0;
+		const button = parseInt(match[1]!, 10);
+		if (button === 64) return -3;
+		if (button === 65) return 3;
+		return 0;
+	}
+
+	private applyScroll(delta: number): void {
+		const availableHeight = this.getAvailableBodyLines();
 		const maxScroll = Math.max(0, this.lastBodyHeight - availableHeight);
-		if (maxScroll === 0) return false;
+		this.scrollOffset = Math.max(0, Math.min(maxScroll, this.scrollOffset + delta));
+	}
+
+	private getAvailableBodyLines(): number {
+		const FRAME_CHROME = 4;
+		const MARGIN = 2;
+		const maxTotalLines = this.tui.terminal.rows - MARGIN;
+		return Math.max(3, maxTotalLines - FRAME_CHROME);
+	}
+
+	private enableMouse(): void {
+		this.tui.terminal.write("\x1b[?1000h\x1b[?1006h");
+	}
+
+	private disableMouse(): void {
+		this.tui.terminal.write("\x1b[?1000l\x1b[?1006l");
+	}
+
+	private handleScroll(data: string): boolean {
 		if (matchesKey(data, "up")) {
-			this.scrollOffset = Math.max(0, this.scrollOffset - 1);
+			this.applyScroll(-1);
 			return true;
 		}
 		if (matchesKey(data, "down")) {
-			this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 1);
+			this.applyScroll(1);
 			return true;
 		}
 		if (matchesKey(data, "pageUp")) {
-			const pageSize = Math.max(1, availableHeight - 2);
-			this.scrollOffset = Math.max(0, this.scrollOffset - pageSize);
+			this.applyScroll(-(this.getAvailableBodyLines() - 2));
 			return true;
 		}
 		if (matchesKey(data, "pageDown")) {
-			const pageSize = Math.max(1, availableHeight - 2);
-			this.scrollOffset = Math.min(maxScroll, this.scrollOffset + pageSize);
+			this.applyScroll(this.getAvailableBodyLines() - 2);
 			return true;
 		}
 		return false;
@@ -1023,24 +1056,18 @@ export class MissionControlComponent {
 			allBodyLines.push(`${left}${right}`);
 		}
 
-		const availableHeight = Math.max(5, this.tui.terminal.rows - 6);
+		const availableBodyLines = this.getAvailableBodyLines();
 		this.lastBodyHeight = allBodyLines.length;
 
-		const maxScroll = Math.max(0, allBodyLines.length - availableHeight);
+		const maxScroll = Math.max(0, allBodyLines.length - availableBodyLines);
 		this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxScroll));
 
-		const visibleLines = allBodyLines.slice(this.scrollOffset, this.scrollOffset + availableHeight);
+		const visibleLines = allBodyLines.slice(this.scrollOffset, this.scrollOffset + availableBodyLines);
 
-		const hasOverflow = allBodyLines.length > availableHeight;
-		if (hasOverflow) {
-			const mf = this.style?.mutedFn ?? ((t: string) => t);
-			const scrollInfo = mf(
-				`[${this.scrollOffset + 1}-${Math.min(this.scrollOffset + availableHeight, allBodyLines.length)} of ${allBodyLines.length}]`,
-			);
-			visibleLines.push(scrollInfo);
-		}
-
-		const scrollHint = hasOverflow ? "Up/Down: Scroll  " : "";
+		const hasOverflow = allBodyLines.length > availableBodyLines;
+		const scrollHint = hasOverflow
+			? `[${this.scrollOffset + 1}-${Math.min(this.scrollOffset + availableBodyLines, allBodyLines.length)} of ${allBodyLines.length}] Scroll: arrows/mouse  `
+			: "";
 		const footer = `${scrollHint}P: Pause  S: Skip  D: Done  R: Redirect  M: Models  V: Validate  L: Logs  H: History  Esc: Close`;
 		return frame("Mission Control", visibleLines, width, footer, this.style);
 	}
@@ -1048,6 +1075,7 @@ export class MissionControlComponent {
 	invalidate(): void {}
 
 	dispose(): void {
+		this.disableMouse();
 		if (this.pollInterval !== null) {
 			clearInterval(this.pollInterval);
 			this.pollInterval = null;
