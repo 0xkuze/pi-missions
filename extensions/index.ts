@@ -9,6 +9,7 @@ import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
 import { loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
 import { appendMutation } from "./state/plan-history.js";
 import { transitionState } from "./state/transitions.js";
+import { type Question, type QuestionAnswer, registerAskQuestionsTool } from "./tools/ask-questions.js";
 import { registerCommitChangesTool } from "./tools/commit-changes.js";
 import { registerCompleteMissionTool } from "./tools/complete.js";
 import { registerCreateFixTool } from "./tools/create-fix.js";
@@ -20,6 +21,7 @@ import type { Feature, MissionPlan, MissionState, WorkerResult } from "./types.j
 import { handleDraftReviewKey, renderDraftReview } from "./ui/draft-review.js";
 import { themeFrameStyle } from "./ui/frame.js";
 import { MissionControlComponent } from "./ui/mission-control.js";
+import { QuestionsOverlayComponent } from "./ui/questions-overlay.js";
 import type { ThemeStyler } from "./ui/widget.js";
 import { buildWidgetLines } from "./ui/widget.js";
 import { nowISO } from "./utils.js";
@@ -485,6 +487,26 @@ export default function (pi: ExtensionAPI): void {
 	});
 	registerCommitChangesTool(pi, { basePath, projectDir, updateWidget });
 	registerCreateFixTool(pi, { basePath, updateWidget });
+	registerAskQuestionsTool(pi, {
+		basePath,
+		showQuestions: (questions: Question[]) => {
+			const ctx = latestCtx;
+			if (!ctx) {
+				return Promise.resolve(
+					questions.map((q) => ({ question: q.question, answer: q.options[0] ?? "", isCustom: false })),
+				);
+			}
+			return ctx.ui
+				.custom<QuestionAnswer[] | null>(
+					(tui, theme, _kb, done) => new QuestionsOverlayComponent(tui, done, questions, theme),
+					{ overlay: true },
+				)
+				.then(
+					(answers) =>
+						answers ?? questions.map((q) => ({ question: q.question, answer: "(skipped)", isCustom: false })),
+				);
+		},
+	});
 
 	// Register all slash commands.
 	registerCommands(pi, { basePath, updateWidget, clearWidget });
