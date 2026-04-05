@@ -128,7 +128,7 @@ describe("VAL-CROSS-004: validation failure -> fix feature -> re-validation", ()
 			basePath,
 			projectDir: tmpDir,
 			updateWidget,
-			_runCommandOverride: failingRunner,
+			exec: failingRunner,
 		});
 
 		const state = makeState("executing");
@@ -263,7 +263,7 @@ describe("VAL-CROSS-004: validation failure -> fix feature -> re-validation", ()
 			basePath,
 			projectDir: tmpDir,
 			updateWidget,
-			_runCommandOverride: conditionalRunner,
+			exec: conditionalRunner,
 		});
 		registerCreateFixTool(pi, { basePath, updateWidget });
 
@@ -355,7 +355,7 @@ describe("VAL-CROSS-004: validation failure -> fix feature -> re-validation", ()
 			basePath,
 			projectDir: tmpDir,
 			updateWidget,
-			_runCommandOverride: conditionalRunner,
+			exec: conditionalRunner,
 		});
 		registerCreateFixTool(pi, { basePath, updateWidget });
 
@@ -619,7 +619,7 @@ describe("VAL-CROSS-010: dirty repo handling through full lifecycle", () => {
 			basePath,
 			projectDir: tmpDir,
 			updateWidget,
-			_runCommandOverride: async () => ({ exitCode: 0, stdout: "OK", stderr: "", timedOut: false }),
+			exec: async () => ({ exitCode: 0, stdout: "OK", stderr: "", timedOut: false }),
 		});
 
 		// Dirty repo state

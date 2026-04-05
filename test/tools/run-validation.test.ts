@@ -6,7 +6,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { savePlan, saveState } from "../../extensions/state/manager.js";
 import type { Feature, Milestone, MissionPlan, MissionState, ValidationResult } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
-import { registerRunValidationTool } from "../../extensions/tools/run-validation.js";
+import { type ExecFn, registerRunValidationTool } from "../../extensions/tools/run-validation.js";
 
 type ToolResult = { content: Array<{ type: string; text: string }>; details: unknown };
 type ExecutableTool = { execute: (...args: unknown[]) => Promise<ToolResult> };
@@ -77,21 +77,10 @@ function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
 	};
 }
 
-type CommandRunner = (
-	cmd: string,
-	cwd: string,
-	timeoutMs: number,
-) => Promise<{
-	exitCode: number | null;
-	stdout: string;
-	stderr: string;
-	timedOut: boolean;
-}>;
-
 interface CallToolOptions {
 	state?: MissionState;
 	plan?: MissionPlan;
-	runCommand?: CommandRunner;
+	exec?: ExecFn;
 	updateWidget?: (state: MissionState, plan?: MissionPlan) => void;
 }
 
@@ -103,7 +92,7 @@ async function callTool(
 	const {
 		state = makeState(),
 		plan = makePlan(),
-		runCommand = async () => ({ exitCode: 0, stdout: "ok", stderr: "", timedOut: false }),
+		exec = async () => ({ exitCode: 0, stdout: "ok", stderr: "", timedOut: false }),
 		updateWidget = () => {},
 	} = options;
 
@@ -115,7 +104,7 @@ async function callTool(
 		basePath,
 		projectDir: basePath,
 		updateWidget,
-		_runCommandOverride: runCommand,
+		exec,
 	});
 	const tool = getLastRegisteredTool()!;
 	return tool.execute("tool-call-id", params, undefined, undefined, undefined) as Promise<ToolResult>;
@@ -139,6 +128,7 @@ describe("registerRunValidationTool", () => {
 				basePath: tmpDir,
 				projectDir: tmpDir,
 				updateWidget: () => {},
+				exec: async () => ({ exitCode: 0, stdout: "", stderr: "", timedOut: false }),
 			});
 			const tool = getLastRegisteredTool()!;
 			const result = (await tool.execute(
@@ -206,12 +196,12 @@ describe("registerRunValidationTool", () => {
 				],
 			});
 			const executionOrder: string[] = [];
-			const runCommand: CommandRunner = async (cmd) => {
+			const exec: ExecFn = async (cmd) => {
 				executionOrder.push(cmd);
 				return { exitCode: 0, stdout: "", stderr: "", timedOut: false };
 			};
 
-			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 
 			expect(executionOrder[0]).toContain("typecheck");
 			expect(executionOrder[1]).toContain("lint");
@@ -229,12 +219,12 @@ describe("registerRunValidationTool", () => {
 				],
 			});
 			const executedCommands: string[] = [];
-			const runCommand: CommandRunner = async (cmd) => {
+			const exec: ExecFn = async (cmd) => {
 				executedCommands.push(cmd);
 				return { exitCode: 0, stdout: "", stderr: "", timedOut: false };
 			};
 
-			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 
 			expect(executedCommands).toContain("echo milestone-test");
 			expect(executedCommands).not.toContain("plan-level-command");
@@ -246,12 +236,12 @@ describe("registerRunValidationTool", () => {
 				milestones: [makeMilestone({ validationCommands: undefined })],
 			});
 			const executedCommands: string[] = [];
-			const runCommand: CommandRunner = async (cmd) => {
+			const exec: ExecFn = async (cmd) => {
 				executedCommands.push(cmd);
 				return { exitCode: 0, stdout: "", stderr: "", timedOut: false };
 			};
 
-			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 
 			expect(executedCommands).toContain("npm run test");
 		});
@@ -265,14 +255,14 @@ describe("registerRunValidationTool", () => {
 				],
 			});
 			const executedCommands: string[] = [];
-			const runCommand: CommandRunner = async (cmd) => {
+			const exec: ExecFn = async (cmd) => {
 				executedCommands.push(cmd);
 				// typecheck fails, others pass
 				const exitCode = cmd.includes("typecheck") ? 1 : 0;
 				return { exitCode, stdout: "", stderr: "", timedOut: false };
 			};
 
-			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 
 			expect(executedCommands).toHaveLength(3);
 		});
@@ -284,7 +274,7 @@ describe("registerRunValidationTool", () => {
 				tmpDir,
 				{ milestoneId: "milestone-1" },
 				{
-					runCommand: async () => ({ exitCode: 0, stdout: "ok", stderr: "", timedOut: false }),
+					exec: async () => ({ exitCode: 0, stdout: "ok", stderr: "", timedOut: false }),
 				},
 			);
 			const text = result.content[0].text;
@@ -301,14 +291,14 @@ describe("registerRunValidationTool", () => {
 					}),
 				],
 			});
-			const runCommand: CommandRunner = async (cmd) => ({
+			const exec: ExecFn = async (cmd) => ({
 				exitCode: cmd.includes("test") ? 1 : 0,
 				stdout: "",
 				stderr: cmd.includes("test") ? "test failed" : "",
 				timedOut: false,
 			});
 
-			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
 			expect(parsed.status).toBe("fail");
 			expect(parsed.failingChecks.length).toBeGreaterThan(0);
@@ -322,14 +312,14 @@ describe("registerRunValidationTool", () => {
 					}),
 				],
 			});
-			const runCommand: CommandRunner = async () => ({
+			const exec: ExecFn = async () => ({
 				exitCode: null,
 				stdout: "",
 				stderr: "",
 				timedOut: true,
 			});
 
-			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
 			expect(parsed.status).toBe("fail");
 			expect(parsed.commands[0]!.timedOut).toBe(true);
@@ -379,13 +369,13 @@ describe("registerRunValidationTool", () => {
 					}),
 				],
 			});
-			const runCommand: CommandRunner = async (cmd) => ({
+			const exec: ExecFn = async (cmd) => ({
 				exitCode: cmd.includes("test") ? 1 : 0,
 				stdout: "",
 				stderr: "",
 				timedOut: false,
 			});
-			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
 			expect(parsed.failingChecks).toHaveLength(1);
 			expect(parsed.failingChecks[0]).toContain("test");
@@ -403,12 +393,12 @@ describe("registerRunValidationTool", () => {
 			wfs(pathJoin(tmpDir, "config.json"), JSON.stringify(config), "utf8");
 
 			const receivedTimeouts: number[] = [];
-			const runCommand: CommandRunner = async (_cmd, _cwd, timeoutMs) => {
+			const exec: ExecFn = async (_cmd, _cwd, timeoutMs) => {
 				receivedTimeouts.push(timeoutMs);
 				return { exitCode: 0, stdout: "", stderr: "", timedOut: false };
 			};
 
-			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 
 			expect(receivedTimeouts[0]).toBe(60000);
 		});
@@ -418,12 +408,12 @@ describe("registerRunValidationTool", () => {
 				milestones: [makeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const receivedTimeouts: number[] = [];
-			const runCommand: CommandRunner = async (_cmd, _cwd, timeoutMs) => {
+			const exec: ExecFn = async (_cmd, _cwd, timeoutMs) => {
 				receivedTimeouts.push(timeoutMs);
 				return { exitCode: 0, stdout: "", stderr: "", timedOut: false };
 			};
 
-			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 
 			expect(receivedTimeouts[0]).toBe(120000);
 		});
@@ -432,14 +422,14 @@ describe("registerRunValidationTool", () => {
 			const plan = makePlan({
 				milestones: [makeMilestone({ validationCommands: ["npm run test"] })],
 			});
-			const runCommand: CommandRunner = async () => ({
+			const exec: ExecFn = async () => ({
 				exitCode: null,
 				stdout: "",
 				stderr: "",
 				timedOut: true,
 			});
 
-			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
 			expect(parsed.commands[0]!.timedOut).toBe(true);
 			expect(parsed.commands[0]!.exitCode).toBeNull();
@@ -467,14 +457,14 @@ describe("registerRunValidationTool", () => {
 			const plan = makePlan({
 				milestones: [makeMilestone({ validationCommands: ["echo hello"] })],
 			});
-			const runCommand: CommandRunner = async () => ({
+			const exec: ExecFn = async () => ({
 				exitCode: 0,
 				stdout: "hello output",
 				stderr: "some error",
 				timedOut: false,
 			});
 
-			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 
 			const validationDir = join(tmpDir, "runtime", "validation", "milestone-1");
 			const { readdirSync } = await import("node:fs");
@@ -509,7 +499,7 @@ describe("registerRunValidationTool", () => {
 				{ milestoneId: "milestone-1" },
 				{
 					plan,
-					runCommand: async () => ({ exitCode: 1, stdout: "", stderr: "", timedOut: false }),
+					exec: async () => ({ exitCode: 1, stdout: "", stderr: "", timedOut: false }),
 				},
 			);
 			const finalState = loadState(tmpDir)!;
@@ -544,13 +534,13 @@ describe("registerRunValidationTool", () => {
 					}),
 				],
 			});
-			const runCommand: CommandRunner = async (cmd) => ({
+			const exec: ExecFn = async (cmd) => ({
 				exitCode: cmd.includes("test") ? 1 : 0,
 				stdout: "",
 				stderr: "",
 				timedOut: false,
 			});
-			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
 			expect(parsed.summary.toLowerCase()).toContain("fail");
 			expect(parsed.summary).toContain("test");
@@ -573,12 +563,12 @@ describe("registerRunValidationTool", () => {
 				],
 			});
 			const executedCommands: string[] = [];
-			const runCommand: CommandRunner = async (cmd) => {
+			const exec: ExecFn = async (cmd) => {
 				executedCommands.push(cmd);
 				return { exitCode: cmd.includes("typecheck") ? 1 : 0, stdout: "", stderr: "", timedOut: false };
 			};
 
-			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 
 			expect(executedCommands).toHaveLength(3);
 		});
@@ -591,14 +581,14 @@ describe("registerRunValidationTool", () => {
 					}),
 				],
 			});
-			const runCommand: CommandRunner = async (cmd) => ({
+			const exec: ExecFn = async (cmd) => ({
 				exitCode: cmd.includes("typecheck") ? 1 : 0,
 				stdout: "output",
 				stderr: "",
 				timedOut: false,
 			});
 
-			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 
 			const validationDir = join(tmpDir, "runtime", "validation", "milestone-1");
 			expect(existsSync(validationDir)).toBe(true);
@@ -620,13 +610,13 @@ describe("registerRunValidationTool", () => {
 					}),
 				],
 			});
-			const runCommand: CommandRunner = async (cmd) => ({
+			const exec: ExecFn = async (cmd) => ({
 				exitCode: cmd.includes("typecheck") ? 1 : 0,
 				stdout: "",
 				stderr: "",
 				timedOut: false,
 			});
-			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, runCommand });
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
 			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
 			expect(parsed.status).toBe("fail");
 		});

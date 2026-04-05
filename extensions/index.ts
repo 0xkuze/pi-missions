@@ -385,7 +385,22 @@ export default function (pi: ExtensionAPI): void {
 	});
 	registerUpdateStateTool(pi, { basePath, updateWidget });
 	registerCompleteMissionTool(pi, { basePath, updateWidget });
-	registerRunValidationTool(pi, { basePath, projectDir, updateWidget });
+	registerRunValidationTool(pi, {
+		basePath,
+		projectDir,
+		updateWidget,
+		exec: async (cmd, cwd, timeoutMs) => {
+			const signal = AbortSignal.timeout(timeoutMs);
+			const [command, ...args] = cmd.split(" ");
+			const result = await pi.exec(command!, args, { cwd, signal });
+			return {
+				exitCode: result.killed ? null : result.code,
+				stdout: result.stdout,
+				stderr: result.stderr,
+				timedOut: result.killed,
+			};
+		},
+	});
 	registerCommitChangesTool(pi, { basePath, projectDir, updateWidget });
 	registerCreateFixTool(pi, { basePath, updateWidget });
 

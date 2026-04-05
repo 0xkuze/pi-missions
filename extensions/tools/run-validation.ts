@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
@@ -15,13 +14,13 @@ type CommandResult = {
 	timedOut: boolean;
 };
 
-type CommandRunner = (cmd: string, cwd: string, timeoutMs: number) => Promise<CommandResult>;
+export type ExecFn = (cmd: string, cwd: string, timeoutMs: number) => Promise<CommandResult>;
 
-interface Deps {
+export interface RunValidationDeps {
 	basePath: string;
 	projectDir: string;
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
-	_runCommandOverride?: CommandRunner;
+	exec: ExecFn;
 }
 
 function sanitizeLabel(cmd: string): string {
@@ -41,47 +40,6 @@ function inferLabel(cmd: string): string {
 	return sanitizeLabel(cmd);
 }
 
-function runCommandDefault(cmd: string, cwd: string, timeoutMs: number): Promise<CommandResult> {
-	return new Promise((resolve) => {
-		const parts = cmd.split(" ");
-		const executable = parts[0]!;
-		const args = parts.slice(1);
-		const proc = spawn(executable, args, { cwd, stdio: ["ignore", "pipe", "pipe"], shell: true });
-
-		let stdoutBuf = "";
-		let stderrBuf = "";
-		let settled = false;
-
-		proc.stdout?.on("data", (chunk: Buffer) => {
-			stdoutBuf += chunk.toString();
-		});
-		proc.stderr?.on("data", (chunk: Buffer) => {
-			stderrBuf += chunk.toString();
-		});
-
-		const timer = setTimeout(() => {
-			if (settled) return;
-			settled = true;
-			proc.kill("SIGKILL");
-			resolve({ exitCode: null, stdout: stdoutBuf, stderr: stderrBuf, timedOut: true });
-		}, timeoutMs);
-
-		proc.on("close", (code: number | null) => {
-			if (settled) return;
-			settled = true;
-			clearTimeout(timer);
-			resolve({ exitCode: code, stdout: stdoutBuf, stderr: stderrBuf, timedOut: false });
-		});
-
-		proc.on("error", () => {
-			if (settled) return;
-			settled = true;
-			clearTimeout(timer);
-			resolve({ exitCode: null, stdout: stdoutBuf, stderr: stderrBuf, timedOut: false });
-		});
-	});
-}
-
 function buildSummary(commands: ValidationResult["commands"]): string {
 	if (commands.length === 0) {
 		return "No validation commands configured. Validation passed by default.";
@@ -99,8 +57,8 @@ function buildSummary(commands: ValidationResult["commands"]): string {
 	return `${passed}/${total} checks passed, ${failed} failed: ${failingLabels}`;
 }
 
-export function registerRunValidationTool(pi: ExtensionAPI, deps: Deps): void {
-	const runCmd: CommandRunner = deps._runCommandOverride ?? runCommandDefault;
+export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationDeps): void {
+	const runCmd = deps.exec;
 
 	pi.registerTool({
 		name: "run_validation",
