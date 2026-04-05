@@ -73,7 +73,9 @@ export function frame(
 	let bottomBorder: string;
 	if (footerLine) {
 		const styledFooter = styleFooter(footerLine, style?.accentFn);
-		const footerText = ` ${styledFooter} `;
+		const maxFooterVW = width - 5;
+		const truncatedFooter = truncateToWidth(styledFooter, maxFooterVW);
+		const footerText = ` ${truncatedFooter} `;
 		const footerVW = visibleWidth(footerText);
 		const bottomFill = Math.max(0, width - 3 - footerVW);
 		bottomBorder = `${b(BOX_BL + BOX_H)}${footerText}${b(BOX_H.repeat(bottomFill) + BOX_BR)}`;

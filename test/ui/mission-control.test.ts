@@ -942,7 +942,7 @@ describe("MissionControlComponent main overlay frame wrapping", () => {
 			const tui = makeTUI();
 			const component = new MissionControlComponent(tui, () => {}, deps);
 
-			const width = 80;
+			const width = 120;
 			const lines = component.render(width);
 			const text = lines.join("\n");
 
