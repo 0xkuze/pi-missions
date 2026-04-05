@@ -26,6 +26,7 @@
 	"files": {
 		"includes": [
 			"extensions/**/*.ts",
+			"test/**/*.ts",
 			"!**/node_modules/**/*"
 		]
 	}

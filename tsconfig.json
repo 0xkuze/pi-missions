@@ -26,6 +26,6 @@
 			]
 		}
 	},
-	"include": ["extensions/**/*.ts"],
+	"include": ["extensions/**/*.ts", "test/**/*.ts"],
 	"exclude": ["node_modules", "dist"]
 }
