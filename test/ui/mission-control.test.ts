@@ -813,8 +813,8 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const tui = makeTUI();
 			const done = () => {};
 			const component = new MissionControlComponent(tui, done, deps);
-			component.currentSubView = { kind: "model" };
-			component.modelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
+			component.handleInput("M");
+			component.handleInput("\r");
 			component.handleInput("\r");
 			await new Promise((r) => setTimeout(r, 10));
 			expect(setModelCalls).toEqual(["claude-opus"]);
@@ -836,8 +836,8 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const tui = makeTUI();
 			const done = () => {};
 			const component = new MissionControlComponent(tui, done, deps);
-			component.currentSubView = { kind: "model" };
-			component.modelViewState = { selectedRoleIndex: 1, searchQuery: "", highlightedIndex: 0 };
+			component.handleInput("M");
+			component.handleInput("2");
 			component.handleInput("\r");
 			await new Promise((r) => setTimeout(r, 10));
 			expect(setModelCalls).toEqual([]);
@@ -854,8 +854,8 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const tui = makeTUI();
 			const done = () => {};
 			const component = new MissionControlComponent(tui, done, deps);
-			component.currentSubView = { kind: "model" };
-			component.modelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
+			component.handleInput("M");
+			component.handleInput("\r");
 			component.handleInput("\r");
 			await new Promise((r) => setTimeout(r, 10));
 			const configPath = join(tmpDir, "config.json");
@@ -896,7 +896,6 @@ describe("MissionControlComponent draft_review approve", () => {
 				deps,
 			);
 
-			component.currentSubView = { kind: "draft_review" };
 			component.handleInput("A");
 
 			expect(doneCalled).toBe(true);
@@ -925,8 +924,8 @@ describe("MissionControlComponent draft_review approve", () => {
 			expect(mutation.planVersion).toBe(2);
 			expect(mutation.actor).toBe("user");
 
-			expect(component.state?.status).toBe("approved");
-			expect(component.plan?.approvedAt).toBeDefined();
+			expect(savedState.status).toBe("approved");
+			expect(savedPlan.approvedAt).toBeDefined();
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
