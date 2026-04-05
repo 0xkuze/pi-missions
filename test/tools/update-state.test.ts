@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { readHistory } from "../../extensions/state/plan-history.js";
 import { loadPlan, loadState, savePlan, saveState } from "../../extensions/state/manager.js";
 import type { Feature, Milestone, MissionPlan, MissionState } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
@@ -78,7 +79,15 @@ function makeMockPi(): { pi: ExtensionAPI; getLastRegisteredTool: () => Executab
 
 async function callTool(
 	basePath: string,
-	params: { action: string; targetId: string; reason?: string },
+	params: {
+		action: string;
+		targetId: string;
+		reason?: string;
+		name?: string;
+		description?: string;
+		acceptanceCriteria?: string[];
+		relevantFiles?: string[];
+	},
 	state: MissionState,
 	plan: MissionPlan | null,
 	updateWidget?: (state: MissionState, plan?: MissionPlan) => void,
@@ -557,6 +566,248 @@ describe("registerUpdateStateTool", () => {
 			const fn = () => callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
 			const result = await fn();
 			expect(result.content[0].text).toContain("Error");
+		});
+	});
+
+	describe("VAL-SCOPE-001: add_feature", () => {
+		it("adds a new pending feature to the specified milestone", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan();
+			await callTool(
+				tmpDir,
+				{
+					action: "add_feature",
+					targetId: "milestone-1",
+					name: "New Feature",
+					description: "A new feature to add",
+					acceptanceCriteria: ["works"],
+					relevantFiles: ["src/index.ts"],
+				},
+				state,
+				plan,
+			);
+
+			const savedPlan = loadPlan(tmpDir)!;
+			const features = savedPlan.milestones[0]!.features;
+			expect(features).toHaveLength(2);
+			const added = features.find((f) => f.name === "New Feature")!;
+			expect(added).toBeDefined();
+			expect(added.status).toBe("pending");
+			expect(added.description).toBe("A new feature to add");
+			expect(added.acceptanceCriteria).toEqual(["works"]);
+			expect(added.relevantFiles).toEqual(["src/index.ts"]);
+		});
+
+		it("increments planVersion", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan({ planVersion: 3 });
+			await callTool(
+				tmpDir,
+				{
+					action: "add_feature",
+					targetId: "milestone-1",
+					name: "Another Feature",
+					description: "desc",
+					acceptanceCriteria: ["passes"],
+				},
+				state,
+				plan,
+			);
+
+			const savedPlan = loadPlan(tmpDir)!;
+			expect(savedPlan.planVersion).toBe(4);
+		});
+
+		it("appends an add-feature mutation to plan history", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan();
+			await callTool(
+				tmpDir,
+				{
+					action: "add_feature",
+					targetId: "milestone-1",
+					name: "Feature X",
+					description: "desc",
+					acceptanceCriteria: ["criterion"],
+				},
+				state,
+				plan,
+			);
+
+			const history = readHistory(tmpDir);
+			expect(history).toHaveLength(1);
+			expect(history[0]!.kind).toBe("add-feature");
+			expect(history[0]!.actor).toBe("orchestrator");
+			expect(history[0]!.planVersion).toBe(2);
+		});
+
+		it("calls updateWidget with the updated plan", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan();
+			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
+			await callTool(
+				tmpDir,
+				{
+					action: "add_feature",
+					targetId: "milestone-1",
+					name: "Widget Feature",
+					description: "desc",
+					acceptanceCriteria: ["ok"],
+				},
+				state,
+				plan,
+				updateWidget,
+			);
+
+			expect(updateWidget).toHaveBeenCalledTimes(1);
+		});
+
+		it("returns error for unknown milestoneId", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan();
+			const result = await callTool(
+				tmpDir,
+				{
+					action: "add_feature",
+					targetId: "no-such-milestone",
+					name: "F",
+					description: "d",
+					acceptanceCriteria: ["x"],
+				},
+				state,
+				plan,
+			);
+
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("no-such-milestone");
+		});
+
+		it("returns error when name is missing", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan();
+			const result = await callTool(
+				tmpDir,
+				{ action: "add_feature", targetId: "milestone-1", description: "d", acceptanceCriteria: ["x"] },
+				state,
+				plan,
+			);
+
+			expect(result.content[0].text).toContain("Error");
+		});
+
+		it("returns error when adding to a done milestone", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan({ milestones: [makeMilestone({ status: "done" })] });
+			const result = await callTool(
+				tmpDir,
+				{
+					action: "add_feature",
+					targetId: "milestone-1",
+					name: "F",
+					description: "d",
+					acceptanceCriteria: ["x"],
+				},
+				state,
+				plan,
+			);
+
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("done");
+		});
+	});
+
+	describe("VAL-SCOPE-002: remove_feature", () => {
+		it("removes a pending feature from the plan", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({
+						features: [
+							makeFeature({ id: "feature-1", status: "pending" }),
+							makeFeature({ id: "feature-2", name: "Feature Two", status: "pending" }),
+						],
+					}),
+				],
+			});
+			await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
+
+			const savedPlan = loadPlan(tmpDir)!;
+			const features = savedPlan.milestones[0]!.features;
+			expect(features).toHaveLength(1);
+			expect(features[0]!.id).toBe("feature-2");
+		});
+
+		it("increments planVersion", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan({ planVersion: 5 });
+			await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
+
+			const savedPlan = loadPlan(tmpDir)!;
+			expect(savedPlan.planVersion).toBe(6);
+		});
+
+		it("appends a remove-feature mutation to plan history", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan();
+			await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
+
+			const history = readHistory(tmpDir);
+			expect(history).toHaveLength(1);
+			expect(history[0]!.kind).toBe("remove-feature");
+			expect(history[0]!.actor).toBe("orchestrator");
+			expect(history[0]!.planVersion).toBe(2);
+		});
+
+		it("calls updateWidget with the updated plan", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan();
+			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
+			await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan, updateWidget);
+
+			expect(updateWidget).toHaveBeenCalledTimes(1);
+		});
+
+		it("rejects removing a completed (done) feature", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan({
+				milestones: [makeMilestone({ features: [makeFeature({ status: "done" })] })],
+			});
+			const result = await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
+
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("completed");
+		});
+
+		it("rejects removing an active feature", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan({
+				milestones: [makeMilestone({ features: [makeFeature({ status: "active" })] })],
+			});
+			const result = await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
+
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("active");
+		});
+
+		it("returns error for unknown featureId", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan();
+			const result = await callTool(tmpDir, { action: "remove_feature", targetId: "does-not-exist" }, state, plan);
+
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("does-not-exist");
+		});
+
+		it("does not modify plan.json when returning an error", async () => {
+			const state = makeExecutingState();
+			const plan = makePlan({
+				milestones: [makeMilestone({ features: [makeFeature({ status: "done" })] })],
+			});
+			await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
+
+			const savedPlan = loadPlan(tmpDir)!;
+			expect(savedPlan.planVersion).toBe(1);
+			expect(savedPlan.milestones[0]!.features).toHaveLength(1);
 		});
 	});
 });

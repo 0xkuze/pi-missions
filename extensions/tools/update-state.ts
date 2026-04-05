@@ -1,7 +1,8 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
-import type { MissionPlan, MissionState } from "../types.js";
+import { appendMutation } from "../state/plan-history.js";
+import type { Feature, MissionPlan, MissionState } from "../types.js";
 import { nowISO } from "../utils.js";
 
 interface Deps {
@@ -162,6 +163,82 @@ function blockFeature(
 	return { plan: updatedPlan, state: updatedState };
 }
 
+function addFeature(
+	basePath: string,
+	plan: MissionPlan,
+	milestoneId: string,
+	params: { name: string; description: string; acceptanceCriteria: string[]; relevantFiles: string[] },
+): string | { plan: MissionPlan; feature: Feature } {
+	const milestone = findMilestone(plan, milestoneId);
+	if (!milestone) return `Milestone '${milestoneId}' not found in plan.`;
+	if (milestone.status === "done" || milestone.status === "failed") {
+		return `Cannot add feature to milestone '${milestoneId}': milestone is already ${milestone.status}.`;
+	}
+
+	const featureId = `${milestoneId}-${params.name
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/(^-|-$)/g, "")}-${Date.now()}`;
+	const newFeature: Feature = {
+		id: featureId,
+		name: params.name,
+		description: params.description,
+		acceptanceCriteria: params.acceptanceCriteria,
+		relevantFiles: params.relevantFiles,
+		dependencies: [],
+		estimatedComplexity: "medium",
+		status: "pending",
+		attempts: [],
+	};
+	const newPlanVersion = plan.planVersion + 1;
+	const updatedPlan: MissionPlan = {
+		...plan,
+		planVersion: newPlanVersion,
+		milestones: plan.milestones.map((m) =>
+			m.id === milestoneId ? { ...m, features: [...m.features, newFeature] } : m,
+		),
+	};
+	appendMutation(basePath, {
+		planVersion: newPlanVersion,
+		timestamp: nowISO(),
+		actor: "orchestrator",
+		kind: "add-feature",
+		summary: `Added feature '${params.name}' to milestone '${milestone.name}'`,
+		payload: { milestoneId, featureId, name: params.name },
+	});
+	return { plan: updatedPlan, feature: newFeature };
+}
+
+function removeFeature(basePath: string, plan: MissionPlan, featureId: string): string | { plan: MissionPlan } {
+	const found = findFeatureInPlan(plan, featureId);
+	if (!found) return `Feature '${featureId}' not found in plan.`;
+	if (found.feature.status === "done") {
+		return `Cannot remove feature '${featureId}': feature is already completed.`;
+	}
+	if (found.feature.status === "active") {
+		return `Cannot remove feature '${featureId}': feature is currently active.`;
+	}
+
+	const newPlanVersion = plan.planVersion + 1;
+	const updatedPlan: MissionPlan = {
+		...plan,
+		planVersion: newPlanVersion,
+		milestones: plan.milestones.map((m) => ({
+			...m,
+			features: m.features.filter((f) => f.id !== featureId),
+		})),
+	};
+	appendMutation(basePath, {
+		planVersion: newPlanVersion,
+		timestamp: nowISO(),
+		actor: "orchestrator",
+		kind: "remove-feature",
+		summary: `Removed feature '${found.feature.name}' from milestone '${found.milestone.name}'`,
+		payload: { featureId, milestoneId: found.milestone.id },
+	});
+	return { plan: updatedPlan };
+}
+
 function appendNote(state: MissionState, detail: string): MissionState {
 	return {
 		...state,
@@ -181,7 +258,7 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 		name: "update_mission_state",
 		label: "Update Mission State",
 		description:
-			"Update milestone or feature status. Actions: start_milestone, complete_milestone, skip_feature, block_feature, note.",
+			"Update milestone or feature status. Actions: start_milestone, complete_milestone, skip_feature, block_feature, note, add_feature, remove_feature.",
 		parameters: Type.Object({
 			action: Type.Union(
 				[
@@ -190,11 +267,22 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 					Type.Literal("skip_feature"),
 					Type.Literal("block_feature"),
 					Type.Literal("note"),
+					Type.Literal("add_feature"),
+					Type.Literal("remove_feature"),
 				],
 				{ description: "Action to perform" },
 			),
-			targetId: Type.String({ description: "Milestone or feature ID" }),
+			targetId: Type.String({
+				description:
+					"Milestone ID (for add_feature) or feature ID (for remove_feature/skip_feature/block_feature) or milestone ID (for start/complete_milestone)",
+			}),
 			reason: Type.Optional(Type.String({ description: "Optional reason or note text" })),
+			name: Type.Optional(Type.String({ description: "Feature name (required for add_feature)" })),
+			description: Type.Optional(Type.String({ description: "Feature description (required for add_feature)" })),
+			acceptanceCriteria: Type.Optional(
+				Type.Array(Type.String(), { description: "Acceptance criteria (required for add_feature)" }),
+			),
+			relevantFiles: Type.Optional(Type.Array(Type.String(), { description: "Relevant files (for add_feature)" })),
 		}),
 		async execute(_toolCallId, params) {
 			const state = loadState(deps.basePath);
@@ -264,6 +352,48 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				saveState(deps.basePath, result.state);
 				deps.updateWidget(result.state, result.plan);
 				return { content: [{ type: "text", text: `Feature '${targetId}' blocked.` }], details: {} };
+			}
+
+			if (action === "add_feature") {
+				const { name, description, acceptanceCriteria, relevantFiles } = params;
+				if (!name || !description || !acceptanceCriteria) {
+					return {
+						content: [
+							{ type: "text", text: "Error: add_feature requires name, description, and acceptanceCriteria." },
+						],
+						details: {},
+					};
+				}
+				const result = addFeature(deps.basePath, plan, targetId, {
+					name,
+					description,
+					acceptanceCriteria,
+					relevantFiles: relevantFiles ?? [],
+				});
+				if (typeof result === "string") {
+					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
+				}
+				savePlan(deps.basePath, result.plan);
+				deps.updateWidget(state, result.plan);
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Feature '${result.feature.name}' added to milestone '${targetId}' with id '${result.feature.id}'.`,
+						},
+					],
+					details: {},
+				};
+			}
+
+			if (action === "remove_feature") {
+				const result = removeFeature(deps.basePath, plan, targetId);
+				if (typeof result === "string") {
+					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
+				}
+				savePlan(deps.basePath, result.plan);
+				deps.updateWidget(state, result.plan);
+				return { content: [{ type: "text", text: `Feature '${targetId}' removed.` }], details: {} };
 			}
 
 			return {
