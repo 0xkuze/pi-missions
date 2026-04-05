@@ -672,7 +672,7 @@ describe("advanced integration: all views connected", () => {
 
 	it("draft review view renders plan and A key dispatches approve", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("Build a scalable auth system");
 		expect(text).toContain("Milestone m1"); // milestone name from factory
@@ -688,10 +688,17 @@ describe("advanced integration: all views connected", () => {
 			name: "auth-endpoint",
 			attempts: [makeAttempt(1, "failure"), makeAttempt(2, "failure"), makeAttempt(3, "failure")],
 		});
-		const lines = renderBlockedView(blocked, 3, {
-			errorMessage: "Connection refused",
-			details: "Service not running",
-		});
+		const lines = renderBlockedView(
+			blocked,
+			3,
+			{
+				errorMessage: "Connection refused",
+				details: "Service not running",
+			},
+			80,
+			undefined,
+			40,
+		);
 		const text = lines.join("\n");
 		expect(text).toContain("auth-endpoint");
 		expect(text).toContain("3/3");
@@ -704,7 +711,7 @@ describe("advanced integration: all views connected", () => {
 			{ label: "test", status: "failed", durationMs: 8000 },
 			{ label: "build", status: "pending" },
 		];
-		const lines = renderValidationView("Foundation", commands, true);
+		const lines = renderValidationView("Foundation", commands, true, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("typecheck");
 		expect(text).toContain("test");
@@ -723,7 +730,7 @@ describe("advanced integration: all views connected", () => {
 			totalFeaturesSkipped: 1,
 			totalFixFeaturesCreated: 1,
 		});
-		const lines = renderReportView(completedState, plan, basePath);
+		const lines = renderReportView(completedState, plan, basePath, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("Build a scalable auth system");
 		expect(text).toContain("Report:");

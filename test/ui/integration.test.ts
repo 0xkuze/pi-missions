@@ -87,14 +87,14 @@ describe("integration: draft review view", () => {
 	describe("renders correctly in draft_review state", () => {
 		it("shows plan description as mission goal", () => {
 			const plan = makePlan({ description: "Build a multi-tenant auth system" });
-			const lines = renderDraftReview(plan);
+			const lines = renderDraftReview(plan, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Build a multi-tenant auth system");
 		});
 
 		it("shows all milestones with feature counts", () => {
 			const plan = makePlan();
-			const lines = renderDraftReview(plan);
+			const lines = renderDraftReview(plan, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Milestone m1");
 			expect(text).toContain("Milestone m2");
@@ -103,7 +103,7 @@ describe("integration: draft review view", () => {
 
 		it("shows all features with names and descriptions", () => {
 			const plan = makePlan();
-			const lines = renderDraftReview(plan);
+			const lines = renderDraftReview(plan, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Feature f1");
 			expect(text).toContain("Feature f2");
@@ -112,7 +112,7 @@ describe("integration: draft review view", () => {
 
 		it("shows validation commands", () => {
 			const plan = makePlan();
-			const lines = renderDraftReview(plan);
+			const lines = renderDraftReview(plan, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("bun test");
 			expect(text).toContain("npx tsc --noEmit");
@@ -120,7 +120,7 @@ describe("integration: draft review view", () => {
 
 		it("shows model assignments", () => {
 			const plan = makePlan();
-			const lines = renderDraftReview(plan);
+			const lines = renderDraftReview(plan, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("claude-sonnet-4");
 			expect(text).toContain("claude-opus");
@@ -128,7 +128,7 @@ describe("integration: draft review view", () => {
 
 		it("shows estimated runs formula", () => {
 			const plan = makePlan();
-			const lines = renderDraftReview(plan);
+			const lines = renderDraftReview(plan, 80, undefined, 40);
 			const text = lines.join("\n");
 			// 3 features + 4 validations (2 milestones * 2) = 7
 			expect(text).toContain("Estimated runs");
@@ -137,7 +137,7 @@ describe("integration: draft review view", () => {
 
 		it("shows A key to approve and Esc to return to chat", () => {
 			const plan = makePlan();
-			const lines = renderDraftReview(plan);
+			const lines = renderDraftReview(plan, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("A:");
 			expect(text).toContain("Esc");
@@ -180,7 +180,7 @@ describe("integration: blocked mission view", () => {
 				name: "refresh-tokens",
 				attempts: [makeAttempt(1), makeAttempt(2), makeAttempt(3)],
 			});
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("refresh-tokens");
 			expect(text).toContain("3/3");
@@ -195,7 +195,7 @@ describe("integration: blocked mission view", () => {
 				errorMessage: "auth.refresh.spec.ts failed",
 				details: "token expiry logic inconsistent with session store",
 			};
-			const lines = renderBlockedView(feature, 3, lastFailure);
+			const lines = renderBlockedView(feature, 3, lastFailure, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("auth.refresh.spec.ts failed");
 			expect(text).toContain("token expiry logic inconsistent");
@@ -203,14 +203,14 @@ describe("integration: blocked mission view", () => {
 
 		it("shows guidance text about available actions", () => {
 			const feature = makeFeature("f1", "blocked", { attempts: [makeAttempt(1)] });
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).toMatch(/retry|skip|chat/);
 		});
 
 		it("shows R, S, and Esc keyboard hints", () => {
 			const feature = makeFeature("f1", "blocked", { attempts: [makeAttempt(1)] });
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("R:");
 			expect(text).toContain("S:");
@@ -221,7 +221,7 @@ describe("integration: blocked mission view", () => {
 			const feature = makeFeature("f1", "blocked", {
 				attempts: [makeAttempt(1), makeAttempt(2), makeAttempt(3)],
 			});
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			expect(lines.length).toBeGreaterThan(0);
 		});
 	});
@@ -273,7 +273,7 @@ describe("integration: completion report view", () => {
 				completedAt: nowISO(),
 				totalFeaturesCompleted: 3,
 			});
-			const lines = renderReportView(state, plan, "/project/.pi/missions");
+			const lines = renderReportView(state, plan, "/project/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Build a multi-tenant auth system");
 		});
@@ -284,7 +284,7 @@ describe("integration: completion report view", () => {
 				completedAt: nowISO(),
 				totalFeaturesCompleted: 3,
 			});
-			const lines = renderReportView(state, plan, "/project/.pi/missions");
+			const lines = renderReportView(state, plan, "/project/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			// startedAt was set to 1 hour ago in makeState
 			expect(text).toMatch(/duration|1h/i);
@@ -298,7 +298,7 @@ describe("integration: completion report view", () => {
 				totalFeaturesSkipped: 1,
 				totalFixFeaturesCreated: 2,
 			});
-			const lines = renderReportView(state, plan, "/project/.pi/missions");
+			const lines = renderReportView(state, plan, "/project/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("5");
 			expect(text).toContain("1");
@@ -314,7 +314,7 @@ describe("integration: completion report view", () => {
 				],
 			});
 			const state = makeState("completed", { completedAt: nowISO() });
-			const lines = renderReportView(state, plan, "/project/.pi/missions");
+			const lines = renderReportView(state, plan, "/project/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			// 2 out of 3 milestones done
 			expect(text).toMatch(/2.*3|milestone/i);
@@ -323,7 +323,7 @@ describe("integration: completion report view", () => {
 		it("shows path to output report.md file", () => {
 			const plan = makePlan();
 			const state = makeState("completed", { completedAt: nowISO() });
-			const lines = renderReportView(state, plan, "/project/.pi/missions");
+			const lines = renderReportView(state, plan, "/project/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("report.md");
 			expect(text).toContain("/project/.pi/missions");
@@ -332,7 +332,7 @@ describe("integration: completion report view", () => {
 		it("shows O key and Esc key hints", () => {
 			const plan = makePlan();
 			const state = makeState("completed", { completedAt: nowISO() });
-			const lines = renderReportView(state, plan, "/project/.pi/missions");
+			const lines = renderReportView(state, plan, "/project/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/O.*report/i);
 			expect(text).toContain("Esc");
@@ -372,14 +372,14 @@ describe("integration: validation view", () => {
 	describe("renders validation command statuses", () => {
 		it("shows milestone name in header", () => {
 			const commands: CommandDisplayEntry[] = [];
-			const lines = renderValidationView("Auth Flows", commands, false);
+			const lines = renderValidationView("Auth Flows", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Auth Flows");
 		});
 
 		it("shows checkmark for passed commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "typecheck", status: "passed", durationMs: 2100 }];
-			const lines = renderValidationView("Foundation", commands, false);
+			const lines = renderValidationView("Foundation", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("\u2713");
 			expect(text).toContain("typecheck");
@@ -387,7 +387,7 @@ describe("integration: validation view", () => {
 
 		it("shows bullet for running commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "running" }];
-			const lines = renderValidationView("Foundation", commands, false);
+			const lines = renderValidationView("Foundation", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("\u25cf");
 			expect(text).toContain("test");
@@ -395,7 +395,7 @@ describe("integration: validation view", () => {
 
 		it("shows circle for pending commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "build", status: "pending" }];
-			const lines = renderValidationView("Foundation", commands, false);
+			const lines = renderValidationView("Foundation", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("\u25cb");
 			expect(text).toContain("build");
@@ -403,14 +403,14 @@ describe("integration: validation view", () => {
 
 		it("shows x mark for failed commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "failed", durationMs: 5000 }];
-			const lines = renderValidationView("Foundation", commands, false);
+			const lines = renderValidationView("Foundation", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("\u2717");
 		});
 
 		it("shows duration for completed commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "typecheck", status: "passed", durationMs: 2100 }];
-			const lines = renderValidationView("Foundation", commands, false);
+			const lines = renderValidationView("Foundation", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/2s|2\.1s|2100/);
 		});
@@ -421,7 +421,7 @@ describe("integration: validation view", () => {
 				{ label: "test", status: "running" },
 				{ label: "build", status: "pending" },
 			];
-			const lines = renderValidationView("Foundation", commands, false);
+			const lines = renderValidationView("Foundation", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("typecheck");
 			expect(text).toContain("test");
@@ -430,19 +430,19 @@ describe("integration: validation view", () => {
 
 		it("shows fix feature info when validation has failed", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "failed", durationMs: 3000 }];
-			const lines = renderValidationView("Foundation", commands, true);
+			const lines = renderValidationView("Foundation", commands, true, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).toMatch(/fix|failure/);
 		});
 
 		it("does not show fix feature info when all pass", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "passed", durationMs: 3000 }];
-			const lines = renderValidationView("Foundation", commands, false);
+			const lines = renderValidationView("Foundation", commands, false, 80, undefined, 40);
 			expect(lines.find((l) => l.toLowerCase().includes("fix feature"))).toBeUndefined();
 		});
 
 		it("shows Esc key hint", () => {
-			const lines = renderValidationView("Foundation", [], false);
+			const lines = renderValidationView("Foundation", [], false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Esc");
 		});
@@ -595,7 +595,7 @@ describe("integration: model switching view", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan();
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n").toLowerCase();
 			expect(text).toContain("orchestrator");
 			expect(text).toContain("worker");
@@ -606,7 +606,7 @@ describe("integration: model switching view", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan({ modelAssignment: { worker: "claude-sonnet-4" } });
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			expect(text).toContain("claude-sonnet-4");
 		});
@@ -615,7 +615,7 @@ describe("integration: model switching view", () => {
 			const config: MissionConfig = { models: { worker: "gpt-4o" } };
 			const plan = makePlan({ modelAssignment: { worker: "claude-sonnet-4" } });
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			expect(text).toContain("gpt-4o");
 			expect(text).not.toContain("claude-sonnet-4");
@@ -625,7 +625,7 @@ describe("integration: model switching view", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan({ modelAssignment: {} });
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/default|session|none|unassigned/i);
 		});
@@ -686,7 +686,7 @@ describe("integration: state-triggered view transitions", () => {
 		it("draft_review state renders draft review content correctly", () => {
 			const plan = makePlan();
 			// draft_review state → render draft review view
-			const lines = renderDraftReview(plan);
+			const lines = renderDraftReview(plan, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Draft Mission Plan");
 			expect(text).toContain("A: approve");
@@ -699,9 +699,16 @@ describe("integration: state-triggered view transitions", () => {
 				name: "auth-endpoint",
 				attempts: [makeAttempt(1), makeAttempt(2), makeAttempt(3)],
 			});
-			const lines = renderBlockedView(feature, 3, {
-				errorMessage: "tests failed",
-			});
+			const lines = renderBlockedView(
+				feature,
+				3,
+				{
+					errorMessage: "tests failed",
+				},
+				80,
+				undefined,
+				40,
+			);
 			const text = lines.join("\n");
 			expect(text).toContain("auth-endpoint");
 			expect(text).toContain("Blocked");
@@ -716,7 +723,7 @@ describe("integration: state-triggered view transitions", () => {
 				completedAt: nowISO(),
 				totalFeaturesCompleted: 3,
 			});
-			const lines = renderReportView(state, plan, "/project/.pi/missions");
+			const lines = renderReportView(state, plan, "/project/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Mission Complete");
 			expect(text).toContain("report.md");
@@ -751,14 +758,14 @@ describe("integration: all views reachable via navigation", () => {
 
 		it("draft review view accessible when state is draft_review", () => {
 			const plan = makePlan();
-			const lines = renderDraftReview(plan);
+			const lines = renderDraftReview(plan, 80, undefined, 40);
 			expect(lines.length).toBeGreaterThan(0);
 			expect(lines.join("\n")).toContain("A: approve");
 		});
 
 		it("blocked view accessible when feature is blocked", () => {
 			const feature = makeFeature("f1", "blocked", { attempts: [makeAttempt(1)] });
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			expect(lines.length).toBeGreaterThan(0);
 			expect(lines.join("\n")).toContain("R:");
 		});
@@ -766,7 +773,7 @@ describe("integration: all views reachable via navigation", () => {
 		it("completion view accessible when mission is complete", () => {
 			const plan = makePlan();
 			const state = makeState("completed", { completedAt: nowISO() });
-			const lines = renderReportView(state, plan, "/project/.pi/missions");
+			const lines = renderReportView(state, plan, "/project/.pi/missions", 80, undefined, 40);
 			expect(lines.length).toBeGreaterThan(0);
 			expect(lines.join("\n")).toContain("O:");
 		});
@@ -776,7 +783,7 @@ describe("integration: all views reachable via navigation", () => {
 				{ label: "typecheck", status: "passed", durationMs: 1000 },
 				{ label: "test", status: "running" },
 			];
-			const lines = renderValidationView("Auth Milestone", commands, false);
+			const lines = renderValidationView("Auth Milestone", commands, false, 80, undefined, 40);
 			expect(lines.length).toBeGreaterThan(0);
 			expect(lines.join("\n")).toContain("Auth Milestone");
 		});
@@ -789,7 +796,7 @@ describe("integration: all views reachable via navigation", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan();
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			expect(lines.length).toBeGreaterThan(0);
 		});
 	});
@@ -873,10 +880,10 @@ describe("integration: edge cases and robustness", () => {
 		const blockedFeature = makeFeature("f1", "blocked");
 		const completedState = makeState("completed", { completedAt: nowISO() });
 
-		expect(() => renderDraftReview(minimalPlan)).not.toThrow();
-		expect(() => renderBlockedView(blockedFeature, 3, undefined)).not.toThrow();
-		expect(() => renderReportView(completedState, minimalPlan, "/path")).not.toThrow();
-		expect(() => renderValidationView("m1", [], false)).not.toThrow();
+		expect(() => renderDraftReview(minimalPlan, 80, undefined, 40)).not.toThrow();
+		expect(() => renderBlockedView(blockedFeature, 3, undefined, 80, undefined, 40)).not.toThrow();
+		expect(() => renderReportView(completedState, minimalPlan, "/path", 80, undefined, 40)).not.toThrow();
+		expect(() => renderValidationView("m1", [], false, 80, undefined, 40)).not.toThrow();
 		expect(() => renderCurrentFeaturePanel(minimalState, minimalPlan)).not.toThrow();
 		expect(() => renderMissionOutline(minimalPlan)).not.toThrow();
 		expect(() => renderProgressLog(minimalState)).not.toThrow();
@@ -889,10 +896,10 @@ describe("integration: edge cases and robustness", () => {
 		const blockedFeature = makeFeature("f1", "blocked");
 		const completedState = makeState("completed", { completedAt: nowISO() });
 
-		expect(renderDraftReview(plan).length).toBeGreaterThan(0);
-		expect(renderBlockedView(blockedFeature, 3, undefined).length).toBeGreaterThan(0);
-		expect(renderReportView(completedState, plan, "/path").length).toBeGreaterThan(0);
-		expect(renderValidationView("m1", [], false).length).toBeGreaterThan(0);
+		expect(renderDraftReview(plan, 80, undefined, 40).length).toBeGreaterThan(0);
+		expect(renderBlockedView(blockedFeature, 3, undefined, 80, undefined, 40).length).toBeGreaterThan(0);
+		expect(renderReportView(completedState, plan, "/path", 80, undefined, 40).length).toBeGreaterThan(0);
+		expect(renderValidationView("m1", [], false, 80, undefined, 40).length).toBeGreaterThan(0);
 		expect(renderCurrentFeaturePanel(state, plan).length).toBeGreaterThan(0);
 		expect(renderMissionOutline(plan).length).toBeGreaterThan(0);
 		expect(renderProgressLog(state).length).toBeGreaterThan(0);

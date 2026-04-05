@@ -27,14 +27,14 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 	describe("blocked feature name", () => {
 		it("shows blocked feature name", () => {
 			const feature = makeFeature("f1", "jwt-tokens");
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("jwt-tokens");
 		});
 
 		it("shows different feature names correctly", () => {
 			const feature = makeFeature("f2", "user-profile-update");
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("user-profile-update");
 		});
@@ -45,7 +45,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 			const feature = makeFeature("f1", "feature", {
 				attempts: [makeAttempt(1), makeAttempt(2), makeAttempt(3)],
 			});
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/3\/3/);
 		});
@@ -54,7 +54,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 			const feature = makeFeature("f1", "feature", {
 				attempts: [makeAttempt(1)],
 			});
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/1\/3/);
 		});
@@ -63,7 +63,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 			const feature = makeFeature("f1", "feature", {
 				attempts: [makeAttempt(1), makeAttempt(2)],
 			});
-			const lines = renderBlockedView(feature, 5, undefined);
+			const lines = renderBlockedView(feature, 5, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/2\/5/);
 		});
@@ -75,7 +75,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 			const lastFailure: LastFailureDetails = {
 				errorMessage: "TypeScript compilation failed: 5 errors",
 			};
-			const lines = renderBlockedView(feature, 3, lastFailure);
+			const lines = renderBlockedView(feature, 3, lastFailure, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("TypeScript compilation failed: 5 errors");
 		});
@@ -86,7 +86,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 				errorMessage: "Tests failed",
 				details: "expect(result).toBe(42) → received 0",
 			};
-			const lines = renderBlockedView(feature, 3, lastFailure);
+			const lines = renderBlockedView(feature, 3, lastFailure, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Tests failed");
 			expect(text).toContain("expect(result).toBe(42)");
@@ -98,7 +98,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 				errorMessage: "Multiple failures",
 				details: "line 1\nline 2\nline 3",
 			};
-			const lines = renderBlockedView(feature, 3, lastFailure);
+			const lines = renderBlockedView(feature, 3, lastFailure, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("line 1");
 			expect(text).toContain("line 2");
@@ -107,14 +107,14 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 
 		it("handles missing last failure gracefully", () => {
 			const feature = makeFeature("f1", "feature");
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			expect(lines.length).toBeGreaterThan(0);
 		});
 
 		it("shows last failure section header when failure present", () => {
 			const feature = makeFeature("f1", "feature", { attempts: [makeAttempt(1)] });
 			const lastFailure: LastFailureDetails = { errorMessage: "build error" };
-			const lines = renderBlockedView(feature, 3, lastFailure);
+			const lines = renderBlockedView(feature, 3, lastFailure, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).toMatch(/last failure|failure/);
 		});
@@ -123,7 +123,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 	describe("guidance text", () => {
 		it("shows guidance text about options", () => {
 			const feature = makeFeature("f1", "feature");
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).toMatch(/retry|skip|return/);
 		});
@@ -132,7 +132,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 			const feature = makeFeature("f1", "feature", {
 				attempts: [makeAttempt(1), makeAttempt(2), makeAttempt(3)],
 			});
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).toMatch(/exhausted|attempts/);
 		});
@@ -141,7 +141,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 	describe("keyboard hints", () => {
 		it("shows R key hint for retry", () => {
 			const feature = makeFeature("f1", "feature");
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("R");
 			expect(text.toLowerCase()).toContain("retry");
@@ -149,7 +149,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 
 		it("shows S key hint for skip", () => {
 			const feature = makeFeature("f1", "feature");
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("S");
 			expect(text.toLowerCase()).toContain("skip");
@@ -157,7 +157,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 
 		it("shows Esc hint for back to chat", () => {
 			const feature = makeFeature("f1", "feature");
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Esc");
 		});
@@ -166,7 +166,7 @@ describe("renderBlockedView (VAL-UI-009)", () => {
 	describe("general rendering", () => {
 		it("returns non-empty array of lines", () => {
 			const feature = makeFeature("f1", "feature");
-			const lines = renderBlockedView(feature, 3, undefined);
+			const lines = renderBlockedView(feature, 3, undefined, 80, undefined, 40);
 			expect(lines.length).toBeGreaterThan(3);
 		});
 	});

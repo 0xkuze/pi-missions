@@ -8,9 +8,9 @@ export type PlanHistoryAction = { kind: "close" } | { kind: "noop" };
 
 export function renderPlanHistoryView(
 	mutations: PlanMutation[],
-	width = 80,
-	style?: FrameStyle,
-	height = 40,
+	width: number,
+	style: FrameStyle | undefined,
+	height: number,
 ): string[] {
 	const mf = style?.mutedFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);

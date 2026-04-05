@@ -43,7 +43,12 @@ function styledProgressEventIcon(type: ProgressEvent["type"], style?: FrameStyle
 	}
 }
 
-export function renderProgressLog(progressLog: ProgressEvent[], width = 80, style?: FrameStyle, height = 40): string[] {
+export function renderProgressLog(
+	progressLog: ProgressEvent[],
+	width: number,
+	style: FrameStyle | undefined,
+	height: number,
+): string[] {
 	const mf = style?.mutedFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);
 

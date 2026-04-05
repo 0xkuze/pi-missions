@@ -13,14 +13,14 @@ function makeEvent(type: ProgressEvent["type"], detail: string, tsOffsetMs = 0):
 describe("renderProgressLog (VAL-NEWUI-002)", () => {
 	describe("empty log", () => {
 		it("shows placeholder when no events", () => {
-			const lines = renderProgressLog([]);
+			const lines = renderProgressLog([], 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text.length).toBeGreaterThan(0);
 			expect(text).toMatch(/no events|empty|placeholder/i);
 		});
 
 		it("returns non-empty array for empty log", () => {
-			const lines = renderProgressLog([]);
+			const lines = renderProgressLog([], 80, undefined, 40);
 			expect(lines).toBeArray();
 			expect(lines.length).toBeGreaterThan(0);
 		});
@@ -29,14 +29,14 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 	describe("events rendering", () => {
 		it("shows detail text for each event", () => {
 			const events = [makeEvent("feature_complete", "jwt-tokens completed")];
-			const lines = renderProgressLog(events);
+			const lines = renderProgressLog(events, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("jwt-tokens completed");
 		});
 
 		it("shows relative timestamps", () => {
 			const events = [makeEvent("feature_start", "feature started", 2 * 60_000)];
-			const lines = renderProgressLog(events);
+			const lines = renderProgressLog(events, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toMatch(/\d+[smh]/);
 		});
@@ -47,7 +47,7 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 				makeEvent("feature_complete", "feature 1 done", 120_000),
 				makeEvent("feature_start", "feature 2 started", 60_000),
 			];
-			const lines = renderProgressLog(events);
+			const lines = renderProgressLog(events, 80, undefined, 40);
 			const text = lines.join("\n");
 			const idx1 = text.indexOf("feature 1 started");
 			const idx2 = text.indexOf("feature 1 done");
@@ -58,28 +58,28 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 
 		it("shows status icons for completed events", () => {
 			const events = [makeEvent("feature_complete", "done")];
-			const lines = renderProgressLog(events);
+			const lines = renderProgressLog(events, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("\u2713");
 		});
 
 		it("shows status icons for failed events", () => {
 			const events = [makeEvent("feature_failed", "failed")];
-			const lines = renderProgressLog(events);
+			const lines = renderProgressLog(events, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("\u2717");
 		});
 
 		it("shows status icons for active/start events", () => {
 			const events = [makeEvent("feature_start", "started")];
-			const lines = renderProgressLog(events);
+			const lines = renderProgressLog(events, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("\u25cf");
 		});
 
 		it("shows status icons for skipped events", () => {
 			const events = [makeEvent("feature_skipped", "skipped")];
-			const lines = renderProgressLog(events);
+			const lines = renderProgressLog(events, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("\u2013");
 		});
@@ -89,7 +89,7 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 				makeEvent("feature_start", "started-feature", 10_000),
 				makeEvent("feature_complete", "completed-feature", 5_000),
 			];
-			const lines = renderProgressLog(events);
+			const lines = renderProgressLog(events, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("started-feature");
 			expect(text).toContain("completed-feature");
@@ -97,13 +97,13 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 
 		it("shows Esc keyboard hint", () => {
 			const events = [makeEvent("feature_complete", "done")];
-			const lines = renderProgressLog(events);
+			const lines = renderProgressLog(events, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("Esc");
 		});
 
 		it("shows heading", () => {
-			const lines = renderProgressLog([]);
+			const lines = renderProgressLog([], 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toMatch(/progress|log/i);
 		});
@@ -118,7 +118,7 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 		];
 		for (const type of completedTypes) {
 			it(`uses ✓ icon for ${type}`, () => {
-				const lines = renderProgressLog([makeEvent(type, "detail")]);
+				const lines = renderProgressLog([makeEvent(type, "detail")], 80, undefined, 40);
 				expect(lines.join(" ")).toContain("\u2713");
 			});
 		}
@@ -126,7 +126,7 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 		const failedTypes: ProgressEvent["type"][] = ["feature_failed", "validation_fail", "mission_failed"];
 		for (const type of failedTypes) {
 			it(`uses ✗ icon for ${type}`, () => {
-				const lines = renderProgressLog([makeEvent(type, "detail")]);
+				const lines = renderProgressLog([makeEvent(type, "detail")], 80, undefined, 40);
 				expect(lines.join(" ")).toContain("\u2717");
 			});
 		}

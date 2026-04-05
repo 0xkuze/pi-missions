@@ -30,9 +30,9 @@ export function renderValidationView(
 	milestoneName: string,
 	commands: CommandDisplayEntry[],
 	hasFailed: boolean,
-	width = 80,
-	style?: FrameStyle,
-	height = 40,
+	width: number,
+	style: FrameStyle | undefined,
+	height: number,
 ): string[] {
 	const af = style?.accentFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);

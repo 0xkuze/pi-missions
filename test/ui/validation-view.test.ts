@@ -5,13 +5,13 @@ import { handleValidationViewKey, renderValidationView } from "../../extensions/
 describe("renderValidationView (VAL-UI-008)", () => {
 	describe("milestone name", () => {
 		it("shows milestone name in header", () => {
-			const lines = renderValidationView("Auth Core", [], false);
+			const lines = renderValidationView("Auth Core", [], false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Auth Core");
 		});
 
 		it("shows different milestone names correctly", () => {
-			const lines = renderValidationView("Data Layer", [], false);
+			const lines = renderValidationView("Data Layer", [], false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Data Layer");
 		});
@@ -20,28 +20,28 @@ describe("renderValidationView (VAL-UI-008)", () => {
 	describe("command status icons", () => {
 		it("shows ✓ for passed commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "typecheck", status: "passed", durationMs: 2000 }];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("\u2713");
 		});
 
 		it("shows ● for running commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "running" }];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("\u25cf");
 		});
 
 		it("shows ○ for pending commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "lint", status: "pending" }];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("\u25cb");
 		});
 
 		it("shows ✗ for failed commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "failed", durationMs: 5000 }];
-			const lines = renderValidationView("Milestone", commands, true);
+			const lines = renderValidationView("Milestone", commands, true, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("\u2717");
 		});
@@ -50,21 +50,21 @@ describe("renderValidationView (VAL-UI-008)", () => {
 	describe("durations for completed commands", () => {
 		it("shows duration for passed commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "typecheck", status: "passed", durationMs: 2500 }];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/2s|2500/);
 		});
 
 		it("shows duration for failed commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "failed", durationMs: 60000 }];
-			const lines = renderValidationView("Milestone", commands, true);
+			const lines = renderValidationView("Milestone", commands, true, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/1m|60/);
 		});
 
 		it("does not show duration for running commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "running" }];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			// Running commands should not show a duration value
 			const testLine = lines.find((l) => l.includes("test"));
 			expect(testLine).toBeDefined();
@@ -73,7 +73,7 @@ describe("renderValidationView (VAL-UI-008)", () => {
 
 		it("does not show duration for pending commands", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "lint", status: "pending" }];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			const lintLine = lines.find((l) => l.includes("lint"));
 			expect(lintLine).toBeDefined();
 			expect(lintLine).not.toMatch(/\(\d+[smh]/);
@@ -87,7 +87,7 @@ describe("renderValidationView (VAL-UI-008)", () => {
 				{ label: "test", status: "running" },
 				{ label: "lint", status: "pending" },
 			];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("typecheck");
 			expect(text).toContain("test");
@@ -101,7 +101,7 @@ describe("renderValidationView (VAL-UI-008)", () => {
 				{ label: "test", status: "running" },
 				{ label: "build", status: "pending" },
 			];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			const typecheckIdx = text.indexOf("typecheck");
 			const lintIdx = text.indexOf("lint");
@@ -116,14 +116,14 @@ describe("renderValidationView (VAL-UI-008)", () => {
 	describe("fix feature info on failure", () => {
 		it("shows fix feature info when hasFailed is true", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "failed", durationMs: 5000 }];
-			const lines = renderValidationView("Milestone", commands, true);
+			const lines = renderValidationView("Milestone", commands, true, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).toMatch(/fix feature|fix|failed/i);
 		});
 
 		it("does not show fix feature info when all passed", () => {
 			const commands: CommandDisplayEntry[] = [{ label: "test", status: "passed", durationMs: 2000 }];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).not.toMatch(/fix feature will be generated/);
 		});
@@ -131,12 +131,12 @@ describe("renderValidationView (VAL-UI-008)", () => {
 
 	describe("empty commands", () => {
 		it("handles empty commands list gracefully", () => {
-			const lines = renderValidationView("Milestone", [], false);
+			const lines = renderValidationView("Milestone", [], false, 80, undefined, 40);
 			expect(lines.length).toBeGreaterThan(0);
 		});
 
 		it("shows no validation commands placeholder when empty", () => {
-			const lines = renderValidationView("Milestone", [], false);
+			const lines = renderValidationView("Milestone", [], false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).toMatch(/no validation/i);
 		});
@@ -144,7 +144,7 @@ describe("renderValidationView (VAL-UI-008)", () => {
 
 	describe("keyboard hint", () => {
 		it("shows Esc hint", () => {
-			const lines = renderValidationView("Milestone", [], false);
+			const lines = renderValidationView("Milestone", [], false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Esc");
 		});
@@ -157,7 +157,7 @@ describe("renderValidationView (VAL-UI-008)", () => {
 				{ label: "test", status: "running" },
 				{ label: "lint", status: "pending" },
 			];
-			const lines = renderValidationView("Milestone", commands, false);
+			const lines = renderValidationView("Milestone", commands, false, 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("\u2713");
 			expect(text).toContain("\u25cf");
@@ -165,7 +165,7 @@ describe("renderValidationView (VAL-UI-008)", () => {
 		});
 
 		it("returns non-empty array of lines", () => {
-			const lines = renderValidationView("Milestone", [], false);
+			const lines = renderValidationView("Milestone", [], false, 80, undefined, 40);
 			expect(lines.length).toBeGreaterThan(2);
 		});
 	});

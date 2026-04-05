@@ -14,9 +14,9 @@ export function renderBlockedView(
 	feature: Feature,
 	maxRetries: number,
 	lastFailure: LastFailureDetails | undefined,
-	width = 80,
-	style?: FrameStyle,
-	height = 40,
+	width: number,
+	style: FrameStyle | undefined,
+	height: number,
 ): string[] {
 	const contentWidth = width - 4;
 	const ef = style?.errorFn ?? ((t: string) => t);

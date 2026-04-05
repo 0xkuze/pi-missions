@@ -992,6 +992,7 @@ export class MissionControlComponent {
 	}
 
 	private renderSubView(view: SubView, state: MissionState, plan: MissionPlan | null, width: number): string[] {
+		const height = this.tui.terminal.rows - 5;
 		switch (view.kind) {
 			case "model": {
 				const effectivePlan = plan ?? {
@@ -1010,6 +1011,7 @@ export class MissionControlComponent {
 					width,
 					this.style,
 					this.deps.availableModels,
+					height,
 				);
 			}
 			case "validation": {
@@ -1019,19 +1021,19 @@ export class MissionControlComponent {
 					label: cmd,
 					status: "pending" as const,
 				}));
-				return renderValidationView(milestoneName, commands, false, width, this.style);
+				return renderValidationView(milestoneName, commands, false, width, this.style, height);
 			}
 			case "logs":
-				return renderProgressLogStandalone(state.progressLog, width, this.style);
+				return renderProgressLogStandalone(state.progressLog, width, this.style, height);
 			case "history":
-				return renderPlanHistoryView(this.planHistory, width, this.style);
+				return renderPlanHistoryView(this.planHistory, width, this.style, height);
 			case "planning": {
 				const goal = plan?.description;
-				return renderPlanningSetupView(state, goal, width, this.style);
+				return renderPlanningSetupView(state, goal, width, this.style, height);
 			}
 			case "draft_review":
 				if (!plan) return ["No plan to review.", "", "Esc: close"];
-				return renderDraftReview(plan, width, this.style);
+				return renderDraftReview(plan, width, this.style, height);
 			case "blocked": {
 				const feature = plan?.milestones.flatMap((m) => m.features).find((f) => f.id === view.featureId);
 				if (!feature) return ["Feature not found.", "", "Esc: close"];
@@ -1039,11 +1041,11 @@ export class MissionControlComponent {
 				const lastFailure: LastFailureDetails | undefined = lastAttempt
 					? { errorMessage: `Exit code: ${lastAttempt.exitCode ?? "unknown"}` }
 					: undefined;
-				return renderBlockedView(feature, 3, lastFailure, width, this.style);
+				return renderBlockedView(feature, 3, lastFailure, width, this.style, height);
 			}
 			case "report":
 				if (!plan) return ["No report available.", "", "Esc: close"];
-				return renderReportView(state, plan, this.deps.basePath, width, this.style);
+				return renderReportView(state, plan, this.deps.basePath, width, this.style, height);
 		}
 	}
 

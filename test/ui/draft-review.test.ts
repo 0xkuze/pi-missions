@@ -31,14 +31,14 @@ function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
 describe("renderDraftReview (VAL-UI-007)", () => {
 	it("shows mission description", () => {
 		const plan = makePlan({ description: "Build multi-tenant auth system" });
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("Build multi-tenant auth system");
 	});
 
 	it("shows all milestone names", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("Foundation");
 		expect(text).toContain("Auth Flows");
@@ -46,7 +46,7 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 
 	it("shows feature count per milestone", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("2");
 		expect(text).toContain("1");
@@ -54,7 +54,7 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 
 	it("shows feature names", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("user-model");
 		expect(text).toContain("tenant-model");
@@ -63,7 +63,7 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 
 	it("shows feature descriptions", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("Create User entity and migration");
 		expect(text).toContain("Email/password login");
@@ -71,7 +71,7 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 
 	it("shows validation commands", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("npm run typecheck");
 		expect(text).toContain("npm test");
@@ -80,14 +80,14 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 
 	it("shows model assignments when present", () => {
 		const plan = makePlan({ modelAssignment: { worker: "claude-sonnet-4" } });
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("claude-sonnet-4");
 	});
 
 	it("shows estimated runs based on feature and milestone counts", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text.toLowerCase()).toMatch(/estimated|runs/i);
 		expect(text).toMatch(/\d+/);
@@ -95,7 +95,7 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 
 	it("shows approval hint (A key)", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("A");
 		expect(text.toLowerCase()).toMatch(/approve/i);
@@ -103,26 +103,26 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 
 	it("shows Esc hint for returning to chat", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text).toContain("Esc");
 	});
 
 	it("handles empty validation commands gracefully", () => {
 		const plan = makePlan({ validationCommands: [] });
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		expect(lines.length).toBeGreaterThan(0);
 	});
 
 	it("handles empty model assignment gracefully", () => {
 		const plan = makePlan({ modelAssignment: {} });
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		expect(lines.length).toBeGreaterThan(0);
 	});
 
 	it("shows milestones in order", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		const foundIdx = text.indexOf("Foundation");
 		const authIdx = text.indexOf("Auth Flows");
@@ -131,7 +131,7 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 
 	it("features appear under their milestone", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		const m1Idx = text.indexOf("Foundation");
 		const f1Idx = text.indexOf("user-model");
@@ -143,14 +143,14 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 
 	it("shows header for the draft plan", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		const text = lines.join("\n");
 		expect(text.toLowerCase()).toMatch(/draft|plan|mission/i);
 	});
 
 	it("returns a non-empty array of lines", () => {
 		const plan = makePlan();
-		const lines = renderDraftReview(plan);
+		const lines = renderDraftReview(plan, 80, undefined, 40);
 		expect(lines.length).toBeGreaterThan(5);
 	});
 });

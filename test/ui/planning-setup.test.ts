@@ -19,32 +19,32 @@ function makePlanningEvent(context?: string[]): ProgressEvent {
 describe("renderPlanningSetupView (VAL-NEWUI-001)", () => {
 	describe("basic rendering", () => {
 		it("returns an array of strings", () => {
-			const lines = renderPlanningSetupView(makeState());
+			const lines = renderPlanningSetupView(makeState(), undefined, 80, undefined, 40);
 			expect(lines).toBeArray();
 			expect(lines.length).toBeGreaterThan(0);
 		});
 
 		it("renders a heading", () => {
-			const lines = renderPlanningSetupView(makeState());
+			const lines = renderPlanningSetupView(makeState(), undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toMatch(/mission|setup/i);
 		});
 
 		it("renders analyzing codebase message", () => {
-			const lines = renderPlanningSetupView(makeState());
+			const lines = renderPlanningSetupView(makeState(), undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toMatch(/analyz/i);
 		});
 
 		it("renders hint about questions in chat", () => {
-			const lines = renderPlanningSetupView(makeState());
+			const lines = renderPlanningSetupView(makeState(), undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toMatch(/question/i);
 			expect(text).toMatch(/chat/i);
 		});
 
 		it("shows Esc keyboard hint", () => {
-			const lines = renderPlanningSetupView(makeState());
+			const lines = renderPlanningSetupView(makeState(), undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("Esc");
 		});
@@ -52,19 +52,19 @@ describe("renderPlanningSetupView (VAL-NEWUI-001)", () => {
 
 	describe("goal rendering", () => {
 		it("renders goal when provided", () => {
-			const lines = renderPlanningSetupView(makeState(), "Build a multi-tenant auth system");
+			const lines = renderPlanningSetupView(makeState(), "Build a multi-tenant auth system", 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("Build a multi-tenant auth system");
 		});
 
 		it("renders goal label when goal is provided", () => {
-			const lines = renderPlanningSetupView(makeState(), "My goal");
+			const lines = renderPlanningSetupView(makeState(), "My goal", 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toMatch(/goal/i);
 		});
 
 		it("does not render goal section when no goal", () => {
-			const lines = renderPlanningSetupView(makeState());
+			const lines = renderPlanningSetupView(makeState(), undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).not.toMatch(/^Goal:/im);
 		});
@@ -75,7 +75,7 @@ describe("renderPlanningSetupView (VAL-NEWUI-001)", () => {
 			const state = makeState({
 				progressLog: [makePlanningEvent(["Next.js app", "Prisma schema present"])],
 			});
-			const lines = renderPlanningSetupView(state);
+			const lines = renderPlanningSetupView(state, undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("Next.js app");
 			expect(text).toContain("Prisma schema present");
@@ -85,14 +85,14 @@ describe("renderPlanningSetupView (VAL-NEWUI-001)", () => {
 			const state = makeState({
 				progressLog: [makePlanningEvent(["Some context"])],
 			});
-			const lines = renderPlanningSetupView(state);
+			const lines = renderPlanningSetupView(state, undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toMatch(/context/i);
 		});
 
 		it("does not render context section when no planning_started event", () => {
 			const state = makeState({ progressLog: [] });
-			const lines = renderPlanningSetupView(state);
+			const lines = renderPlanningSetupView(state, undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).not.toMatch(/Context discovered/i);
 		});
@@ -101,7 +101,7 @@ describe("renderPlanningSetupView (VAL-NEWUI-001)", () => {
 			const state = makeState({
 				progressLog: [makePlanningEvent()],
 			});
-			const lines = renderPlanningSetupView(state);
+			const lines = renderPlanningSetupView(state, undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).not.toMatch(/Context discovered/i);
 		});
@@ -110,7 +110,7 @@ describe("renderPlanningSetupView (VAL-NEWUI-001)", () => {
 			const state = makeState({
 				progressLog: [makePlanningEvent(["item one"])],
 			});
-			const lines = renderPlanningSetupView(state);
+			const lines = renderPlanningSetupView(state, undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("\u2022");
 		});
@@ -121,7 +121,7 @@ describe("renderPlanningSetupView (VAL-NEWUI-001)", () => {
 					makePlanningEvent(["Next.js app", "Prisma schema present", "Existing auth middleware found"]),
 				],
 			});
-			const lines = renderPlanningSetupView(state);
+			const lines = renderPlanningSetupView(state, undefined, 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("Next.js app");
 			expect(text).toContain("Prisma schema present");
@@ -131,7 +131,7 @@ describe("renderPlanningSetupView (VAL-NEWUI-001)", () => {
 
 	describe("combined rendering (VAL-NEWUI-001, VAL-XFLOW-002)", () => {
 		it("renders goal and codebase analysis message together", () => {
-			const lines = renderPlanningSetupView(makeState(), "Build a CRM");
+			const lines = renderPlanningSetupView(makeState(), "Build a CRM", 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("Build a CRM");
 			expect(text).toMatch(/analyz/i);
@@ -141,7 +141,7 @@ describe("renderPlanningSetupView (VAL-NEWUI-001)", () => {
 			const state = makeState({
 				progressLog: [makePlanningEvent(["React app"])],
 			});
-			const lines = renderPlanningSetupView(state, "Build something great");
+			const lines = renderPlanningSetupView(state, "Build something great", 80, undefined, 40);
 			const text = lines.join(" ");
 			expect(text).toContain("Build something great");
 			expect(text).toMatch(/analyz/i);

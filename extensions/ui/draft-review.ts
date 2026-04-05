@@ -43,9 +43,9 @@ function renderValidationCommands(plan: MissionPlan): string[] {
 
 export function renderDraftReview(
 	plan: MissionPlan,
-	width = 80,
-	style?: FrameStyle,
-	height = 40,
+	width: number,
+	style: FrameStyle | undefined,
+	height: number,
 	scrollOffset = 0,
 ): string[] {
 	const contentWidth = width - 4;

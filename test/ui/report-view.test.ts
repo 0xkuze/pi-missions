@@ -33,7 +33,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 			const plan = makePlan([]);
 			plan.description = "Build an authentication system";
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Build an authentication system");
 		});
@@ -41,7 +41,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("shows a 'Mission' or 'Goal' heading", () => {
 			const plan = makePlan([]);
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/Mission|Goal/i);
 		});
@@ -53,7 +53,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 			const startedAt = new Date(Date.now() - 3661_000).toISOString();
 			const completedAt = nowISO();
 			const state = makeState({ startedAt, completedAt });
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/1h|duration/i);
 		});
@@ -63,7 +63,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 			const startedAt = new Date(Date.now() - 5 * 60_000).toISOString();
 			const completedAt = nowISO();
 			const state = makeState({ startedAt, completedAt });
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/5m|5 min/i);
 		});
@@ -73,7 +73,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("shows completed feature count", () => {
 			const plan = makePlan([]);
 			const state = makeState({ totalFeaturesCompleted: 5 });
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("5");
 		});
@@ -81,7 +81,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("shows skipped feature count when non-zero", () => {
 			const plan = makePlan([]);
 			const state = makeState({ totalFeaturesSkipped: 2 });
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("2");
 		});
@@ -89,7 +89,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("shows fix feature count when non-zero", () => {
 			const plan = makePlan([]);
 			const state = makeState({ totalFixFeaturesCreated: 1 });
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("1");
 		});
@@ -101,7 +101,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 				totalFeaturesSkipped: 1,
 				totalFixFeaturesCreated: 2,
 			});
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("4");
 			expect(text).toContain("1");
@@ -116,7 +116,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 				makeMilestone("m2", [makeFeature("f2", "done")], "done"),
 			]);
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/2|milestone/i);
 		});
@@ -124,7 +124,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("shows milestone pass count", () => {
 			const plan = makePlan([makeMilestone("m1", [], "done"), makeMilestone("m2", [], "pending")]);
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/1.*2|milestone/i);
 		});
@@ -134,7 +134,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("shows path to report.md", () => {
 			const plan = makePlan([]);
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("report.md");
 		});
@@ -142,7 +142,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("includes the basePath in artifact path", () => {
 			const plan = makePlan([]);
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/my/custom/path");
+			const lines = renderReportView(state, plan, "/my/custom/path", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("/my/custom/path");
 		});
@@ -152,7 +152,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("shows O key hint for opening report", () => {
 			const plan = makePlan([]);
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/O.*report|O.*open/i);
 		});
@@ -160,7 +160,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("shows Esc key hint for closing", () => {
 			const plan = makePlan([]);
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Esc");
 		});
@@ -170,7 +170,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("returns a non-empty array of strings", () => {
 			const plan = makePlan([]);
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			expect(lines).toBeArray();
 			expect(lines.length).toBeGreaterThan(0);
 		});
@@ -178,7 +178,7 @@ describe("renderReportView (VAL-UI-010)", () => {
 		it("returns strings, not nested arrays", () => {
 			const plan = makePlan([]);
 			const state = makeState();
-			const lines = renderReportView(state, plan, "/repo/.pi/missions");
+			const lines = renderReportView(state, plan, "/repo/.pi/missions", 80, undefined, 40);
 			for (const line of lines) {
 				expect(typeof line).toBe("string");
 			}
@@ -226,7 +226,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).toContain("orchestrator");
 			expect(text.toLowerCase()).toContain("worker");
@@ -237,7 +237,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 			const config: MissionConfig = { models: { orchestrator: "claude-opus" } };
 			const plan = makePlan([]);
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			expect(text).toContain("claude-opus");
 		});
@@ -249,7 +249,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 				modelAssignment: { worker: "gpt-4o" },
 			};
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			expect(text).toContain("gpt-4o");
 		});
@@ -258,7 +258,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/unassigned|\(none\)|\(current\)|default/i);
 		});
@@ -269,7 +269,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			expect(text).toContain(">");
 		});
@@ -278,7 +278,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
 			const viewState: ModelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState, 80, undefined, ["model-a"]);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, ["model-a"], 40);
 			const text = lines.join("\n");
 			expect(text).toMatch(/search/i);
 		});
@@ -287,7 +287,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			for (const role of roles) {
 				expect(text.toLowerCase()).toContain(role);
@@ -300,7 +300,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
 			expect(text).toContain("Esc");
 		});
@@ -311,7 +311,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
-			const lines = renderModelView(config, plan, viewState);
+			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			expect(lines).toBeArray();
 			expect(lines.length).toBeGreaterThan(0);
 		});

@@ -7,10 +7,10 @@ export type PlanningSetupAction = { kind: "close" } | { kind: "noop" };
 
 export function renderPlanningSetupView(
 	state: MissionState,
-	goal?: string,
-	width = 80,
-	style?: FrameStyle,
-	height = 40,
+	goal: string | undefined,
+	width: number,
+	style: FrameStyle | undefined,
+	height: number,
 ): string[] {
 	const contentWidth = width - 4;
 	const tf = style?.textFn ?? ((t: string) => t);

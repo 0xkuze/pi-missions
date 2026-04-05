@@ -45,9 +45,9 @@ export function renderReportView(
 	state: MissionState,
 	plan: MissionPlan,
 	basePath: string,
-	width = 80,
-	style?: FrameStyle,
-	height = 40,
+	width: number,
+	style: FrameStyle | undefined,
+	height: number,
 ): string[] {
 	const contentWidth = width - 4;
 	const tf = style?.textFn ?? ((t: string) => t);
@@ -108,10 +108,10 @@ export function renderModelView(
 	config: MissionConfig,
 	plan: MissionPlan,
 	viewState: ModelViewState,
-	width = 80,
-	style?: FrameStyle,
-	availableModels: string[] = [],
-	height = 40,
+	width: number,
+	style: FrameStyle | undefined,
+	availableModels: string[],
+	height: number,
 ): string[] {
 	const tf = style?.textFn ?? ((t: string) => t);
 	const af = style?.accentFn ?? ((t: string) => t);
