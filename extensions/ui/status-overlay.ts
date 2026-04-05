@@ -1,4 +1,4 @@
-import type { TUI } from "@mariozechner/pi-tui";
+import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
@@ -87,9 +87,17 @@ export function handleStatusOverlayKey(key: string): StatusOverlayAction {
 	return { kind: "noop" };
 }
 
-export class StatusOverlayComponent {
+export class StatusOverlayComponent implements Component, Focusable {
+	focused = false;
 	private style: FrameStyle | undefined;
 	private scrollOffset = 0;
+	private theme:
+		| { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string }
+		| undefined;
+	private cachedWidth = 0;
+	private cachedLines: string[] = [];
+	private version = 0;
+	private cachedVersion = -1;
 
 	constructor(
 		private tui: TUI,
@@ -98,6 +106,7 @@ export class StatusOverlayComponent {
 		private plan: MissionPlan | null,
 		theme?: { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string },
 	) {
+		this.theme = theme;
 		this.style = theme ? themeFrameStyle(theme) : undefined;
 	}
 
@@ -106,15 +115,27 @@ export class StatusOverlayComponent {
 		if (action.kind === "close") this.done();
 		if (action.kind === "scroll") {
 			this.scrollOffset = Math.max(0, this.scrollOffset + action.delta);
+			this.version++;
+			this.tui.requestRender();
 		}
 	}
 
 	render(width: number): string[] {
+		if (width === this.cachedWidth && this.version === this.cachedVersion) return this.cachedLines;
 		const height = this.tui.terminal.rows - 5;
-		return renderStatusOverlay(this.state, this.plan, width, height, this.scrollOffset, this.style);
+		const result = renderStatusOverlay(this.state, this.plan, width, height, this.scrollOffset, this.style);
+		this.cachedWidth = width;
+		this.cachedLines = result;
+		this.cachedVersion = this.version;
+		return result;
 	}
 
-	invalidate(): void {}
+	invalidate(): void {
+		this.cachedVersion = -1;
+		if (this.theme) {
+			this.style = themeFrameStyle(this.theme);
+		}
+	}
 
 	dispose(): void {}
 }

@@ -1,4 +1,4 @@
-import type { TUI } from "@mariozechner/pi-tui";
+import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { Question, QuestionAnswer } from "../tools/ask-questions.js";
 import type { FrameStyle } from "./frame.js";
@@ -242,9 +242,17 @@ export function handleQuestionsKey(data: string, questions: Question[], state: Q
 	return { kind: "noop" };
 }
 
-export class QuestionsOverlayComponent {
+export class QuestionsOverlayComponent implements Component, Focusable {
+	focused = false;
 	private state: QuestionsState;
 	private style: FrameStyle | undefined;
+	private theme:
+		| { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string }
+		| undefined;
+	private cachedWidth = 0;
+	private cachedLines: string[] = [];
+	private version = 0;
+	private cachedVersion = -1;
 
 	constructor(
 		private tui: TUI,
@@ -252,6 +260,7 @@ export class QuestionsOverlayComponent {
 		private questions: Question[],
 		theme?: { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string },
 	) {
+		this.theme = theme;
 		this.state = createInitialState(questions.length);
 		this.style = theme ? themeFrameStyle(theme) : undefined;
 	}
@@ -266,15 +275,26 @@ export class QuestionsOverlayComponent {
 			this.done(null);
 			return;
 		}
+		this.version++;
 		this.tui.requestRender();
 	}
 
 	render(width: number): string[] {
+		if (width === this.cachedWidth && this.version === this.cachedVersion) return this.cachedLines;
 		const height = this.tui.terminal.rows;
-		return renderQuestionsOverlay(this.questions, this.state, width, height, this.style);
+		const result = renderQuestionsOverlay(this.questions, this.state, width, height, this.style);
+		this.cachedWidth = width;
+		this.cachedLines = result;
+		this.cachedVersion = this.version;
+		return result;
 	}
 
-	invalidate(): void {}
+	invalidate(): void {
+		this.cachedVersion = -1;
+		if (this.theme) {
+			this.style = themeFrameStyle(this.theme);
+		}
+	}
 
 	dispose(): void {}
 }

@@ -1,4 +1,4 @@
-import type { TUI } from "@mariozechner/pi-tui";
+import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
 import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { saveConfig, savePlan, saveState } from "../state/manager.js";
 import { appendMutation, readHistory } from "../state/plan-history.js";
@@ -489,7 +489,8 @@ export interface MissionControlDeps {
 	setModel: (modelId: string) => Promise<void>;
 }
 
-export class MissionControlComponent {
+export class MissionControlComponent implements Component, Focusable {
+	focused = false;
 	private state: MissionState | null;
 	private plan: MissionPlan | null;
 	private config: MissionConfig;
@@ -498,10 +499,17 @@ export class MissionControlComponent {
 	private modelViewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 	private pollInterval: ReturnType<typeof setInterval> | null = null;
 	private style: FrameStyle | undefined;
+	private theme:
+		| { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string }
+		| undefined;
 	private leftScrollOffset = 0;
 	private rightTopScrollOffset = 0;
 	private rightBottomScrollOffset = 0;
 	private activePane: "left" | "right-top" | "right-bottom" = "left";
+	private cachedWidth = 0;
+	private cachedLines: string[] = [];
+	private version = 0;
+	private cachedVersion = -1;
 
 	constructor(
 		private tui: TUI,
@@ -510,6 +518,7 @@ export class MissionControlComponent {
 		// why: pi Theme uses branded union types for color parameters; we accept `any` at this boundary
 		theme?: { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string },
 	) {
+		this.theme = theme;
 		this.state = deps.loadState(deps.basePath);
 		this.plan = deps.loadPlan(deps.basePath);
 		this.config = deps.loadConfig(deps.basePath);
@@ -544,6 +553,7 @@ export class MissionControlComponent {
 			this.plan = nextPlan;
 			this.config = nextConfig;
 			this.planHistory = nextHistory;
+			this.version++;
 			this.tui.requestRender();
 		}
 	}
@@ -556,6 +566,7 @@ export class MissionControlComponent {
 		}
 
 		if (this.handleMouseScroll(data)) {
+			this.version++;
 			this.tui.requestRender();
 			return;
 		}
@@ -564,11 +575,13 @@ export class MissionControlComponent {
 			const panes: Array<"left" | "right-top" | "right-bottom"> = ["left", "right-top", "right-bottom"];
 			const currentIdx = panes.indexOf(this.activePane);
 			this.activePane = panes[(currentIdx + 1) % panes.length]!;
+			this.version++;
 			this.tui.requestRender();
 			return;
 		}
 
 		if (this.handleScroll(data)) {
+			this.version++;
 			this.tui.requestRender();
 			return;
 		}
@@ -988,7 +1001,12 @@ export class MissionControlComponent {
 			return this.renderSubView(activeView, state, plan, width);
 		}
 
-		return this.renderMainOverlay(state, plan, width);
+		if (width === this.cachedWidth && this.version === this.cachedVersion) return this.cachedLines;
+		const result = this.renderMainOverlay(state, plan, width);
+		this.cachedWidth = width;
+		this.cachedLines = result;
+		this.cachedVersion = this.version;
+		return result;
 	}
 
 	private renderSubView(view: SubView, state: MissionState, plan: MissionPlan | null, width: number): string[] {
@@ -1292,7 +1310,12 @@ export class MissionControlComponent {
 		return output;
 	}
 
-	invalidate(): void {}
+	invalidate(): void {
+		this.cachedVersion = -1;
+		if (this.theme) {
+			this.style = themeFrameStyle(this.theme);
+		}
+	}
 
 	dispose(): void {
 		this.disableMouse();

@@ -1484,3 +1484,140 @@ describe("MissionControlComponent parseMouseScroll", () => {
 		}
 	});
 });
+
+describe("MissionControlComponent contract compliance", () => {
+	function makeMCComponent(opts: { theme?: any; requestRender?: () => void } = {}) {
+		const tmpDir = join(tmpdir(), `mc-contract-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		mkdirSync(tmpDir, { recursive: true });
+		const feature = makeFeature("f1", "active", "jwt-tokens");
+		const milestone = makeMilestone("m1", [feature], "active");
+		const plan = makePlan([milestone]);
+		const state = makeState("executing", {
+			currentMilestoneId: "m1",
+			currentFeatureId: "f1",
+			progressLog: [makeEvent("feature_start", "started jwt-tokens", 60_000)],
+		});
+
+		const deps = makeDeps(tmpDir, {
+			loadState: () => state,
+			loadPlan: () => plan,
+		});
+
+		const tui = makeTUI();
+		if (opts.requestRender) {
+			(tui as any).requestRender = opts.requestRender;
+		}
+		const component = new MissionControlComponent(tui, () => {}, deps, opts.theme);
+		return { component, tmpDir };
+	}
+
+	function cleanupMC(tmpDir: string) {
+		rmSync(tmpDir, { recursive: true, force: true });
+	}
+
+	describe("focused property", () => {
+		it("has focused property defaulting to false", () => {
+			const { component, tmpDir } = makeMCComponent();
+			try {
+				expect(component.focused).toBe(false);
+			} finally {
+				component.dispose();
+				cleanupMC(tmpDir);
+			}
+		});
+
+		it("can set focused to true", () => {
+			const { component, tmpDir } = makeMCComponent();
+			try {
+				component.focused = true;
+				expect(component.focused).toBe(true);
+			} finally {
+				component.dispose();
+				cleanupMC(tmpDir);
+			}
+		});
+	});
+
+	describe("render caching", () => {
+		it("returns same array ref for same width and version", () => {
+			const { component, tmpDir } = makeMCComponent();
+			try {
+				const first = component.render(120);
+				const second = component.render(120);
+				expect(second).toBe(first);
+			} finally {
+				component.dispose();
+				cleanupMC(tmpDir);
+			}
+		});
+
+		it("returns different array ref for different width", () => {
+			const { component, tmpDir } = makeMCComponent();
+			try {
+				const first = component.render(120);
+				const second = component.render(100);
+				expect(second).not.toBe(first);
+			} finally {
+				component.dispose();
+				cleanupMC(tmpDir);
+			}
+		});
+
+		it("returns different array ref after input changes version", () => {
+			const { component, tmpDir } = makeMCComponent();
+			try {
+				const first = component.render(120);
+				component.handleInput("\x1B[B");
+				const second = component.render(120);
+				expect(second).not.toBe(first);
+			} finally {
+				component.dispose();
+				cleanupMC(tmpDir);
+			}
+		});
+	});
+
+	describe("invalidate", () => {
+		it("resets cache so next render returns new array ref", () => {
+			const { component, tmpDir } = makeMCComponent();
+			try {
+				const first = component.render(120);
+				component.invalidate();
+				const second = component.render(120);
+				expect(second).not.toBe(first);
+			} finally {
+				component.dispose();
+				cleanupMC(tmpDir);
+			}
+		});
+
+		it("rebuilds style when theme was provided", () => {
+			const theme = {
+				fg: (_color: string, text: string) => `\x1b[31m${text}\x1b[0m`,
+				bg: (_color: string, text: string) => `\x1b[41m${text}\x1b[0m`,
+				bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+			};
+			const { component, tmpDir } = makeMCComponent({ theme });
+			try {
+				const before = component.render(120);
+				component.invalidate();
+				const after = component.render(120);
+				expect(after).not.toBe(before);
+				expect(after.length).toBeGreaterThan(0);
+			} finally {
+				component.dispose();
+				cleanupMC(tmpDir);
+			}
+		});
+
+		it("does not throw when no theme was provided", () => {
+			const { component, tmpDir } = makeMCComponent();
+			try {
+				expect(() => component.invalidate()).not.toThrow();
+			} finally {
+				component.dispose();
+				cleanupMC(tmpDir);
+			}
+		});
+	});
+});

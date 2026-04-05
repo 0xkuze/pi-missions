@@ -1,8 +1,8 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
+import type { TUI } from "@mariozechner/pi-tui";
 import type { Feature, Milestone, MissionPlan } from "../../extensions/types.js";
-import { handleDraftReviewKey, renderDraftReview } from "../../extensions/ui/draft-review.js";
-import { nowISO } from "../../extensions/utils.js";
-import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";
+import { DraftReviewComponent, handleDraftReviewKey, renderDraftReview } from "../../extensions/ui/draft-review.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp } from "../helpers/index.js";
 
 function makeFeature(id: string, name: string, description = "A feature"): Feature {
 	return _sf({ id, name, description });
@@ -152,6 +152,103 @@ describe("renderDraftReview (VAL-UI-007)", () => {
 		const plan = makePlan();
 		const lines = renderDraftReview(plan, 80, undefined, 40);
 		expect(lines.length).toBeGreaterThan(5);
+	});
+});
+
+function makeMockTui(requestRender?: () => void): TUI {
+	return { terminal: { rows: 40 }, requestRender: requestRender ?? (() => {}) } as any;
+}
+
+function makeDraftComponent(
+	opts: { plan?: MissionPlan; theme?: any; requestRender?: () => void } = {},
+): DraftReviewComponent {
+	const plan = opts.plan ?? makePlan();
+	const tui = makeMockTui(opts.requestRender);
+	const deps = { onApprove: () => {} };
+	return new DraftReviewComponent(tui, () => {}, plan, deps, opts.theme);
+}
+
+describe("DraftReviewComponent (VAL-NEWUI-007)", () => {
+	describe("focused property", () => {
+		it("has focused property defaulting to false", () => {
+			const comp = makeDraftComponent();
+			expect(comp.focused).toBe(false);
+		});
+
+		it("can set focused to true", () => {
+			const comp = makeDraftComponent();
+			comp.focused = true;
+			expect(comp.focused).toBe(true);
+		});
+	});
+
+	describe("render caching", () => {
+		it("returns same array ref for same width and version", () => {
+			const comp = makeDraftComponent();
+			const first = comp.render(80);
+			const second = comp.render(80);
+			expect(second).toBe(first);
+		});
+
+		it("returns different array ref for different width", () => {
+			const comp = makeDraftComponent();
+			const first = comp.render(80);
+			const second = comp.render(100);
+			expect(second).not.toBe(first);
+		});
+
+		it("returns different array ref after scroll changes version", () => {
+			const comp = makeDraftComponent();
+			const first = comp.render(80);
+			comp.handleInput("\x1B[B");
+			const second = comp.render(80);
+			expect(second).not.toBe(first);
+		});
+	});
+
+	describe("requestRender on scroll", () => {
+		it("calls requestRender when scrolling", () => {
+			const mockFn = mock(() => {});
+			const comp = makeDraftComponent({ requestRender: mockFn });
+			comp.handleInput("\x1B[B");
+			expect(mockFn).toHaveBeenCalledTimes(1);
+		});
+
+		it("does not call requestRender for non-scroll keys", () => {
+			const mockFn = mock(() => {});
+			const comp = makeDraftComponent({ requestRender: mockFn });
+			comp.handleInput("x");
+			expect(mockFn).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("invalidate", () => {
+		it("resets cache so next render returns new array ref", () => {
+			const comp = makeDraftComponent();
+			const first = comp.render(80);
+			comp.invalidate();
+			const second = comp.render(80);
+			expect(second).not.toBe(first);
+		});
+
+		it("rebuilds style when theme was provided", () => {
+			const theme = {
+				fg: (t: string) => `\x1b[37m${t}\x1b[0m`,
+				bg: (t: string) => `\x1b[40m${t}\x1b[0m`,
+				bold: (t: string) => `\x1b[1m${t}\x1b[0m`,
+			};
+			const comp = makeDraftComponent({ theme });
+			const before = comp.render(80);
+			comp.invalidate();
+			const after = comp.render(80);
+			expect(after).not.toBe(before);
+			expect(after.length).toBeGreaterThan(0);
+		});
+
+		it("does not throw when no theme was provided", () => {
+			const comp = makeDraftComponent();
+			expect(() => comp.invalidate()).not.toThrow();
+		});
 	});
 });
 
