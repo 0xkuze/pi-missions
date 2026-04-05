@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@mariozachner/pi-coding-agent";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadState, savePlan, saveState } from "../state/manager.js";
 import { transitionState } from "../state/transitions.js";
 import type { Feature, Milestone, MissionPlan, MissionState } from "../types.js";
