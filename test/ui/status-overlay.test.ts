@@ -25,31 +25,31 @@ function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
 describe("renderStatusOverlay (VAL-NEWUI-004)", () => {
 	describe("basic rendering", () => {
 		it("returns array of strings", () => {
-			const lines = renderStatusOverlay(makeState(), null);
+			const lines = renderStatusOverlay(makeState(), null, 80, 40, 0);
 			expect(lines).toBeArray();
 			expect(lines.length).toBeGreaterThan(0);
 		});
 
 		it("shows heading", () => {
-			const lines = renderStatusOverlay(makeState(), null);
+			const lines = renderStatusOverlay(makeState(), null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toMatch(/Mission Status/i);
 		});
 
 		it("shows state", () => {
-			const lines = renderStatusOverlay(makeState({ status: "planning" }), null);
+			const lines = renderStatusOverlay(makeState({ status: "planning" }), null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toContain("planning");
 		});
 
 		it("shows duration", () => {
-			const lines = renderStatusOverlay(makeState(), null);
+			const lines = renderStatusOverlay(makeState(), null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toMatch(/Duration/i);
 		});
 
 		it("shows progress counts section", () => {
-			const lines = renderStatusOverlay(makeState(), null);
+			const lines = renderStatusOverlay(makeState(), null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toMatch(/Progress/i);
 			expect(text).toMatch(/Completed/i);
@@ -58,7 +58,7 @@ describe("renderStatusOverlay (VAL-NEWUI-004)", () => {
 		});
 
 		it("shows Esc keyboard hint", () => {
-			const lines = renderStatusOverlay(makeState(), null);
+			const lines = renderStatusOverlay(makeState(), null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toContain("Esc");
 		});
@@ -67,28 +67,28 @@ describe("renderStatusOverlay (VAL-NEWUI-004)", () => {
 	describe("progress counts", () => {
 		it("shows completed count", () => {
 			const state = makeState({ totalFeaturesCompleted: 5 });
-			const lines = renderStatusOverlay(state, null);
+			const lines = renderStatusOverlay(state, null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toContain("5");
 		});
 
 		it("shows failed count", () => {
 			const state = makeState({ totalFeaturesFailed: 2 });
-			const lines = renderStatusOverlay(state, null);
+			const lines = renderStatusOverlay(state, null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toContain("2");
 		});
 
 		it("shows skipped count", () => {
 			const state = makeState({ totalFeaturesSkipped: 3 });
-			const lines = renderStatusOverlay(state, null);
+			const lines = renderStatusOverlay(state, null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toContain("3");
 		});
 
 		it("shows fix tasks count", () => {
 			const state = makeState({ totalFixFeaturesCreated: 1 });
-			const lines = renderStatusOverlay(state, null);
+			const lines = renderStatusOverlay(state, null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toMatch(/Fix/i);
 		});
@@ -98,7 +98,7 @@ describe("renderStatusOverlay (VAL-NEWUI-004)", () => {
 		it("shows current milestone when executing", () => {
 			const state = makeState({ status: "executing", currentMilestoneId: "m1" });
 			const plan = makePlan();
-			const lines = renderStatusOverlay(state, plan);
+			const lines = renderStatusOverlay(state, plan, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toContain("Milestone 1");
 		});
@@ -106,14 +106,14 @@ describe("renderStatusOverlay (VAL-NEWUI-004)", () => {
 		it("shows current feature when executing", () => {
 			const state = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f1" });
 			const plan = makePlan();
-			const lines = renderStatusOverlay(state, plan);
+			const lines = renderStatusOverlay(state, plan, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toContain("Feature 1");
 		});
 
 		it("omits milestone when not set", () => {
 			const state = makeState({ status: "planning" });
-			const lines = renderStatusOverlay(state, null);
+			const lines = renderStatusOverlay(state, null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).not.toContain("Milestone:");
 		});
@@ -122,7 +122,7 @@ describe("renderStatusOverlay (VAL-NEWUI-004)", () => {
 	describe("paused state", () => {
 		it("shows pause info when paused with resume target", () => {
 			const state = makeState({ status: "paused", resumeTargetState: "executing" });
-			const lines = renderStatusOverlay(state, null);
+			const lines = renderStatusOverlay(state, null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).toMatch(/Paused/i);
 			expect(text).toContain("executing");
@@ -130,7 +130,7 @@ describe("renderStatusOverlay (VAL-NEWUI-004)", () => {
 
 		it("omits pause info when not paused", () => {
 			const state = makeState({ status: "planning" });
-			const lines = renderStatusOverlay(state, null);
+			const lines = renderStatusOverlay(state, null, 80, 40, 0);
 			const text = lines.join(" ");
 			expect(text).not.toMatch(/will resume/i);
 		});
@@ -140,7 +140,7 @@ describe("renderStatusOverlay (VAL-NEWUI-004)", () => {
 		for (const status of ["planning", "draft_review", "executing", "validating", "completed", "failed"] as const) {
 			it(`renders without error for status ${status}`, () => {
 				const state = makeState({ status });
-				const lines = renderStatusOverlay(state, null);
+				const lines = renderStatusOverlay(state, null, 80, 40, 0);
 				expect(lines).toBeArray();
 				expect(lines.length).toBeGreaterThan(0);
 			});
@@ -152,6 +152,26 @@ describe("handleStatusOverlayKey (VAL-NEWUI-004)", () => {
 	it("returns close for Esc key", () => {
 		const action = handleStatusOverlayKey("\x1B");
 		expect(action.kind).toBe("close");
+	});
+
+	it("returns scroll -1 for up arrow", () => {
+		const action = handleStatusOverlayKey("\x1B[A");
+		expect(action).toEqual({ kind: "scroll", delta: -1 });
+	});
+
+	it("returns scroll +1 for down arrow", () => {
+		const action = handleStatusOverlayKey("\x1B[B");
+		expect(action).toEqual({ kind: "scroll", delta: 1 });
+	});
+
+	it("returns scroll -10 for page up", () => {
+		const action = handleStatusOverlayKey("\x1B[5~");
+		expect(action).toEqual({ kind: "scroll", delta: -10 });
+	});
+
+	it("returns scroll +10 for page down", () => {
+		const action = handleStatusOverlayKey("\x1B[6~");
+		expect(action).toEqual({ kind: "scroll", delta: 10 });
 	});
 
 	it("returns noop for other keys", () => {

@@ -4,7 +4,6 @@ import { loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
 import { appendMutation } from "./state/plan-history.js";
 import { transitionState } from "./state/transitions.js";
 import type { MissionPlan, MissionState, MissionStatus } from "./types.js";
-import { themeFrameStyle } from "./ui/frame.js";
 import { PlanOverlayComponent } from "./ui/plan-overlay.js";
 import { StatusOverlayComponent } from "./ui/status-overlay.js";
 import { formatDuration, generateId, nowISO } from "./utils.js";
@@ -319,7 +318,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
 			}
 			const plan = loadPlan(deps.basePath);
 			await ctx.ui.custom<void>(
-				(_tui, theme, _kb, done) => new StatusOverlayComponent(state, plan, done, themeFrameStyle(theme)),
+				(tui, theme, _kb, done) => new StatusOverlayComponent(tui, done, state, plan, theme),
 				{
 					overlay: true,
 				},

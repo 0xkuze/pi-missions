@@ -1,10 +1,13 @@
+import type { TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
 import type { FrameStyle } from "./frame.js";
-import { footerBar, panel, section, titleBar } from "./frame.js";
+import { footerBar, panel, section, themeFrameStyle, titleBar } from "./frame.js";
 
-export type StatusOverlayAction = { kind: "close" } | { kind: "noop" };
+export type StatusOverlayAction = { kind: "close" } | { kind: "scroll"; delta: number } | { kind: "noop" };
+
+const PAGE_SIZE = 10;
 
 function styledStatusName(status: string, style?: FrameStyle): string {
 	switch (status) {
@@ -26,9 +29,10 @@ function styledStatusName(status: string, style?: FrameStyle): string {
 export function renderStatusOverlay(
 	state: MissionState,
 	plan: MissionPlan | null,
-	width = 80,
+	width: number,
+	height: number,
+	scrollOffset: number,
 	style?: FrameStyle,
-	height = 40,
 ): string[] {
 	const contentWidth = width - 4;
 	const mf = style?.mutedFn ?? ((t: string) => t);
@@ -69,36 +73,48 @@ export function renderStatusOverlay(
 	const panelHeight = Math.max(5, height - 7);
 	return [
 		titleBar("Mission Status", width, style),
-		...panel("Status", lines, width, panelHeight, 0, style),
-		...footerBar("Esc: close", width, style),
+		...panel("Status", lines, width, panelHeight, scrollOffset, style),
+		...footerBar("Esc: close  ↑↓: scroll  PgUp/PgDn: page", width, style),
 	];
 }
 
 export function handleStatusOverlayKey(key: string): StatusOverlayAction {
 	if (matchesKey(key, "escape")) return { kind: "close" };
+	if (matchesKey(key, "up")) return { kind: "scroll", delta: -1 };
+	if (matchesKey(key, "down")) return { kind: "scroll", delta: 1 };
+	if (matchesKey(key, "pageUp")) return { kind: "scroll", delta: -PAGE_SIZE };
+	if (matchesKey(key, "pageDown")) return { kind: "scroll", delta: PAGE_SIZE };
 	return { kind: "noop" };
 }
 
 export class StatusOverlayComponent {
 	private style: FrameStyle | undefined;
+	private scrollOffset = 0;
 
 	constructor(
+		private tui: TUI,
+		private done: () => void,
 		private state: MissionState,
 		private plan: MissionPlan | null,
-		private done: () => void,
-		style?: FrameStyle,
+		theme?: { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string },
 	) {
-		this.style = style;
+		this.style = theme ? themeFrameStyle(theme) : undefined;
 	}
 
 	handleInput(data: string): void {
 		const action = handleStatusOverlayKey(data);
 		if (action.kind === "close") this.done();
+		if (action.kind === "scroll") {
+			this.scrollOffset = Math.max(0, this.scrollOffset + action.delta);
+		}
 	}
 
 	render(width: number): string[] {
-		return renderStatusOverlay(this.state, this.plan, width, this.style);
+		const height = this.tui.terminal.rows - 5;
+		return renderStatusOverlay(this.state, this.plan, width, height, this.scrollOffset, this.style);
 	}
 
 	invalidate(): void {}
+
+	dispose(): void {}
 }
