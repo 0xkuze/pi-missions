@@ -310,12 +310,12 @@ export default function (pi: ExtensionAPI): void {
 				recoveryContext,
 			} = reconcileStateOnStart(stateWithSnapshot, basePath);
 			if (recoveryContext) {
-				saveState(basePath, recoveredState);
-				if (recoveredPlan) savePlan(basePath, recoveredPlan);
+				saveState(basePath, recoveredState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
+				if (recoveredPlan) savePlan(basePath, recoveredPlan, (p) => pi.appendEntry(SESSION_CACHE_KEY, p));
 				pendingRecoveryContext = recoveryContext;
 			} else if (stateWithSnapshot !== fsState) {
 				// Snapshot was captured — persist the updated state.
-				saveState(basePath, recoveredState);
+				saveState(basePath, recoveredState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
 			}
 			renderWidget(ctx.ui, recoveredState, recoveredPlan ?? undefined);
 			if (!TERMINAL_STATUSES.has(recoveredState.status)) {
@@ -338,7 +338,7 @@ export default function (pi: ExtensionAPI): void {
 		// Restore from cache: write back to filesystem so it becomes authoritative.
 		// Also capture snapshot for the restored state.
 		const cachedWithSnapshot = captureSnapshotIfNeeded(cached, projectDir);
-		saveState(basePath, cachedWithSnapshot);
+		saveState(basePath, cachedWithSnapshot, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
 		const plan = loadPlan(basePath);
 		renderWidget(ctx.ui, cachedWithSnapshot, plan ?? undefined);
 		if (!TERMINAL_STATUSES.has(cachedWithSnapshot.status)) {

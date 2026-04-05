@@ -28,8 +28,9 @@ function configPath(basePath: string): string {
 	return join(basePath, "config.json");
 }
 
-export function saveState(basePath: string, state: MissionState): void {
+export function saveState(basePath: string, state: MissionState, cacheCallback?: (data: MissionState) => void): void {
 	atomicWrite(statePath(basePath), JSON.stringify(state, null, 2));
+	cacheCallback?.(state);
 }
 
 export function loadState(basePath: string): MissionState | null {
@@ -56,8 +57,9 @@ export function loadState(basePath: string): MissionState | null {
 	return parsed;
 }
 
-export function savePlan(basePath: string, plan: MissionPlan): void {
+export function savePlan(basePath: string, plan: MissionPlan, cacheCallback?: (data: MissionPlan) => void): void {
 	atomicWrite(planPath(basePath), JSON.stringify(plan, null, 2));
+	cacheCallback?.(plan);
 }
 
 export function loadPlan(basePath: string): MissionPlan | null {

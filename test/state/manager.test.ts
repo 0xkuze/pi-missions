@@ -49,6 +49,19 @@ describe("saveState / loadState", () => {
 		expect(loaded).toEqual(minimalState);
 	});
 
+	it("invokes cacheCallback with state after write", () => {
+		const dir = makeTmpDir();
+		const calls: MissionState[] = [];
+		saveState(dir, minimalState, (s) => calls.push(s));
+		expect(calls).toHaveLength(1);
+		expect(calls[0]).toEqual(minimalState);
+	});
+
+	it("does not invoke cacheCallback when not provided", () => {
+		const dir = makeTmpDir();
+		expect(() => saveState(dir, minimalState)).not.toThrow();
+	});
+
 	it("writes pretty-printed JSON", () => {
 		const dir = makeTmpDir();
 		saveState(dir, minimalState);
@@ -135,6 +148,19 @@ describe("savePlan / loadPlan", () => {
 		const dir = makeTmpDir();
 		savePlan(dir, minimalPlan);
 		expect(loadPlan(dir)).toEqual(minimalPlan);
+	});
+
+	it("invokes cacheCallback with plan after write", () => {
+		const dir = makeTmpDir();
+		const calls: MissionPlan[] = [];
+		savePlan(dir, minimalPlan, (p) => calls.push(p));
+		expect(calls).toHaveLength(1);
+		expect(calls[0]).toEqual(minimalPlan);
+	});
+
+	it("does not invoke cacheCallback when not provided", () => {
+		const dir = makeTmpDir();
+		expect(() => savePlan(dir, minimalPlan)).not.toThrow();
 	});
 
 	it("writes pretty-printed JSON", () => {
