@@ -7,7 +7,15 @@ import { readHistory } from "../../extensions/state/plan-history.js";
 import { registerCreateFixTool } from "../../extensions/tools/create-fix.js";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
-import { createMockPi, makeFeature, makeMilestone, makePlan, makeState, type ToolResult } from "../helpers/index.js";
+import {
+	createMockContext,
+	createMockPi,
+	makeFeature,
+	makeMilestone,
+	makePlan,
+	makeState,
+	type ToolResult,
+} from "../helpers/index.js";
 
 const EXISTING_FEATURE = {
 	id: "feature-1",
@@ -436,7 +444,7 @@ describe("registerCreateFixTool", () => {
 					},
 					undefined,
 					undefined,
-					undefined,
+					createMockContext(),
 				)) as ToolResult;
 				expect(result.content[0]!.text).toContain("Error");
 			} finally {

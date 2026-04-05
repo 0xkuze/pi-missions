@@ -98,7 +98,7 @@ describe("createMockPi", () => {
 	});
 
 	it("accepts overrides for specific methods", () => {
-		const customExec = async () => ({ stdout: "custom", stderr: "", exitCode: 42, signal: null });
+		const customExec = async () => ({ stdout: "custom", stderr: "", code: 42, killed: false });
 		const mock = createMockPi({ exec: customExec });
 		expect(mock.pi.exec).toBe(customExec);
 	});
@@ -141,7 +141,7 @@ describe("createMockPi", () => {
 		expect(mock.pi.getActiveTools()).toEqual([]);
 		expect(mock.pi.getAllTools()).toEqual([]);
 		expect(mock.pi.getCommands()).toEqual([]);
-		expect(mock.pi.getThinkingLevel()).toBe("none");
+		expect(mock.pi.getThinkingLevel()).toBe("off");
 	});
 });
 
@@ -221,7 +221,7 @@ describe("createMockContext", () => {
 		expect(await ctx.ui.editor("title")).toBeUndefined();
 		expect(ctx.ui.getEditorText()).toBe("");
 		expect(ctx.ui.getToolsExpanded()).toBe(false);
-		expect(ctx.ui.getTheme()).toBeUndefined();
+		expect(ctx.ui.getTheme("nonexistent")).toBeUndefined();
 		expect(ctx.ui.getAllThemes()).toEqual([]);
 	});
 

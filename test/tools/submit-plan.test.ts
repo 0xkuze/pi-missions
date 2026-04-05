@@ -6,7 +6,7 @@ import { loadPlan, loadState, saveState } from "../../extensions/state/manager.j
 import { readHistory } from "../../extensions/state/plan-history.js";
 import { registerSubmitPlanTool } from "../../extensions/tools/submit-plan.js";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
-import { createMockPi, makeState, type ToolResult } from "../helpers/index.js";
+import { createMockContext, createMockPi, makeState, type ToolResult } from "../helpers/index.js";
 
 function makePlanningState(): MissionState {
 	return makeState({ status: "planning" });
@@ -358,7 +358,7 @@ describe("registerSubmitPlanTool", () => {
 			const { pi, getRegisteredTool: getTool } = createMockPi();
 			registerSubmitPlanTool(pi, { basePath: tmpDir, updateWidget: mock(() => {}) });
 			const tool = getTool("submit_plan")!;
-			const result = await tool.execute("id", makeMinimalPlanParams(), undefined, undefined, undefined);
+			const result = await tool.execute("id", makeMinimalPlanParams(), undefined, undefined, createMockContext());
 
 			expect(result.content[0].text).toContain("Error");
 			expect(result.content[0].text).toContain("no active mission");

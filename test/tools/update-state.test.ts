@@ -6,7 +6,15 @@ import { loadPlan, loadState, savePlan, saveState } from "../../extensions/state
 import { readHistory } from "../../extensions/state/plan-history.js";
 import { registerUpdateStateTool } from "../../extensions/tools/update-state.js";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
-import { createMockPi, makeFeature, makeMilestone, makePlan, makeState, type ToolResult } from "../helpers/index.js";
+import {
+	createMockContext,
+	createMockPi,
+	makeFeature,
+	makeMilestone,
+	makePlan,
+	makeState,
+	type ToolResult,
+} from "../helpers/index.js";
 
 function makeExecutingState() {
 	return makeState();
@@ -77,7 +85,7 @@ describe("registerUpdateStateTool", () => {
 				{ action: "start_milestone", targetId: "milestone-1" },
 				undefined,
 				undefined,
-				undefined,
+				createMockContext(),
 			);
 			expect(result.content[0].text).toContain("Error");
 			expect(result.content[0].text).toContain("no active mission");

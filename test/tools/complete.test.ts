@@ -6,7 +6,15 @@ import { loadState, savePlan, saveState } from "../../extensions/state/manager.j
 import { transitionState } from "../../extensions/state/transitions.js";
 import { registerCompleteMissionTool } from "../../extensions/tools/complete.js";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
-import { createMockPi, makeFeature, makeMilestone, makePlan, makeState, type ToolResult } from "../helpers/index.js";
+import {
+	createMockContext,
+	createMockPi,
+	makeFeature,
+	makeMilestone,
+	makePlan,
+	makeState,
+	type ToolResult,
+} from "../helpers/index.js";
 
 function makeExecutingState(overrides: Partial<MissionState> = {}) {
 	return makeState({ status: "executing", startedAt: new Date(Date.now() - 60_000).toISOString(), ...overrides });
@@ -67,7 +75,7 @@ describe("registerCompleteMissionTool", () => {
 			const { pi, getRegisteredTool } = createMockPi();
 			registerCompleteMissionTool(pi, { basePath: tmpDir, updateWidget: () => {} });
 			const tool = getRegisteredTool("complete_mission")!;
-			const result = await tool.execute("id", { summary: "all done" }, undefined, undefined, undefined);
+			const result = await tool.execute("id", { summary: "all done" }, undefined, undefined, createMockContext());
 			expect((result as ToolResult).content[0].text).toContain("Error");
 			expect((result as ToolResult).content[0].text).toContain("no active mission");
 		});

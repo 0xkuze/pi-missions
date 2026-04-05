@@ -5,7 +5,15 @@ import { join } from "node:path";
 import { savePlan, saveState } from "../../extensions/state/manager.js";
 import { type ExecFn, registerRunValidationTool } from "../../extensions/tools/run-validation.js";
 import type { MissionPlan, MissionState, ValidationResult } from "../../extensions/types.js";
-import { createMockPi, makeFeature, makeMilestone, makePlan, makeState, type ToolResult } from "../helpers/index.js";
+import {
+	createMockContext,
+	createMockPi,
+	makeFeature,
+	makeMilestone,
+	makePlan,
+	makeState,
+	type ToolResult,
+} from "../helpers/index.js";
 
 function localMakePlan(overrides: Partial<MissionPlan> = {}) {
 	return makePlan({
@@ -52,7 +60,7 @@ async function callTool(
 		exec,
 	});
 	const tool = getRegisteredTool("run_validation")!;
-	return tool.execute("tool-call-id", params, undefined, undefined, undefined) as Promise<ToolResult>;
+	return tool.execute("tool-call-id", params, undefined, undefined, createMockContext()) as Promise<ToolResult>;
 }
 
 describe("registerRunValidationTool", () => {
@@ -81,7 +89,7 @@ describe("registerRunValidationTool", () => {
 				{ milestoneId: "milestone-1" },
 				undefined,
 				undefined,
-				undefined,
+				createMockContext(),
 			)) as ToolResult;
 			expect(result.content[0].text).toContain("Error");
 		});
