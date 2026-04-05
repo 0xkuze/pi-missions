@@ -2,10 +2,10 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { generateReport } from "../report.js";
 import { loadPlan, loadState, saveState } from "../state/manager.js";
 import { transitionState } from "../state/transitions.js";
 import type { MissionPlan, MissionState } from "../types.js";
-import { formatDuration, nowISO } from "../utils.js";
 
 interface Deps {
 	basePath: string;
@@ -33,60 +33,6 @@ function countPendingFeatures(plan: MissionPlan): number {
 		}
 	}
 	return count;
-}
-
-function buildReport(state: MissionState, plan: MissionPlan, summary: string, remainingNotes?: string[]): string {
-	const startedAt = new Date(state.startedAt);
-	const completedAt = new Date(state.completedAt ?? nowISO());
-	const durationMs = completedAt.getTime() - startedAt.getTime();
-
-	const totalFeatures = plan.milestones.reduce((sum, m) => sum + m.features.length, 0);
-	const lines: string[] = [];
-
-	lines.push("# Mission Report");
-	lines.push("");
-	lines.push(`**Goal:** ${plan.description}`);
-	lines.push("");
-	lines.push("## Summary");
-	lines.push("");
-	lines.push(summary);
-	lines.push("");
-	lines.push("## Timeline");
-	lines.push("");
-	lines.push(`- **Started:** ${startedAt.toISOString()}`);
-	lines.push(`- **Completed:** ${completedAt.toISOString()}`);
-	lines.push(`- **Duration:** ${formatDuration(durationMs)}`);
-	lines.push("");
-	lines.push("## Progress");
-	lines.push("");
-	lines.push(`- **Features completed:** ${state.totalFeaturesCompleted}`);
-	lines.push(`- **Features failed:** ${state.totalFeaturesFailed}`);
-	lines.push(`- **Features skipped:** ${state.totalFeaturesSkipped}`);
-	lines.push(`- **Fix features created:** ${state.totalFixFeaturesCreated}`);
-	lines.push(`- **Total features:** ${totalFeatures}`);
-	lines.push("");
-	lines.push("## Milestones");
-	lines.push("");
-
-	for (const milestone of plan.milestones) {
-		lines.push(`### ${milestone.name} (${milestone.status})`);
-		lines.push("");
-		for (const feature of milestone.features) {
-			lines.push(`- **${feature.name}** — ${feature.status}`);
-		}
-		lines.push("");
-	}
-
-	if (remainingNotes && remainingNotes.length > 0) {
-		lines.push("## Notes");
-		lines.push("");
-		for (const note of remainingNotes) {
-			lines.push(`- ${note}`);
-		}
-		lines.push("");
-	}
-
-	return lines.join("\n");
 }
 
 export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void {
@@ -154,7 +100,12 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 				const reportPath = join(deps.basePath, "report.md");
 				const reportDir = dirname(reportPath);
 				mkdirSync(reportDir, { recursive: true });
-				const reportContent = buildReport(completedState, plan, summary, remainingNotes);
+				const reportContent = generateReport(completedState, plan, {
+					filesChanged: [],
+					commits: [],
+					summary,
+					remainingNotes: remainingNotes ?? [],
+				});
 				writeFileSync(reportPath, reportContent, "utf8");
 			}
 
