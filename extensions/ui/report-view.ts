@@ -4,7 +4,7 @@ import { resolveModel } from "../config.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
 import type { FrameStyle } from "./frame.js";
-import { frame, section } from "./frame.js";
+import { footerBar, panel, section, titleBar } from "./frame.js";
 
 export type ReportViewAction = { kind: "close" } | { kind: "open_report" } | { kind: "noop" };
 
@@ -47,6 +47,7 @@ export function renderReportView(
 	basePath: string,
 	width = 80,
 	style?: FrameStyle,
+	height = 40,
 ): string[] {
 	const contentWidth = width - 4;
 	const tf = style?.textFn ?? ((t: string) => t);
@@ -84,7 +85,12 @@ export function renderReportView(
 	lines.push(section("Output", contentWidth, style));
 	lines.push(mf(`Report: ${reportPath}`));
 
-	return frame("Mission Complete", lines, width, "O: open report   Esc: close", style);
+	const panelHeight = Math.max(5, height - 7);
+	return [
+		titleBar("Mission Complete", width, style),
+		...panel("Summary", lines, width, panelHeight, 0, style),
+		...footerBar("O: open report   Esc: close", width, style),
+	];
 }
 
 export function handleReportViewKey(key: string): ReportViewAction {
@@ -105,6 +111,7 @@ export function renderModelView(
 	width = 80,
 	style?: FrameStyle,
 	availableModels: string[] = [],
+	height = 40,
 ): string[] {
 	const tf = style?.textFn ?? ((t: string) => t);
 	const af = style?.accentFn ?? ((t: string) => t);
@@ -153,7 +160,12 @@ export function renderModelView(
 	}
 
 	const footer = viewState.selectedRoleIndex === null ? "Esc: close" : "Esc: back";
-	return frame("Model Assignment", lines, width, footer, style);
+	const panelHeight = Math.max(5, height - 7);
+	return [
+		titleBar("Model Assignment", width, style),
+		...panel("Models", lines, width, panelHeight, 0, style),
+		...footerBar(footer, width, style),
+	];
 }
 
 function capitalize(s: string): string {

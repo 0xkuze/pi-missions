@@ -159,6 +159,145 @@ export function wrapText(text: string, maxWidth: number): string[] {
 
 const IDENTITY_FN = (t: string) => t;
 
+function renderPanelBody(
+	lines: string[],
+	contentWidth: number,
+	contentHeight: number,
+	scrollOffset: number,
+	style?: FrameStyle,
+): { rows: string[]; clampedOffset: number } {
+	const b = style?.borderFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const totalLines = lines.length;
+	const maxScroll = Math.max(0, totalLines - contentHeight);
+	const clampedOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+	const visibleLines = lines.slice(clampedOffset, clampedOffset + contentHeight);
+
+	const showScrollbar = totalLines > contentHeight;
+	const scrollThumbSize = showScrollbar
+		? Math.max(1, Math.round((contentHeight / totalLines) * contentHeight))
+		: contentHeight;
+	const scrollThumbPos =
+		showScrollbar && maxScroll > 0
+			? Math.round((clampedOffset / maxScroll) * (contentHeight - scrollThumbSize))
+			: 0;
+
+	const rows: string[] = [];
+	for (let i = 0; i < contentHeight; i++) {
+		const lineContent = visibleLines[i] ?? "";
+		const padded = padOrTruncate(lineContent, contentWidth);
+
+		let scrollChar: string;
+		if (showScrollbar) {
+			const isThumb = i >= scrollThumbPos && i < scrollThumbPos + scrollThumbSize;
+			scrollChar = isThumb ? mf("\u2590") : " ";
+		} else {
+			scrollChar = " ";
+		}
+
+		rows.push(`${b(BOX_V)} ${padded}${scrollChar}${b(BOX_V)}`);
+	}
+	return { rows, clampedOffset };
+}
+
+export function panel(
+	title: string,
+	lines: string[],
+	width: number,
+	height: number,
+	scrollOffset: number,
+	style?: FrameStyle,
+): string[] {
+	const contentWidth = width - 4;
+	if (contentWidth < 1) return [];
+
+	const b = style?.borderFn ?? ((t: string) => t);
+	const tf = style?.titleFn ?? ((t: string) => t);
+
+	const styledTitle = tf(title);
+	const titleText = ` ${styledTitle} `;
+	const titleVW = visibleWidth(titleText);
+	const topFill = Math.max(0, width - 3 - titleVW);
+	const topBorder = `${b(BOX_TL + BOX_H)}${titleText}${b(BOX_H.repeat(topFill) + BOX_TR)}`;
+
+	const bottomBorder = b(`${BOX_BL}${BOX_H.repeat(width - 2)}${BOX_BR}`);
+
+	const contentHeight = Math.max(1, height - 2);
+	const { rows } = renderPanelBody(lines, contentWidth, contentHeight, scrollOffset, style);
+
+	const output: string[] = [topBorder, ...rows, bottomBorder];
+
+	if (style?.bgFn) {
+		return output.map((l) => applyBg(l, width, style.bgFn!));
+	}
+	return output;
+}
+
+export function panelWithCount(
+	title: string,
+	count: string,
+	lines: string[],
+	width: number,
+	height: number,
+	scrollOffset: number,
+	style?: FrameStyle,
+): string[] {
+	const contentWidth = width - 4;
+	if (contentWidth < 1) return [];
+
+	const b = style?.borderFn ?? ((t: string) => t);
+	const tf = style?.titleFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
+
+	const styledTitle = tf(title);
+	const titleText = ` ${styledTitle} `;
+	const countText = ` ${mf(count)} `;
+	const titleVW = visibleWidth(titleText);
+	const countVW = visibleWidth(countText);
+	const topFill = Math.max(0, width - 3 - titleVW - countVW);
+	const topBorder = `${b(BOX_TL + BOX_H)}${titleText}${b(BOX_H.repeat(topFill))}${countText}${b(BOX_TR)}`;
+
+	const bottomBorder = b(`${BOX_BL}${BOX_H.repeat(width - 2)}${BOX_BR}`);
+
+	const contentHeight = Math.max(1, height - 2);
+	const { rows } = renderPanelBody(lines, contentWidth, contentHeight, scrollOffset, style);
+
+	const output: string[] = [topBorder, ...rows, bottomBorder];
+
+	if (style?.bgFn) {
+		return output.map((l) => applyBg(l, width, style.bgFn!));
+	}
+	return output;
+}
+
+export function titleBar(title: string, width: number, style?: FrameStyle): string {
+	const b = style?.borderFn ?? ((t: string) => t);
+	const tf = style?.titleFn ?? ((t: string) => t);
+	const styledTitle = tf(title);
+	const titleText = ` ${styledTitle} `;
+	const titleVW = visibleWidth(titleText);
+	const remaining = Math.max(0, width - titleVW);
+	const leftFill = Math.floor(remaining / 2);
+	const rightFill = remaining - leftFill;
+	return `${b(BOX_H.repeat(leftFill))}${titleText}${b(BOX_H.repeat(rightFill))}`;
+}
+
+export function footerBar(shortcuts: string, width: number, style?: FrameStyle): string[] {
+	const b = style?.borderFn ?? ((t: string) => t);
+	const contentWidth = width - 4;
+	if (contentWidth < 1) return [];
+	const styledShortcuts = styleFooter(shortcuts, style?.accentFn);
+	const padded = padOrTruncate(styledShortcuts, contentWidth);
+
+	const topBorder = b(`${BOX_TL}${BOX_H.repeat(width - 2)}${BOX_TR}`);
+	const content = `${b(BOX_V)} ${padded} ${b(BOX_V)}`;
+	const bottomBorder = b(`${BOX_BL}${BOX_H.repeat(width - 2)}${BOX_BR}`);
+
+	const raw = [topBorder, content, bottomBorder];
+	if (style?.bgFn) return raw.map((l) => applyBg(l, width, style.bgFn!));
+	return raw;
+}
+
 export function styledFeatureIcon(status: string, style?: FrameStyle): string {
 	const icons: Record<string, { icon: string; fn?: (t: string) => string }> = {
 		done: { icon: "\u2713", fn: style?.successFn },

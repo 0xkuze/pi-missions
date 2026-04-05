@@ -2,7 +2,7 @@ import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
 import type { FrameStyle } from "./frame.js";
-import { frame, section } from "./frame.js";
+import { footerBar, panel, section, titleBar } from "./frame.js";
 
 export type StatusOverlayAction = { kind: "close" } | { kind: "noop" };
 
@@ -28,6 +28,7 @@ export function renderStatusOverlay(
 	plan: MissionPlan | null,
 	width = 80,
 	style?: FrameStyle,
+	height = 40,
 ): string[] {
 	const contentWidth = width - 4;
 	const mf = style?.mutedFn ?? ((t: string) => t);
@@ -65,7 +66,12 @@ export function renderStatusOverlay(
 		lines.push(mf(`Paused (will resume to: ${state.resumeTargetState})`));
 	}
 
-	return frame("Mission Status", lines, width, "Esc: close", style);
+	const panelHeight = Math.max(5, height - 7);
+	return [
+		titleBar("Mission Status", width, style),
+		...panel("Status", lines, width, panelHeight, 0, style),
+		...footerBar("Esc: close", width, style),
+	];
 }
 
 export function handleStatusOverlayKey(key: string): StatusOverlayAction {

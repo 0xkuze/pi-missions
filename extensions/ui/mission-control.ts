@@ -9,12 +9,16 @@ import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from
 import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
 import type { FrameStyle } from "./frame.js";
 import {
+	footerBar,
 	frame,
+	panel,
+	panelWithCount,
 	section,
 	sectionWithCount,
 	styledFeatureIcon,
 	styledFeatureName,
 	themeFrameStyle,
+	titleBar,
 	wrapText,
 } from "./frame.js";
 import { handlePlanHistoryKey, renderPlanHistoryView } from "./plan-history.js";
@@ -208,7 +212,8 @@ function renderFeaturePanelContent(
 	return lines;
 }
 
-function countFeatureStats(plan: MissionPlan): { done: number; total: number } {
+function countFeatureStats(plan: MissionPlan | null): { done: number; total: number } {
+	if (!plan) return { done: 0, total: 0 };
 	let done = 0;
 	let total = 0;
 	for (const milestone of plan.milestones) {
@@ -492,8 +497,10 @@ export class MissionControlComponent {
 	private modelViewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 	private pollInterval: ReturnType<typeof setInterval> | null = null;
 	private style: FrameStyle | undefined;
-	private scrollOffset = 0;
-	private lastBodyHeight = 0;
+	private leftScrollOffset = 0;
+	private rightTopScrollOffset = 0;
+	private rightBottomScrollOffset = 0;
+	private activePane: "left" | "right-top" | "right-bottom" = "left";
 
 	constructor(
 		private tui: TUI,
@@ -528,7 +535,9 @@ export class MissionControlComponent {
 			nextHistory.length !== this.planHistory.length
 		) {
 			if (nextState?.status !== this.state?.status || nextState?.currentFeatureId !== this.state?.currentFeatureId) {
-				this.scrollOffset = 0;
+				this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 			}
 			this.state = nextState;
 			this.plan = nextPlan;
@@ -539,18 +548,25 @@ export class MissionControlComponent {
 	}
 
 	handleInput(data: string): void {
-		const mouseScroll = this.parseMouseScroll(data);
-		if (mouseScroll !== 0) {
-			this.applyScroll(mouseScroll);
-			this.tui.requestRender();
-			return;
-		}
-
 		const activeView = this.resolveActiveView();
 		if (activeView !== null) {
 			this.handleSubViewInput(data, activeView);
 			return;
 		}
+
+		if (this.handleMouseScroll(data)) {
+			this.tui.requestRender();
+			return;
+		}
+
+		if (data === "\t") {
+			const panes: Array<"left" | "right-top" | "right-bottom"> = ["left", "right-top", "right-bottom"];
+			const currentIdx = panes.indexOf(this.activePane);
+			this.activePane = panes[(currentIdx + 1) % panes.length]!;
+			this.tui.requestRender();
+			return;
+		}
+
 		if (this.handleScroll(data)) {
 			this.tui.requestRender();
 			return;
@@ -568,17 +584,37 @@ export class MissionControlComponent {
 		return 0;
 	}
 
-	private applyScroll(delta: number): void {
-		const availableHeight = this.getAvailableBodyLines();
-		const maxScroll = Math.max(0, this.lastBodyHeight - availableHeight);
-		this.scrollOffset = Math.max(0, Math.min(maxScroll, this.scrollOffset + delta));
+	private applyScrollToActivePane(delta: number): void {
+		switch (this.activePane) {
+			case "left":
+				this.leftScrollOffset = Math.max(0, this.leftScrollOffset + delta);
+				break;
+			case "right-top":
+				this.rightTopScrollOffset = Math.max(0, this.rightTopScrollOffset + delta);
+				break;
+			case "right-bottom":
+				this.rightBottomScrollOffset = Math.max(0, this.rightBottomScrollOffset + delta);
+				break;
+		}
 	}
 
-	private getAvailableBodyLines(): number {
-		const FRAME_CHROME = 4;
-		const MARGIN = 2;
-		const maxTotalLines = this.tui.terminal.rows - MARGIN;
-		return Math.max(3, maxTotalLines - FRAME_CHROME);
+	private handleMouseScroll(data: string): boolean {
+		const match = data.match(/^\x1b\[<(\d+);(\d+);\d+[Mm]$/);
+		if (!match) return false;
+		const button = parseInt(match[1]!, 10);
+		if (button !== 64 && button !== 65) return false;
+		const col = parseInt(match[2]!, 10);
+		const delta = button === 64 ? -3 : 3;
+
+		const leftWidth = Math.floor(this.tui.terminal.columns * 0.4);
+		if (col <= leftWidth) {
+			this.leftScrollOffset = Math.max(0, this.leftScrollOffset + delta);
+		} else if (this.activePane === "right-bottom") {
+			this.rightBottomScrollOffset = Math.max(0, this.rightBottomScrollOffset + delta);
+		} else {
+			this.rightTopScrollOffset = Math.max(0, this.rightTopScrollOffset + delta);
+		}
+		return true;
 	}
 
 	private enableMouse(): void {
@@ -591,19 +627,19 @@ export class MissionControlComponent {
 
 	private handleScroll(data: string): boolean {
 		if (matchesKey(data, "up")) {
-			this.applyScroll(-1);
+			this.applyScrollToActivePane(-1);
 			return true;
 		}
 		if (matchesKey(data, "down")) {
-			this.applyScroll(1);
+			this.applyScrollToActivePane(1);
 			return true;
 		}
 		if (matchesKey(data, "pageUp")) {
-			this.applyScroll(-(this.getAvailableBodyLines() - 2));
+			this.applyScrollToActivePane(-5);
 			return true;
 		}
 		if (matchesKey(data, "pageDown")) {
-			this.applyScroll(this.getAvailableBodyLines() - 2);
+			this.applyScrollToActivePane(5);
 			return true;
 		}
 		return false;
@@ -616,7 +652,9 @@ export class MissionControlComponent {
 				this.modelViewState = result.nextViewState;
 				if (result.action.kind === "close") {
 					this.currentSubView = null;
-					this.scrollOffset = 0;
+					this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 				} else if (result.action.kind === "select_model") {
 					const updated = applyModelChangeToConfig(this.config, result.action.roleIndex, result.action.model);
 					saveConfig(this.deps.basePath, updated);
@@ -634,7 +672,9 @@ export class MissionControlComponent {
 				const action = handleValidationViewKey(data);
 				if (action.kind === "close") {
 					this.currentSubView = null;
-					this.scrollOffset = 0;
+					this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 					this.tui.requestRender();
 				}
 				return;
@@ -643,7 +683,9 @@ export class MissionControlComponent {
 				const action = handleProgressLogKey(data);
 				if (action.kind === "close") {
 					this.currentSubView = null;
-					this.scrollOffset = 0;
+					this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 					this.tui.requestRender();
 				}
 				return;
@@ -652,7 +694,9 @@ export class MissionControlComponent {
 				const action = handlePlanHistoryKey(data);
 				if (action.kind === "close") {
 					this.currentSubView = null;
-					this.scrollOffset = 0;
+					this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 					this.tui.requestRender();
 				}
 				return;
@@ -696,11 +740,15 @@ export class MissionControlComponent {
 						);
 					}
 					this.currentSubView = null;
-					this.scrollOffset = 0;
+					this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 					this.done();
 				} else if (action.kind === "close") {
 					this.currentSubView = null;
-					this.scrollOffset = 0;
+					this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 					this.done();
 				}
 				this.tui.requestRender();
@@ -761,23 +809,31 @@ export class MissionControlComponent {
 			case "open_model_view":
 				this.modelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 				this.currentSubView = { kind: "model" };
-				this.scrollOffset = 0;
+				this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 				this.tui.requestRender();
 				return;
 			case "open_validation_view":
 				this.currentSubView = { kind: "validation" };
-				this.scrollOffset = 0;
+				this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 				this.tui.requestRender();
 				return;
 			case "open_logs_view":
 				this.currentSubView = { kind: "logs" };
-				this.scrollOffset = 0;
+				this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 				this.tui.requestRender();
 				return;
 			case "open_history_view":
 				this.planHistory = readHistory(this.deps.basePath);
 				this.currentSubView = { kind: "history" };
-				this.scrollOffset = 0;
+				this.leftScrollOffset = 0;
+				this.rightTopScrollOffset = 0;
+				this.rightBottomScrollOffset = 0;
 				this.tui.requestRender();
 				return;
 		}
@@ -1027,49 +1083,194 @@ export class MissionControlComponent {
 		return `${statusDot}  ${bar}  ${count}${suffix}`;
 	}
 
-	private renderMainOverlay(state: MissionState, plan: MissionPlan | null, width: number): string[] {
-		const contentWidth = width - 4;
-		const colWidth = Math.floor(contentWidth / 2);
-		const rightColWidth = contentWidth - colWidth;
+	private buildFeaturePanelLines(
+		state: MissionState,
+		plan: MissionPlan,
+		contentWidth: number,
+	): string[] {
+		const feature = findCurrentFeature(state, plan);
+		const milestone = findCurrentMilestone(state, plan);
+		const mf = this.style?.mutedFn ?? ((t: string) => t);
+		const tf = this.style?.textFn ?? ((t: string) => t);
+		const bf = this.style?.boldFn ?? ((t: string) => t);
+		const wf = this.style?.warningFn ?? ((t: string) => t);
+		const lines: string[] = [];
 
-		const statusLine = this.renderStatusBar(state, plan, contentWidth);
-
-		const leftContent = plan
-			? renderFeaturePanelContent(state, plan, colWidth, this.style)
-			: [section("Current Feature", colWidth, this.style), "(no plan loaded)"];
-
-		const rightOutline = plan
-			? renderOutlinePanelContent(plan, rightColWidth, this.style)
-			: [section("Mission Outline", rightColWidth, this.style), "(no plan loaded)"];
-		const rightLog = renderLogPanelContent(state, rightColWidth, this.style);
-		const rightContent = [...rightOutline, "", ...rightLog];
-
-		const maxRows = Math.max(leftContent.length, rightContent.length);
-		const allBodyLines: string[] = [statusLine, ""];
-
-		for (let i = 0; i < maxRows; i++) {
-			const rawLeft = leftContent[i] ?? "";
-			const leftTrunc = truncateToWidth(rawLeft, colWidth);
-			const leftPad = colWidth - visibleWidth(leftTrunc);
-			const left = leftPad > 0 ? leftTrunc + " ".repeat(leftPad) : leftTrunc;
-			const right = truncateToWidth(rightContent[i] ?? "", rightColWidth);
-			allBodyLines.push(`${left}${right}`);
+		if (!feature) {
+			if (state.status === "executing" || state.status === "validating") {
+				const nextPending = plan.milestones.flatMap((m) => m.features).find((f) => f.status === "pending");
+				if (nextPending) {
+					lines.push(mf("Waiting to start:"));
+					lines.push(bf(tf(nextPending.name)));
+					if (milestone) lines.push(`${mf("Milestone:")} ${tf(milestone.name)}`);
+				} else {
+					lines.push(mf("All features dispatched"));
+				}
+			} else {
+				lines.push(mf("No Active Feature"));
+			}
+			return lines;
 		}
 
-		const availableBodyLines = this.getAvailableBodyLines();
-		this.lastBodyHeight = allBodyLines.length;
+		lines.push(bf(tf(feature.name)));
 
-		const maxScroll = Math.max(0, allBodyLines.length - availableBodyLines);
-		this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxScroll));
+		if (milestone) {
+			lines.push(`${mf("Milestone:")} ${tf(milestone.name)}`);
+		}
 
-		const visibleLines = allBodyLines.slice(this.scrollOffset, this.scrollOffset + availableBodyLines);
+		const workerModel = plan.modelAssignment.worker;
+		if (workerModel) {
+			lines.push(`${mf("Worker:")} ${tf(workerModel)}`);
+		}
 
-		const hasOverflow = allBodyLines.length > availableBodyLines;
-		const scrollHint = hasOverflow
-			? `[${this.scrollOffset + 1}-${Math.min(this.scrollOffset + availableBodyLines, allBodyLines.length)} of ${allBodyLines.length}] Scroll: arrows/mouse  `
-			: "";
-		const footer = `${scrollHint}P: Pause  S: Skip  D: Done  R: Redirect  M: Models  V: Validate  L: Logs  H: History  Esc: Close`;
-		return frame("Mission Control", visibleLines, width, footer, this.style);
+		const attemptCount = feature.attempts.length;
+		const maxRetries = 3;
+		lines.push(`${mf("Attempt:")} ${tf(`${attemptCount + 1}/${maxRetries}`)}`);
+
+		if (feature.acceptanceCriteria.length > 0) {
+			lines.push(section("Acceptance Criteria", contentWidth, this.style));
+			for (const criterion of feature.acceptanceCriteria) {
+				lines.push(`\u2022 ${tf(criterion)}`);
+			}
+		}
+
+		const warnings = buildWarnings(state);
+		if (warnings.length > 0) {
+			lines.push(section("Warnings", contentWidth, this.style));
+			for (const warning of warnings) {
+				lines.push(`\u2022 ${wf(warning)}`);
+			}
+		}
+
+		return lines;
+	}
+
+	private buildOutlineLines(plan: MissionPlan, contentWidth: number): string[] {
+		const lines: string[] = [];
+		const tf = this.style?.textFn ?? ((t: string) => t);
+
+		for (const milestone of plan.milestones) {
+			lines.push(tf(milestone.name));
+			for (const feature of milestone.features) {
+				const icon = styledFeatureIcon(feature.status, this.style);
+				const fixMarker = feature.fixOrigin ? ` ${ICON_FIX}` : "";
+				const prefix = `  ${icon} `;
+				const prefixWidth = visibleWidth(prefix);
+				const availableWidth = contentWidth - prefixWidth;
+				const rawName = `${feature.name}${fixMarker}`;
+				const wrappedRaw = wrapText(rawName, availableWidth);
+				lines.push(`${prefix}${styledFeatureName(wrappedRaw[0]!, feature.status, this.style)}`);
+				for (let i = 1; i < wrappedRaw.length; i++) {
+					lines.push(" ".repeat(prefixWidth) + styledFeatureName(wrappedRaw[i]!, feature.status, this.style));
+				}
+			}
+		}
+
+		return lines;
+	}
+
+	private buildLogLines(state: MissionState, contentWidth: number): string[] {
+		const mf = this.style?.mutedFn ?? ((t: string) => t);
+		const tf = this.style?.textFn ?? ((t: string) => t);
+
+		if (state.progressLog.length === 0) {
+			return [mf("(no events yet)")];
+		}
+
+		const events = [...state.progressLog].sort(
+			(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+		);
+
+		const lines: string[] = [];
+		for (const event of events) {
+			const time = formatRelativeTime(event.timestamp);
+			const icon = styledProgressEventIcon(event.type, this.style);
+			const prefix = `${mf(time.padEnd(4))} ${icon} `;
+			const prefixWidth = visibleWidth(prefix);
+			const availableWidth = contentWidth - prefixWidth;
+			const wrappedRaw = wrapText(event.detail, availableWidth);
+			lines.push(`${prefix}${tf(wrappedRaw[0]!)}`);
+			for (let i = 1; i < wrappedRaw.length; i++) {
+				lines.push(" ".repeat(prefixWidth) + tf(wrappedRaw[i]!));
+			}
+		}
+
+		return lines;
+	}
+
+	private renderMainOverlay(state: MissionState, plan: MissionPlan | null, width: number): string[] {
+		const termRows = this.tui.terminal.rows;
+		const FOOTER_LINES = 3;
+		const TITLE_LINES = 1;
+		const STATUS_LINES = 1;
+		const SPACING = 1;
+		const MARGIN = 2;
+		const availablePanelRows = Math.max(5, termRows - FOOTER_LINES - TITLE_LINES - STATUS_LINES - SPACING - MARGIN);
+
+		const leftWidth = Math.floor(width * 0.4);
+		const rightWidth = width - leftWidth;
+
+		const statusLine = this.renderStatusBar(state, plan, width);
+
+		const leftContentWidth = leftWidth - 4;
+		const leftContent = plan
+			? this.buildFeaturePanelLines(state, plan, leftContentWidth)
+			: ["No Active Feature"];
+		const leftPanel = panel("Current Feature", leftContent, leftWidth, availablePanelRows, this.leftScrollOffset, this.style);
+
+		const rightTopHeight = Math.floor(availablePanelRows * 0.45);
+		const rightBottomHeight = availablePanelRows - rightTopHeight;
+
+		const rightContentWidth = rightWidth - 4;
+		const { done, total } = countFeatureStats(plan);
+		const featuresContent = plan
+			? this.buildOutlineLines(plan, rightContentWidth)
+			: ["(no plan loaded)"];
+		const featuresPanel = panelWithCount(
+			"Features",
+			`${done}/${total}`,
+			featuresContent,
+			rightWidth,
+			rightTopHeight,
+			this.rightTopScrollOffset,
+			this.style,
+		);
+
+		const logContent = this.buildLogLines(state, rightContentWidth);
+		const logCount = `${state.progressLog.length}`;
+		const logPanel = panelWithCount(
+			"Progress Log",
+			logCount,
+			logContent,
+			rightWidth,
+			rightBottomHeight,
+			this.rightBottomScrollOffset,
+			this.style,
+		);
+
+		const rightLines = [...featuresPanel, ...logPanel];
+		const maxRows = Math.max(leftPanel.length, rightLines.length);
+
+		const output: string[] = [];
+
+		output.push(titleBar("Mission Control", width, this.style));
+		output.push(statusLine);
+		output.push("");
+
+		for (let i = 0; i < maxRows; i++) {
+			const left = leftPanel[i] ?? "";
+			const right = rightLines[i] ?? "";
+			const leftPadded = truncateToWidth(left, leftWidth);
+			const leftPad = leftWidth - visibleWidth(leftPadded);
+			output.push(`${leftPadded}${leftPad > 0 ? " ".repeat(leftPad) : ""}${truncateToWidth(right, rightWidth)}`);
+		}
+
+		const shortcuts = "P: Pause  S: Skip  D: Done  R: Redirect  M: Models  V: Validate  L: Logs  H: History  Esc: Close";
+		for (const line of footerBar(shortcuts, width, this.style)) {
+			output.push(line);
+		}
+
+		return output;
 	}
 
 	invalidate(): void {}

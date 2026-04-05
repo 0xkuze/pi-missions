@@ -1,7 +1,7 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { Feature } from "../types.js";
 import type { FrameStyle } from "./frame.js";
-import { frame, section } from "./frame.js";
+import { footerBar, panel, section, titleBar } from "./frame.js";
 
 export type BlockedViewAction = { kind: "retry" } | { kind: "skip" } | { kind: "close" } | { kind: "noop" };
 
@@ -16,6 +16,7 @@ export function renderBlockedView(
 	lastFailure: LastFailureDetails | undefined,
 	width = 80,
 	style?: FrameStyle,
+	height = 40,
 ): string[] {
 	const contentWidth = width - 4;
 	const ef = style?.errorFn ?? ((t: string) => t);
@@ -48,7 +49,12 @@ export function renderBlockedView(
 	lines.push(mf("This feature has exhausted all retry attempts."));
 	lines.push(mf("You can retry with additional instructions, skip it, or return to chat."));
 
-	return frame("Mission Blocked", lines, width, "R: retry   S: skip   Esc: back to chat", style);
+	const panelHeight = Math.max(5, height - 7);
+	return [
+		titleBar("Mission Blocked", width, style),
+		...panel("Details", lines, width, panelHeight, 0, style),
+		...footerBar("R: retry   S: skip   Esc: back to chat", width, style),
+	];
 }
 
 export function handleBlockedViewKey(key: string): BlockedViewAction {

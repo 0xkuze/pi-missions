@@ -1,7 +1,7 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../types.js";
 import type { FrameStyle } from "./frame.js";
-import { frame, section } from "./frame.js";
+import { footerBar, panel, section, titleBar } from "./frame.js";
 
 export type DraftReviewAction = { kind: "approve" } | { kind: "close" } | { kind: "noop" };
 
@@ -34,7 +34,7 @@ function renderValidationCommands(plan: MissionPlan): string[] {
 	return lines;
 }
 
-export function renderDraftReview(plan: MissionPlan, width = 80, style?: FrameStyle): string[] {
+export function renderDraftReview(plan: MissionPlan, width = 80, style?: FrameStyle, height = 40): string[] {
 	const contentWidth = width - 4;
 	const tf = style?.textFn ?? ((t: string) => t);
 	const bf = style?.boldFn ?? ((t: string) => t);
@@ -79,7 +79,12 @@ export function renderDraftReview(plan: MissionPlan, width = 80, style?: FrameSt
 	const runs = estimatedRuns(plan);
 	lines.push(mf(`\u2022 Estimated runs: ${total} features + ${plan.milestones.length * 2} validations = ~${runs}`));
 
-	return frame("Draft Mission Plan", lines, width, "A: approve   Esc: back to chat (continue planning)", style);
+	const panelHeight = Math.max(5, height - 7);
+	return [
+		titleBar("Draft Mission Plan", width, style),
+		...panel("Plan Details", lines, width, panelHeight, 0, style),
+		...footerBar("A: approve   Esc: back to chat (continue planning)", width, style),
+	];
 }
 
 export function handleDraftReviewKey(key: string): DraftReviewAction {

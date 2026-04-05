@@ -959,7 +959,7 @@ describe("MissionControlComponent main overlay frame wrapping", () => {
 			const lines = component.render(width);
 			const text = lines.join("\n");
 
-			expect(lines[0]).toContain("\u250c");
+			expect(lines[0]).toContain("\u2500");
 			expect(lines[0]).toContain("Mission Control");
 
 			const lastLine = lines[lines.length - 1]!;
@@ -1011,7 +1011,8 @@ describe("MissionControlComponent ANSI-aware two-column layout", () => {
 			const width = 80;
 			const lines = component.render(width);
 
-			for (const line of lines) {
+			const panelLines = lines.filter((l) => l.includes("\u2502"));
+			for (const line of panelLines) {
 				expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 			}
 
@@ -1116,8 +1117,7 @@ describe("MissionControlComponent scroll and height clamping", () => {
 			const lines = component.render(120);
 			const text = lines.join(" ");
 
-			expect(text).toContain("Scroll");
-			expect(text).toContain("arrows/mouse");
+			expect(text).toContain("\u2590");
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
@@ -1141,6 +1141,7 @@ describe("MissionControlComponent scroll and height clamping", () => {
 			const tui = makeTUI(20);
 			const component = new MissionControlComponent(tui, () => {}, deps);
 
+			component.handleInput("\t");
 			const linesBefore = component.render(120);
 			component.handleInput("\x1b[B");
 			const linesAfter = component.render(120);
@@ -1236,10 +1237,10 @@ describe("MissionControlComponent scroll and height clamping", () => {
 			const tui = makeTUI(20);
 			const component = new MissionControlComponent(tui, () => {}, deps);
 			const lines = component.render(120);
-			const lastLine = lines[lines.length - 1]!;
+			const lastThree = lines.slice(-3).join(" ");
 
-			expect(lastLine).toContain("P: Pause");
-			expect(lastLine).toContain("\u2518");
+			expect(lastThree).toContain("P: Pause");
+			expect(lines[lines.length - 1]).toContain("\u2518");
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}

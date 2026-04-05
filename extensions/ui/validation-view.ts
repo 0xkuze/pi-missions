@@ -1,7 +1,7 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import { formatDuration } from "../utils.js";
 import type { FrameStyle } from "./frame.js";
-import { frame } from "./frame.js";
+import { footerBar, panel, titleBar } from "./frame.js";
 
 export type ValidationViewAction = { kind: "close" } | { kind: "noop" };
 
@@ -32,6 +32,7 @@ export function renderValidationView(
 	hasFailed: boolean,
 	width = 80,
 	style?: FrameStyle,
+	height = 40,
 ): string[] {
 	const af = style?.accentFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);
@@ -62,7 +63,12 @@ export function renderValidationView(
 		lines.push(ef("One or more checks failed. A fix feature will be generated to address the failures."));
 	}
 
-	return frame("Milestone Validation", lines, width, "Esc: close", style);
+	const panelHeight = Math.max(5, height - 7);
+	return [
+		titleBar("Milestone Validation", width, style),
+		...panel("Commands", lines, width, panelHeight, 0, style),
+		...footerBar("Esc: close", width, style),
+	];
 }
 
 export function handleValidationViewKey(key: string): ValidationViewAction {

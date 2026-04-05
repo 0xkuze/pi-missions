@@ -1,18 +1,24 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { PlanMutation } from "../types.js";
 import type { FrameStyle } from "./frame.js";
-import { frame } from "./frame.js";
+import { footerBar, panel, titleBar } from "./frame.js";
 import { formatRelativeTime } from "./mission-control.js";
 
 export type PlanHistoryAction = { kind: "close" } | { kind: "noop" };
 
-export function renderPlanHistoryView(mutations: PlanMutation[], width = 80, style?: FrameStyle): string[] {
+export function renderPlanHistoryView(mutations: PlanMutation[], width = 80, style?: FrameStyle, height = 40): string[] {
 	const mf = style?.mutedFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);
 	const af = style?.accentFn ?? ((t: string) => t);
 
+	const panelHeight = Math.max(5, height - 7);
+
 	if (mutations.length === 0) {
-		return frame("Plan History", [mf("(no history yet)")], width, "Esc: close", style);
+		return [
+			titleBar("Plan History", width, style),
+			...panel("Mutations", [mf("(no history yet)")], width, panelHeight, 0, style),
+			...footerBar("Esc: close", width, style),
+		];
 	}
 
 	const sorted = [...mutations].sort((a, b) => a.planVersion - b.planVersion);
@@ -26,7 +32,11 @@ export function renderPlanHistoryView(mutations: PlanMutation[], width = 80, sty
 		lines.push(`  ${tf(mutation.summary)}`);
 	}
 
-	return frame("Plan History", lines, width, "Esc: close", style);
+	return [
+		titleBar("Plan History", width, style),
+		...panel("Mutations", lines, width, panelHeight, 0, style),
+		...footerBar("Esc: close", width, style),
+	];
 }
 
 export function handlePlanHistoryKey(key: string): PlanHistoryAction {

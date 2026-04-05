@@ -1,7 +1,7 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { ProgressEvent } from "../types.js";
 import type { FrameStyle } from "./frame.js";
-import { frame } from "./frame.js";
+import { footerBar, panel, titleBar } from "./frame.js";
 import { formatRelativeTime } from "./mission-control.js";
 
 export type ProgressLogAction = { kind: "close" } | { kind: "noop" };
@@ -43,12 +43,18 @@ function styledProgressEventIcon(type: ProgressEvent["type"], style?: FrameStyle
 	}
 }
 
-export function renderProgressLog(progressLog: ProgressEvent[], width = 80, style?: FrameStyle): string[] {
+export function renderProgressLog(progressLog: ProgressEvent[], width = 80, style?: FrameStyle, height = 40): string[] {
 	const mf = style?.mutedFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);
 
+	const panelHeight = Math.max(5, height - 7);
+
 	if (progressLog.length === 0) {
-		return frame("Progress Log", [mf("(no events yet)")], width, "Esc: close", style);
+		return [
+			titleBar("Progress Log", width, style),
+			...panel("Events", [mf("(no events yet)")], width, panelHeight, 0, style),
+			...footerBar("Esc: close", width, style),
+		];
 	}
 
 	const events = [...progressLog].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -60,7 +66,11 @@ export function renderProgressLog(progressLog: ProgressEvent[], width = 80, styl
 		lines.push(`${mf(time.padEnd(4))} ${icon} ${tf(event.detail)}`);
 	}
 
-	return frame("Progress Log", lines, width, "Esc: close", style);
+	return [
+		titleBar("Progress Log", width, style),
+		...panel("Events", lines, width, panelHeight, 0, style),
+		...footerBar("Esc: close", width, style),
+	];
 }
 
 export function handleProgressLogKey(key: string): ProgressLogAction {

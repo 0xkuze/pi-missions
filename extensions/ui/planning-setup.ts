@@ -1,11 +1,11 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionState } from "../types.js";
 import type { FrameStyle } from "./frame.js";
-import { frame, section } from "./frame.js";
+import { footerBar, panel, section, titleBar } from "./frame.js";
 
 export type PlanningSetupAction = { kind: "close" } | { kind: "noop" };
 
-export function renderPlanningSetupView(state: MissionState, goal?: string, width = 80, style?: FrameStyle): string[] {
+export function renderPlanningSetupView(state: MissionState, goal?: string, width = 80, style?: FrameStyle, height = 40): string[] {
 	const contentWidth = width - 4;
 	const tf = style?.textFn ?? ((t: string) => t);
 	const bf = style?.boldFn ?? ((t: string) => t);
@@ -32,7 +32,12 @@ export function renderPlanningSetupView(state: MissionState, goal?: string, widt
 		}
 	}
 
-	return frame("Mission Setup", lines, width, "Esc: close", style);
+	const panelHeight = Math.max(5, height - 7);
+	return [
+		titleBar("Mission Setup", width, style),
+		...panel("Setup", lines, width, panelHeight, 0, style),
+		...footerBar("Esc: close", width, style),
+	];
 }
 
 function extractContextBullets(state: MissionState): string[] {
