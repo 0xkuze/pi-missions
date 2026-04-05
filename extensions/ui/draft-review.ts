@@ -36,16 +36,19 @@ function renderValidationCommands(plan: MissionPlan): string[] {
 
 export function renderDraftReview(plan: MissionPlan, width = 80, style?: FrameStyle): string[] {
 	const contentWidth = width - 4;
+	const tf = style?.textFn ?? ((t: string) => t);
+	const bf = style?.boldFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
-	lines.push(`Mission: ${plan.description}`);
+	lines.push(bf(tf(`Mission: ${plan.description}`)));
 	lines.push("");
 
 	for (const milestone of plan.milestones) {
 		const count = milestone.features.length;
 		lines.push(section(`${milestone.name} (${count} feature${count !== 1 ? "s" : ""})`, contentWidth, style));
 		for (const feature of milestone.features) {
-			lines.push(`• ${feature.name}: ${feature.description}`);
+			lines.push(`\u2022 ${tf(feature.name)}: ${mf(feature.description)}`);
 		}
 		lines.push("");
 	}
@@ -54,7 +57,7 @@ export function renderDraftReview(plan: MissionPlan, width = 80, style?: FrameSt
 	if (validationLines.length > 0) {
 		lines.push(section("Validation", contentWidth, style));
 		for (const vl of validationLines.slice(1)) {
-			lines.push(vl.trimStart());
+			lines.push(mf(vl.trimStart()));
 		}
 		lines.push("");
 	}
@@ -63,13 +66,18 @@ export function renderDraftReview(plan: MissionPlan, width = 80, style?: FrameSt
 	if (modelLines.length > 0) {
 		lines.push(section("Models", contentWidth, style));
 		for (const ml of modelLines.slice(1)) {
-			lines.push(ml.trimStart());
+			const parts = ml.trimStart().split(": ");
+			if (parts.length === 2) {
+				lines.push(`${mf(`${parts[0]}:`)} ${tf(parts[1])}`);
+			} else {
+				lines.push(ml.trimStart());
+			}
 		}
 	}
 
 	const total = countTotalFeatures(plan);
 	const runs = estimatedRuns(plan);
-	lines.push(`• Estimated runs: ${total} features + ${plan.milestones.length * 2} validations = ~${runs}`);
+	lines.push(mf(`\u2022 Estimated runs: ${total} features + ${plan.milestones.length * 2} validations = ~${runs}`));
 
 	return frame("Draft Mission Plan", lines, width, "A: approve   Esc: back to chat (continue planning)", style);
 }

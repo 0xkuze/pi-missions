@@ -6,6 +6,23 @@ import { frame, section } from "./frame.js";
 
 export type StatusOverlayAction = { kind: "close" } | { kind: "noop" };
 
+function styledStatusName(status: string, style?: FrameStyle): string {
+	switch (status) {
+		case "executing":
+			return (style?.successFn ?? ((t: string) => t))(status);
+		case "paused":
+			return (style?.warningFn ?? ((t: string) => t))(status);
+		case "validating":
+			return (style?.accentFn ?? ((t: string) => t))(status);
+		case "completed":
+			return (style?.successFn ?? ((t: string) => t))(status);
+		case "failed":
+			return (style?.errorFn ?? ((t: string) => t))(status);
+		default:
+			return (style?.mutedFn ?? ((t: string) => t))(status);
+	}
+}
+
 export function renderStatusOverlay(
 	state: MissionState,
 	plan: MissionPlan | null,
@@ -13,37 +30,39 @@ export function renderStatusOverlay(
 	style?: FrameStyle,
 ): string[] {
 	const contentWidth = width - 4;
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const tf = style?.textFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
-	lines.push(`State: ${state.status}`);
+	lines.push(`${mf("State:")} ${styledStatusName(state.status, style)}`);
 
 	const durationMs = Date.now() - new Date(state.startedAt).getTime();
-	lines.push(`Duration: ${formatDuration(durationMs)}`);
+	lines.push(`${mf("Duration:")} ${tf(formatDuration(durationMs))}`);
 
 	if (state.currentMilestoneId && plan) {
 		const milestone = plan.milestones.find((m) => m.id === state.currentMilestoneId);
 		if (milestone) {
-			lines.push(`Milestone: ${milestone.name}`);
+			lines.push(`${mf("Milestone:")} ${tf(milestone.name)}`);
 		}
 	}
 
 	if (state.currentFeatureId && plan) {
 		const feature = plan.milestones.flatMap((m) => m.features).find((f) => f.id === state.currentFeatureId);
 		if (feature) {
-			lines.push(`Feature: ${feature.name}`);
+			lines.push(`${mf("Feature:")} ${tf(feature.name)}`);
 		}
 	}
 
 	lines.push("");
 	lines.push(section("Progress", contentWidth, style));
-	lines.push(`Completed: ${state.totalFeaturesCompleted}`);
-	lines.push(`Failed:    ${state.totalFeaturesFailed}`);
-	lines.push(`Skipped:   ${state.totalFeaturesSkipped}`);
-	lines.push(`Fix tasks: ${state.totalFixFeaturesCreated}`);
+	lines.push(`${mf("Completed:")} ${tf(`${state.totalFeaturesCompleted}`)}`);
+	lines.push(`${mf("Failed:")}    ${tf(`${state.totalFeaturesFailed}`)}`);
+	lines.push(`${mf("Skipped:")}   ${tf(`${state.totalFeaturesSkipped}`)}`);
+	lines.push(`${mf("Fix tasks:")} ${tf(`${state.totalFixFeaturesCreated}`)}`);
 
 	if (state.status === "paused" && state.resumeTargetState) {
 		lines.push("");
-		lines.push(`Paused (will resume to: ${state.resumeTargetState})`);
+		lines.push(mf(`Paused (will resume to: ${state.resumeTargetState})`));
 	}
 
 	return frame("Mission Status", lines, width, "Esc: close", style);

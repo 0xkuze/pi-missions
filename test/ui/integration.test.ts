@@ -517,7 +517,7 @@ describe("integration: mission control overlay navigation", () => {
 			const plan = makePlan();
 			const state = makeState("planning");
 			const currentFeatureLines = renderCurrentFeaturePanel(state, plan);
-			expect(currentFeatureLines.join(" ")).toContain("(no feature active)");
+			expect(currentFeatureLines.join(" ")).toContain("No Active Feature");
 		});
 	});
 
@@ -843,12 +843,12 @@ describe("integration: mission control state polling", () => {
 		const state = makeState("executing", { progressLog: events });
 		const lines = renderProgressLog(state);
 		const text = lines.join("\n");
-		// Events should appear in chronological order
+		// Events should appear in reverse chronological order (newest first)
 		const idx1 = text.indexOf("Feature f1 started");
 		const idx2 = text.indexOf("Feature f1 completed");
 		const idx3 = text.indexOf("Feature f2 started");
-		expect(idx1).toBeLessThan(idx2);
-		expect(idx2).toBeLessThan(idx3);
+		expect(idx3).toBeLessThan(idx2);
+		expect(idx2).toBeLessThan(idx1);
 	});
 
 	it("mission outline updates to reflect latest feature statuses", () => {
@@ -867,7 +867,7 @@ describe("integration: mission control state polling", () => {
 		const text = lines.join("\n");
 		expect(text).toContain("\u2713"); // ✓ for done features
 		expect(text).toContain("\u25cf"); // ● for active feature
-		expect(text).toContain("\u25cb"); // ○ for pending feature
+		expect(text).toContain("\u00b7"); // · for pending feature
 	});
 
 	it("current feature panel updates with latest state", () => {

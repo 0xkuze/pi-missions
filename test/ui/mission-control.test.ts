@@ -271,11 +271,11 @@ describe("renderMissionOutline (VAL-UI-004)", () => {
 		expect(text).toContain("●");
 	});
 
-	it("shows ○ for pending features", () => {
+	it("shows · for pending features", () => {
 		const plan = makePlan([makeMilestone("m1", [makeFeature("f1", "pending", "refresh-tokens")])]);
 		const lines = renderMissionOutline(plan);
 		const text = lines.join(" ");
-		expect(text).toContain("○");
+		expect(text).toContain("\u00b7");
 	});
 
 	it("shows ✗ for failed features", () => {
@@ -300,7 +300,7 @@ describe("renderMissionOutline (VAL-UI-004)", () => {
 		const milestoneLine = lines.find((l) => l.includes("Milestone m1"));
 		expect(milestoneLine).toBeDefined();
 		const milestoneIdx = milestoneLine!.indexOf("Milestone m1");
-		const featureIdx = featureLine!.indexOf("\u25cb");
+		const featureIdx = featureLine!.indexOf("\u00b7");
 		expect(featureIdx).toBeGreaterThan(milestoneIdx);
 	});
 
@@ -317,7 +317,7 @@ describe("renderMissionOutline (VAL-UI-004)", () => {
 });
 
 describe("renderProgressLog (VAL-UI-005)", () => {
-	it("shows events in chronological order (oldest first)", () => {
+	it("shows events in reverse chronological order (newest first)", () => {
 		const events: ProgressEvent[] = [
 			makeEvent("feature_start", "feature 1 started", 300_000),
 			makeEvent("feature_complete", "feature 1 done", 120_000),
@@ -329,8 +329,8 @@ describe("renderProgressLog (VAL-UI-005)", () => {
 		const idx1 = text.indexOf("feature 1 started");
 		const idx2 = text.indexOf("feature 1 done");
 		const idx3 = text.indexOf("feature 2 started");
-		expect(idx1).toBeLessThan(idx2);
-		expect(idx2).toBeLessThan(idx3);
+		expect(idx3).toBeLessThan(idx2);
+		expect(idx2).toBeLessThan(idx1);
 	});
 
 	it("includes relative timestamps", () => {
@@ -970,7 +970,7 @@ describe("MissionControlComponent main overlay frame wrapping", () => {
 			expect(text).toContain("S: Skip");
 
 			expect(text).toContain("Current Feature");
-			expect(text).toContain("Mission Outline");
+			expect(text).toContain("Features");
 			expect(text).toContain("Progress Log");
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });

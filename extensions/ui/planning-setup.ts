@@ -7,25 +7,28 @@ export type PlanningSetupAction = { kind: "close" } | { kind: "noop" };
 
 export function renderPlanningSetupView(state: MissionState, goal?: string, width = 80, style?: FrameStyle): string[] {
 	const contentWidth = width - 4;
+	const tf = style?.textFn ?? ((t: string) => t);
+	const bf = style?.boldFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
 	if (goal) {
-		lines.push(`Goal: ${goal}`);
+		lines.push(bf(tf(`Goal: ${goal}`)));
 		lines.push("");
 	}
 
-	lines.push("Orchestrator is analyzing the codebase and gathering");
-	lines.push("constraints before drafting a plan.");
+	lines.push(mf("Orchestrator is analyzing the codebase and gathering"));
+	lines.push(mf("constraints before drafting a plan."));
 	lines.push("");
-	lines.push("The orchestrator will ask you questions in the chat.");
-	lines.push("Answer them to help refine the plan.");
+	lines.push(mf("The orchestrator will ask you questions in the chat."));
+	lines.push(mf("Answer them to help refine the plan."));
 
 	const contextBullets = extractContextBullets(state);
 	if (contextBullets.length > 0) {
 		lines.push("");
 		lines.push(section("Context discovered", contentWidth, style));
 		for (const bullet of contextBullets) {
-			lines.push(`\u2022 ${bullet}`);
+			lines.push(`\u2022 ${tf(bullet)}`);
 		}
 	}
 

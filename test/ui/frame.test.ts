@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { visibleWidth } from "@mariozechner/pi-tui";
-import { frame, section } from "../../extensions/ui/frame.js";
+import { frame, section, sectionWithCount, styledFeatureIcon, styledFeatureName } from "../../extensions/ui/frame.js";
 
 describe("frame", () => {
 	it("produces correct border characters", () => {
@@ -94,13 +94,118 @@ describe("section", () => {
 		expect(line).toContain("\u2500");
 	});
 
-	it("starts with ── characters", () => {
+	it("starts with \u2500\u2500 characters", () => {
 		const line = section("Title", 40);
 		expect(line.startsWith("\u2500\u2500")).toBe(true);
 	});
 
-	it("has trailing ─ fill", () => {
+	it("has trailing \u2500 fill", () => {
 		const line = section("T", 40);
 		expect(line.endsWith("\u2500")).toBe(true);
+	});
+});
+
+describe("sectionWithCount", () => {
+	it("contains both title and count", () => {
+		const line = sectionWithCount("Features", "16/20", 40);
+		expect(line).toContain("Features");
+		expect(line).toContain("16/20");
+	});
+
+	it("starts with \u2500\u2500 characters", () => {
+		const line = sectionWithCount("Features", "5/10", 40);
+		expect(line.startsWith("\u2500\u2500")).toBe(true);
+	});
+
+	it("has \u2500 fill between title and count", () => {
+		const line = sectionWithCount("A", "1", 40);
+		expect(line).toContain("\u2500");
+	});
+
+	it("applies style functions when provided", () => {
+		const style = {
+			borderFn: (t: string) => `[B${t}B]`,
+			titleFn: (t: string) => `[T${t}T]`,
+			mutedFn: (t: string) => `[M${t}M]`,
+		};
+		const line = sectionWithCount("Feat", "3/5", 60, style);
+		expect(line).toContain("[TFeatT]");
+		expect(line).toContain("[M3/5M]");
+	});
+});
+
+describe("styledFeatureIcon", () => {
+	it("returns \u2713 for done status", () => {
+		expect(styledFeatureIcon("done")).toBe("\u2713");
+	});
+
+	it("returns \u25cf for active status", () => {
+		expect(styledFeatureIcon("active")).toBe("\u25cf");
+	});
+
+	it("returns \u00b7 for pending status", () => {
+		expect(styledFeatureIcon("pending")).toBe("\u00b7");
+	});
+
+	it("returns \u2717 for failed status", () => {
+		expect(styledFeatureIcon("failed")).toBe("\u2717");
+	});
+
+	it("returns \u2717 for blocked status", () => {
+		expect(styledFeatureIcon("blocked")).toBe("\u2717");
+	});
+
+	it("returns \u2013 for skipped status", () => {
+		expect(styledFeatureIcon("skipped")).toBe("\u2013");
+	});
+
+	it("returns \u00b7 for unknown status", () => {
+		expect(styledFeatureIcon("unknown")).toBe("\u00b7");
+	});
+
+	it("applies successFn for done status", () => {
+		const style = { successFn: (t: string) => `[S${t}S]` };
+		expect(styledFeatureIcon("done", style)).toBe("[S\u2713S]");
+	});
+
+	it("applies accentFn for active status", () => {
+		const style = { accentFn: (t: string) => `[A${t}A]` };
+		expect(styledFeatureIcon("active", style)).toBe("[A\u25cfA]");
+	});
+
+	it("applies errorFn for failed status", () => {
+		const style = { errorFn: (t: string) => `[E${t}E]` };
+		expect(styledFeatureIcon("failed", style)).toBe("[E\u2717E]");
+	});
+});
+
+describe("styledFeatureName", () => {
+	it("returns plain name when no style", () => {
+		expect(styledFeatureName("my-feature", "done")).toBe("my-feature");
+	});
+
+	it("applies mutedFn for done status", () => {
+		const style = { mutedFn: (t: string) => `[M${t}M]` };
+		expect(styledFeatureName("feat", "done", style)).toBe("[MfeatM]");
+	});
+
+	it("applies accentFn for active status", () => {
+		const style = { accentFn: (t: string) => `[A${t}A]` };
+		expect(styledFeatureName("feat", "active", style)).toBe("[AfeatA]");
+	});
+
+	it("applies errorFn for failed status", () => {
+		const style = { errorFn: (t: string) => `[E${t}E]` };
+		expect(styledFeatureName("feat", "failed", style)).toBe("[EfeatE]");
+	});
+
+	it("applies errorFn for blocked status", () => {
+		const style = { errorFn: (t: string) => `[E${t}E]` };
+		expect(styledFeatureName("feat", "blocked", style)).toBe("[EfeatE]");
+	});
+
+	it("applies textFn for pending status", () => {
+		const style = { textFn: (t: string) => `[T${t}T]` };
+		expect(styledFeatureName("feat", "pending", style)).toBe("[TfeatT]");
 	});
 });

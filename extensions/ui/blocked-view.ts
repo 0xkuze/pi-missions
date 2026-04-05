@@ -18,31 +18,35 @@ export function renderBlockedView(
 	style?: FrameStyle,
 ): string[] {
 	const contentWidth = width - 4;
+	const ef = style?.errorFn ?? ((t: string) => t);
+	const tf = style?.textFn ?? ((t: string) => t);
+	const bf = style?.boldFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
-	lines.push(`Blocked: ${feature.name}`);
+	lines.push(`${ef("Blocked:")} ${bf(tf(feature.name))}`);
 	lines.push("");
 
 	const attemptCount = feature.attempts.length;
-	lines.push(`Attempts: ${attemptCount}/${maxRetries} failed`);
+	lines.push(mf(`Attempts: ${attemptCount}/${maxRetries} failed`));
 	lines.push("");
 
 	if (lastFailure) {
 		lines.push(section("Last Failure", contentWidth, style));
 		if (lastFailure.errorMessage) {
-			lines.push(lastFailure.errorMessage);
+			lines.push(ef(lastFailure.errorMessage));
 		}
 		if (lastFailure.details) {
 			const detailLines = lastFailure.details.split("\n");
 			for (const line of detailLines) {
-				lines.push(line);
+				lines.push(ef(line));
 			}
 		}
 		lines.push("");
 	}
 
-	lines.push("This feature has exhausted all retry attempts.");
-	lines.push("You can retry with additional instructions, skip it, or return to chat.");
+	lines.push(mf("This feature has exhausted all retry attempts."));
+	lines.push(mf("You can retry with additional instructions, skip it, or return to chat."));
 
 	return frame("Mission Blocked", lines, width, "R: retry   S: skip   Esc: back to chat", style);
 }

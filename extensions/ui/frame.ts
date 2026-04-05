@@ -12,6 +12,12 @@ export interface FrameStyle {
 	borderFn?: (text: string) => string;
 	titleFn?: (text: string) => string;
 	accentFn?: (text: string) => string;
+	successFn?: (text: string) => string;
+	errorFn?: (text: string) => string;
+	warningFn?: (text: string) => string;
+	mutedFn?: (text: string) => string;
+	textFn?: (text: string) => string;
+	boldFn?: (text: string) => string;
 }
 
 // why: pi Theme uses branded union types for color parameters; we accept `any` at this boundary
@@ -25,6 +31,12 @@ export function themeFrameStyle(theme: {
 		borderFn: (t) => theme.fg("borderMuted", t),
 		titleFn: (t) => theme.bold(theme.fg("text", t)),
 		accentFn: (t) => theme.bold(theme.fg("accent", t)),
+		successFn: (t) => theme.fg("success", t),
+		errorFn: (t) => theme.fg("error", t),
+		warningFn: (t) => theme.fg("warning", t),
+		mutedFn: (t) => theme.fg("muted", t),
+		textFn: (t) => theme.fg("text", t),
+		boldFn: (t) => theme.bold(t),
 	};
 }
 
@@ -105,4 +117,47 @@ export function section(title: string, contentWidth: number, style?: FrameStyle)
 	const labelVW = visibleWidth(label);
 	const fill = Math.max(0, contentWidth - 2 - labelVW);
 	return `${b(BOX_H + BOX_H)}${label}${b(BOX_H.repeat(fill))}`;
+}
+
+export function sectionWithCount(title: string, count: string, contentWidth: number, style?: FrameStyle): string {
+	const b = style?.borderFn ?? ((t: string) => t);
+	const tf = style?.titleFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const label = ` ${tf(title)} `;
+	const countLabel = ` ${mf(count)} `;
+	const labelVW = visibleWidth(label);
+	const countVW = visibleWidth(countLabel);
+	const fill = Math.max(0, contentWidth - 2 - labelVW - countVW);
+	return `${b(BOX_H + BOX_H)}${label}${b(BOX_H.repeat(fill))}${countLabel}`;
+}
+
+const IDENTITY_FN = (t: string) => t;
+
+export function styledFeatureIcon(status: string, style?: FrameStyle): string {
+	const icons: Record<string, { icon: string; fn?: (t: string) => string }> = {
+		done: { icon: "\u2713", fn: style?.successFn },
+		active: { icon: "\u25cf", fn: style?.accentFn },
+		pending: { icon: "\u00b7", fn: style?.mutedFn },
+		failed: { icon: "\u2717", fn: style?.errorFn },
+		blocked: { icon: "\u2717", fn: style?.errorFn },
+		skipped: { icon: "\u2013", fn: style?.mutedFn },
+	};
+	const entry = icons[status] ?? { icon: "\u00b7", fn: style?.mutedFn };
+	const styled = entry.fn ? entry.fn(entry.icon) : entry.icon;
+	return styled;
+}
+
+export function styledFeatureName(name: string, status: string, style?: FrameStyle): string {
+	if (!style) return name;
+	switch (status) {
+		case "done":
+			return (style.mutedFn ?? IDENTITY_FN)(name);
+		case "active":
+			return (style.accentFn ?? IDENTITY_FN)(name);
+		case "failed":
+		case "blocked":
+			return (style.errorFn ?? IDENTITY_FN)(name);
+		default:
+			return (style.textFn ?? IDENTITY_FN)(name);
+	}
 }

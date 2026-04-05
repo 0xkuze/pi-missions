@@ -8,7 +8,7 @@ import { nowISO } from "../utils.js";
 import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
 import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
 import type { FrameStyle } from "./frame.js";
-import { frame, section, themeFrameStyle } from "./frame.js";
+import { frame, section, sectionWithCount, styledFeatureIcon, styledFeatureName, themeFrameStyle } from "./frame.js";
 import { handlePlanHistoryKey, renderPlanHistoryView } from "./plan-history.js";
 import { handlePlanningSetupKey, renderPlanningSetupView } from "./planning-setup.js";
 import { handleProgressLogKey, renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
@@ -21,12 +21,11 @@ import {
 } from "./report-view.js";
 import { type CommandDisplayEntry, handleValidationViewKey, renderValidationView } from "./validation-view.js";
 
-const ICON_DONE = "\u2713";
-const ICON_ACTIVE = "\u25cf";
-const ICON_PENDING = "\u25cb";
-const ICON_FAILED = "\u2717";
-const ICON_SKIPPED = "\u2013";
 const ICON_FIX = "\u27a1";
+
+const PROGRESS_BAR_DONE = "\u2588";
+const PROGRESS_BAR_PENDING = "\u2591";
+const MAX_LOG_ENTRIES = 13;
 
 export function formatRelativeTime(timestamp: string): string {
 	const ms = Date.now() - new Date(timestamp).getTime();
@@ -36,24 +35,6 @@ export function formatRelativeTime(timestamp: string): string {
 	if (hours > 0) return `${hours}h`;
 	if (minutes > 0) return `${minutes}m`;
 	return `${seconds}s`;
-}
-
-function featureStatusIcon(feature: Feature): string {
-	switch (feature.status) {
-		case "done":
-			return ICON_DONE;
-		case "active":
-			return ICON_ACTIVE;
-		case "pending":
-			return ICON_PENDING;
-		case "failed":
-		case "blocked":
-			return ICON_FAILED;
-		case "skipped":
-			return ICON_SKIPPED;
-		default:
-			return ICON_PENDING;
-	}
 }
 
 function findCurrentFeature(state: MissionState, plan: MissionPlan): Feature | undefined {
@@ -88,31 +69,35 @@ export function renderCurrentFeaturePanel(
 	const contentWidth = width - 4;
 	const feature = findCurrentFeature(state, plan);
 	const milestone = findCurrentMilestone(state, plan);
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const tf = style?.textFn ?? ((t: string) => t);
+	const bf = style?.boldFn ?? ((t: string) => t);
+	const wf = style?.warningFn ?? ((t: string) => t);
 
 	if (!feature) {
-		return frame("Current Feature", ["(no feature active)"], width, undefined, style);
+		return frame("Current Feature", [mf("No Active Feature")], width, undefined, style);
 	}
 
 	const lines: string[] = [];
-	lines.push(feature.name);
+	lines.push(bf(tf(feature.name)));
 
 	if (milestone) {
-		lines.push(`Milestone: ${milestone.name}`);
+		lines.push(`${mf("Milestone:")} ${tf(milestone.name)}`);
 	}
 
 	const workerModel = plan.modelAssignment.worker;
 	if (workerModel) {
-		lines.push(`Worker: ${workerModel}`);
+		lines.push(`${mf("Worker:")} ${tf(workerModel)}`);
 	}
 
 	const attemptCount = feature.attempts.length;
 	const maxRetries = 3;
-	lines.push(`Attempt: ${attemptCount + 1}/${maxRetries}`);
+	lines.push(`${mf("Attempt:")} ${tf(`${attemptCount + 1}/${maxRetries}`)}`);
 
 	if (feature.acceptanceCriteria.length > 0) {
 		lines.push(section("Acceptance Criteria", contentWidth, style));
 		for (const criterion of feature.acceptanceCriteria) {
-			lines.push(`\u2022 ${criterion}`);
+			lines.push(`\u2022 ${tf(criterion)}`);
 		}
 	}
 
@@ -120,7 +105,7 @@ export function renderCurrentFeaturePanel(
 	if (warnings.length > 0) {
 		lines.push(section("Warnings", contentWidth, style));
 		for (const warning of warnings) {
-			lines.push(`\u2022 ${warning}`);
+			lines.push(`\u2022 ${wf(warning)}`);
 		}
 	}
 
@@ -129,14 +114,16 @@ export function renderCurrentFeaturePanel(
 
 export function renderMissionOutline(plan: MissionPlan, width = 40, style?: FrameStyle): string[] {
 	const lines: string[] = [];
+	const tf = style?.textFn ?? ((t: string) => t);
 
 	for (const milestone of plan.milestones) {
-		lines.push(milestone.name);
+		lines.push(tf(milestone.name));
 
 		for (const feature of milestone.features) {
-			const icon = featureStatusIcon(feature);
+			const icon = styledFeatureIcon(feature.status, style);
+			const name = styledFeatureName(feature.name, feature.status, style);
 			const fixMarker = feature.fixOrigin ? ` ${ICON_FIX}` : "";
-			lines.push(`  ${icon} ${feature.name}${fixMarker}`);
+			lines.push(`  ${icon} ${name}${fixMarker}`);
 		}
 	}
 
@@ -151,34 +138,38 @@ function renderFeaturePanelContent(
 ): string[] {
 	const feature = findCurrentFeature(state, plan);
 	const milestone = findCurrentMilestone(state, plan);
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const tf = style?.textFn ?? ((t: string) => t);
+	const bf = style?.boldFn ?? ((t: string) => t);
+	const wf = style?.warningFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
 	lines.push(section("Current Feature", contentWidth, style));
 
 	if (!feature) {
-		lines.push("(no feature active)");
+		lines.push(mf("No Active Feature"));
 		return lines;
 	}
 
-	lines.push(feature.name);
+	lines.push(bf(tf(feature.name)));
 
 	if (milestone) {
-		lines.push(`Milestone: ${milestone.name}`);
+		lines.push(`${mf("Milestone:")} ${tf(milestone.name)}`);
 	}
 
 	const workerModel = plan.modelAssignment.worker;
 	if (workerModel) {
-		lines.push(`Worker: ${workerModel}`);
+		lines.push(`${mf("Worker:")} ${tf(workerModel)}`);
 	}
 
 	const attemptCount = feature.attempts.length;
 	const maxRetries = 3;
-	lines.push(`Attempt: ${attemptCount + 1}/${maxRetries}`);
+	lines.push(`${mf("Attempt:")} ${tf(`${attemptCount + 1}/${maxRetries}`)}`);
 
 	if (feature.acceptanceCriteria.length > 0) {
 		lines.push(section("Acceptance Criteria", contentWidth, style));
 		for (const criterion of feature.acceptanceCriteria) {
-			lines.push(`\u2022 ${criterion}`);
+			lines.push(`\u2022 ${tf(criterion)}`);
 		}
 	}
 
@@ -186,88 +177,113 @@ function renderFeaturePanelContent(
 	if (warnings.length > 0) {
 		lines.push(section("Warnings", contentWidth, style));
 		for (const warning of warnings) {
-			lines.push(`\u2022 ${warning}`);
+			lines.push(`\u2022 ${wf(warning)}`);
 		}
 	}
 
 	return lines;
+}
+
+function countFeatureStats(plan: MissionPlan): { done: number; total: number } {
+	let done = 0;
+	let total = 0;
+	for (const milestone of plan.milestones) {
+		for (const feature of milestone.features) {
+			total++;
+			if (feature.status === "done" || feature.status === "skipped") done++;
+		}
+	}
+	return { done, total };
 }
 
 function renderOutlinePanelContent(plan: MissionPlan, contentWidth: number, style?: FrameStyle): string[] {
 	const lines: string[] = [];
+	const { done, total } = countFeatureStats(plan);
+	const tf = style?.textFn ?? ((t: string) => t);
 
-	lines.push(section("Mission Outline", contentWidth, style));
+	lines.push(sectionWithCount("Features", `${done}/${total}`, contentWidth, style));
 
 	for (const milestone of plan.milestones) {
-		lines.push(milestone.name);
+		lines.push(tf(milestone.name));
 		for (const feature of milestone.features) {
-			const icon = featureStatusIcon(feature);
+			const icon = styledFeatureIcon(feature.status, style);
+			const name = styledFeatureName(feature.name, feature.status, style);
 			const fixMarker = feature.fixOrigin ? ` ${ICON_FIX}` : "";
-			lines.push(`  ${icon} ${feature.name}${fixMarker}`);
+			lines.push(`  ${icon} ${name}${fixMarker}`);
 		}
 	}
 
 	return lines;
 }
 
-function renderLogPanelContent(state: MissionState, contentWidth: number, style?: FrameStyle): string[] {
-	const lines: string[] = [];
-
-	lines.push(section("Progress Log", contentWidth, style));
-
-	if (state.progressLog.length === 0) {
-		lines.push("(no events yet)");
-		return lines;
-	}
-
-	const events = [...state.progressLog].sort(
-		(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
-	);
-
-	for (const event of events) {
-		const time = formatRelativeTime(event.timestamp);
-		const icon = progressEventIcon(event.type);
-		lines.push(`${time.padEnd(4)} ${icon} ${event.detail}`);
-	}
-
-	return lines;
-}
-
-function progressEventIcon(type: ProgressEvent["type"]): string {
+function styledProgressEventIcon(type: ProgressEvent["type"], style?: FrameStyle): string {
 	switch (type) {
 		case "feature_complete":
 		case "milestone_complete":
 		case "validation_pass":
 		case "mission_complete":
-			return ICON_DONE;
+			return (style?.successFn ?? ((t: string) => t))("\u2713");
 		case "feature_failed":
 		case "validation_fail":
 		case "mission_failed":
-			return ICON_FAILED;
+			return (style?.errorFn ?? ((t: string) => t))("\u2717");
 		case "feature_start":
 		case "worker_spawn":
-			return ICON_ACTIVE;
+			return (style?.accentFn ?? ((t: string) => t))("\u25cf");
 		case "feature_skipped":
-			return ICON_SKIPPED;
+			return (style?.mutedFn ?? ((t: string) => t))("\u2013");
 		default:
-			return "\u00b7";
+			return (style?.mutedFn ?? ((t: string) => t))("\u00b7");
 	}
 }
 
-export function renderProgressLog(state: MissionState, width = 40, style?: FrameStyle): string[] {
+function renderLogPanelContent(state: MissionState, contentWidth: number, style?: FrameStyle): string[] {
+	const lines: string[] = [];
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const tf = style?.textFn ?? ((t: string) => t);
+
 	if (state.progressLog.length === 0) {
-		return frame("Progress Log", ["(no events yet)"], width, undefined, style);
+		lines.push(sectionWithCount("Progress Log", "0", contentWidth, style));
+		lines.push(mf("(no events yet)"));
+		return lines;
 	}
 
 	const events = [...state.progressLog].sort(
-		(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+		(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+	);
+
+	const totalCount = events.length;
+	const displayed = events.slice(0, MAX_LOG_ENTRIES);
+	const pageLabel = totalCount <= MAX_LOG_ENTRIES ? `${totalCount}` : `1-${displayed.length} of ${totalCount}`;
+
+	lines.push(sectionWithCount("Progress Log", pageLabel, contentWidth, style));
+
+	for (const event of displayed) {
+		const time = formatRelativeTime(event.timestamp);
+		const icon = styledProgressEventIcon(event.type, style);
+		lines.push(`${mf(time.padEnd(4))} ${icon} ${tf(event.detail)}`);
+	}
+
+	return lines;
+}
+
+export function renderProgressLog(state: MissionState, width = 40, style?: FrameStyle): string[] {
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const tf = style?.textFn ?? ((t: string) => t);
+
+	if (state.progressLog.length === 0) {
+		return frame("Progress Log", [mf("(no events yet)")], width, undefined, style);
+	}
+
+	const events = [...state.progressLog].sort(
+		(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
 	);
 	const lines: string[] = [];
 
 	for (const event of events) {
 		const time = formatRelativeTime(event.timestamp);
-		const icon = progressEventIcon(event.type);
-		lines.push(`${time.padEnd(4)} ${icon} ${event.detail}`);
+		const icon = styledProgressEventIcon(event.type, style);
+		lines.push(`${mf(time.padEnd(4))} ${icon} ${tf(event.detail)}`);
 	}
 
 	return frame("Progress Log", lines, width, undefined, style);
@@ -777,7 +793,14 @@ export class MissionControlComponent {
 		const plan = this.plan;
 
 		if (!state) {
-			return [" No active mission.", " Press Esc to close."];
+			const mf = this.style?.mutedFn ?? ((t: string) => t);
+			const emptyLines = [
+				"No active mission.",
+				"",
+				mf("Start a new mission by telling the orchestrator your goal."),
+				mf("The LLM will analyze your codebase and draft a plan."),
+			];
+			return frame("Mission Control", emptyLines, width, "Esc: Close", this.style);
 		}
 
 		const activeView = this.resolveActiveView();
@@ -837,10 +860,55 @@ export class MissionControlComponent {
 		}
 	}
 
+	private renderStatusBar(state: MissionState, plan: MissionPlan | null, contentWidth: number): string {
+		const sf = this.style?.successFn ?? ((t: string) => t);
+		const wf = this.style?.warningFn ?? ((t: string) => t);
+		const af = this.style?.accentFn ?? ((t: string) => t);
+		const ef = this.style?.errorFn ?? ((t: string) => t);
+		const mf = this.style?.mutedFn ?? ((t: string) => t);
+		const tf = this.style?.textFn ?? ((t: string) => t);
+
+		const statusLabel = state.status.toUpperCase();
+		let statusDot: string;
+		switch (state.status) {
+			case "executing":
+				statusDot = `${sf("\u25cf")} ${sf(statusLabel)}`;
+				break;
+			case "paused":
+				statusDot = `${wf("\u25cf")} ${wf(statusLabel)}`;
+				break;
+			case "validating":
+				statusDot = `${af("\u25cf")} ${af(statusLabel)}`;
+				break;
+			case "completed":
+				statusDot = `${sf("\u25cf")} ${sf(statusLabel)}`;
+				break;
+			case "failed":
+				statusDot = `${ef("\u25cf")} ${ef(statusLabel)}`;
+				break;
+			default:
+				statusDot = `${mf("\u25cf")} ${mf(statusLabel)}`;
+				break;
+		}
+
+		if (!plan) return statusDot;
+
+		const { done, total } = countFeatureStats(plan);
+		const barWidth = Math.min(20, Math.max(5, contentWidth - 30));
+		const filledWidth = total === 0 ? barWidth : Math.round((done / total) * barWidth);
+		const emptyWidth = barWidth - filledWidth;
+		const bar = sf(PROGRESS_BAR_DONE.repeat(filledWidth)) + mf(PROGRESS_BAR_PENDING.repeat(emptyWidth));
+		const count = tf(`${done}/${total}`);
+
+		return `${statusDot}  ${bar}  ${count}`;
+	}
+
 	private renderMainOverlay(state: MissionState, plan: MissionPlan | null, width: number): string[] {
 		const contentWidth = width - 4;
 		const colWidth = Math.floor(contentWidth / 2);
 		const rightColWidth = contentWidth - colWidth;
+
+		const statusLine = this.renderStatusBar(state, plan, contentWidth);
 
 		const leftContent = plan
 			? renderFeaturePanelContent(state, plan, colWidth, this.style)
@@ -853,7 +921,7 @@ export class MissionControlComponent {
 		const rightContent = [...rightOutline, "", ...rightLog];
 
 		const maxRows = Math.max(leftContent.length, rightContent.length);
-		const bodyLines: string[] = [];
+		const bodyLines: string[] = [statusLine, ""];
 
 		for (let i = 0; i < maxRows; i++) {
 			const rawLeft = leftContent[i] ?? "";

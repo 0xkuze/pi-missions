@@ -1,61 +1,41 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../types.js";
 import type { FrameStyle } from "./frame.js";
-import { frame } from "./frame.js";
+import { frame, styledFeatureIcon, styledFeatureName } from "./frame.js";
 
 export type PlanOverlayAction = { kind: "close" } | { kind: "noop" };
 
-const ICON_DONE = "\u2713";
-const ICON_ACTIVE = "\u25cf";
-const ICON_PENDING = "\u25cb";
-const ICON_FAILED = "\u2717";
-const ICON_SKIPPED = "\u2013";
 const ICON_FIX = "\u27a1";
 
-function featureIcon(status: string): string {
+function styledMilestoneIcon(status: string, style?: FrameStyle): string {
 	switch (status) {
 		case "done":
-			return ICON_DONE;
+			return (style?.successFn ?? ((t: string) => t))("\u2713");
 		case "active":
-			return ICON_ACTIVE;
+			return (style?.accentFn ?? ((t: string) => t))("\u25cf");
 		case "pending":
-			return ICON_PENDING;
+			return (style?.mutedFn ?? ((t: string) => t))("\u00b7");
 		case "failed":
-		case "blocked":
-			return ICON_FAILED;
-		case "skipped":
-			return ICON_SKIPPED;
+			return (style?.errorFn ?? ((t: string) => t))("\u2717");
 		default:
-			return ICON_PENDING;
-	}
-}
-
-function milestoneIcon(status: string): string {
-	switch (status) {
-		case "done":
-			return ICON_DONE;
-		case "active":
-			return ICON_ACTIVE;
-		case "pending":
-			return ICON_PENDING;
-		case "failed":
-			return ICON_FAILED;
-		default:
-			return ICON_PENDING;
+			return (style?.mutedFn ?? ((t: string) => t))("\u00b7");
 	}
 }
 
 export function renderPlanOverlay(plan: MissionPlan, width = 80, style?: FrameStyle): string[] {
-	const lines: string[] = [`${plan.description}`, ""];
+	const tf = style?.textFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const lines: string[] = [tf(plan.description), ""];
 
 	for (const milestone of plan.milestones) {
-		const mIcon = milestoneIcon(milestone.status);
-		lines.push(`${mIcon} ${milestone.name} [${milestone.status}]`);
+		const mIcon = styledMilestoneIcon(milestone.status, style);
+		lines.push(`${mIcon} ${tf(milestone.name)} ${mf(`[${milestone.status}]`)}`);
 
 		for (const feature of milestone.features) {
-			const fIcon = featureIcon(feature.status);
+			const fIcon = styledFeatureIcon(feature.status, style);
+			const fName = styledFeatureName(feature.name, feature.status, style);
 			const fixMark = feature.fixOrigin ? ` ${ICON_FIX}` : "";
-			lines.push(`    ${fIcon} ${feature.name}${fixMark} [${feature.status}]`);
+			lines.push(`    ${fIcon} ${fName}${fixMark} ${mf(`[${feature.status}]`)}`);
 		}
 		lines.push("");
 	}

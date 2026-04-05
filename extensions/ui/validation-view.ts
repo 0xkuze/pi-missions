@@ -13,16 +13,16 @@ export interface CommandDisplayEntry {
 	durationMs?: number;
 }
 
-function commandStatusIcon(status: CommandStatus): string {
+function styledCommandStatusIcon(status: CommandStatus, style?: FrameStyle): string {
 	switch (status) {
 		case "passed":
-			return "\u2713";
+			return (style?.successFn ?? ((t: string) => t))("\u2713");
 		case "failed":
-			return "\u2717";
+			return (style?.errorFn ?? ((t: string) => t))("\u2717");
 		case "running":
-			return "\u25cf";
+			return (style?.accentFn ?? ((t: string) => t))("\u25cf");
 		case "pending":
-			return "\u25cb";
+			return (style?.mutedFn ?? ((t: string) => t))("\u25cb");
 	}
 }
 
@@ -33,29 +33,33 @@ export function renderValidationView(
 	width = 80,
 	style?: FrameStyle,
 ): string[] {
+	const af = style?.accentFn ?? ((t: string) => t);
+	const tf = style?.textFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const ef = style?.errorFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
-	lines.push(`Validating: ${milestoneName}`);
+	lines.push(`${af("Validating:")} ${tf(milestoneName)}`);
 	lines.push("");
 
 	if (commands.length === 0) {
-		lines.push("(no validation commands)");
+		lines.push(mf("(no validation commands)"));
 	} else {
 		for (const cmd of commands) {
-			const icon = commandStatusIcon(cmd.status);
+			const icon = styledCommandStatusIcon(cmd.status, style);
 			const duration =
 				cmd.status === "passed" || cmd.status === "failed"
 					? cmd.durationMs !== undefined
-						? ` (${formatDuration(cmd.durationMs)})`
+						? ` ${mf(`(${formatDuration(cmd.durationMs)})`)}`
 						: ""
 					: "";
-			lines.push(`${icon} ${cmd.label}${duration}`);
+			lines.push(`${icon} ${tf(cmd.label)}${duration}`);
 		}
 	}
 
 	if (hasFailed) {
 		lines.push("");
-		lines.push("One or more checks failed. A fix feature will be generated to address the failures.");
+		lines.push(ef("One or more checks failed. A fix feature will be generated to address the failures."));
 	}
 
 	return frame("Milestone Validation", lines, width, "Esc: close", style);

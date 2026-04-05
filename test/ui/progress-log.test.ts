@@ -41,7 +41,7 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 			expect(text).toMatch(/\d+[smh]/);
 		});
 
-		it("shows events oldest-to-newest (ascending timestamp order)", () => {
+		it("shows events newest-to-oldest (descending timestamp order)", () => {
 			const events: ProgressEvent[] = [
 				makeEvent("feature_start", "feature 1 started", 300_000),
 				makeEvent("feature_complete", "feature 1 done", 120_000),
@@ -52,8 +52,8 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 			const idx1 = text.indexOf("feature 1 started");
 			const idx2 = text.indexOf("feature 1 done");
 			const idx3 = text.indexOf("feature 2 started");
-			expect(idx1).toBeLessThan(idx2);
-			expect(idx2).toBeLessThan(idx3);
+			expect(idx3).toBeLessThan(idx2);
+			expect(idx2).toBeLessThan(idx1);
 		});
 
 		it("shows status icons for completed events", () => {

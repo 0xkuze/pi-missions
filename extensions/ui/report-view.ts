@@ -40,34 +40,40 @@ export function renderReportView(
 	style?: FrameStyle,
 ): string[] {
 	const contentWidth = width - 4;
+	const tf = style?.textFn ?? ((t: string) => t);
+	const bf = style?.boldFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const sf = style?.successFn ?? ((t: string) => t);
+	const ef = style?.errorFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
-	lines.push(`Goal: ${plan.description}`);
+	lines.push(bf(tf(`Goal: ${plan.description}`)));
 	lines.push("");
 
 	const durationMs = computeDurationMs(state);
-	lines.push(`Duration: ${formatDuration(durationMs)}`);
+	lines.push(mf(`Duration: ${formatDuration(durationMs)}`));
 	lines.push("");
 
 	lines.push(section("Features", contentWidth, style));
-	lines.push(`Completed: ${state.totalFeaturesCompleted}`);
+	lines.push(`${mf("Completed:")} ${tf(`${state.totalFeaturesCompleted}`)}`);
 	if (state.totalFeaturesSkipped > 0) {
-		lines.push(`Skipped: ${state.totalFeaturesSkipped}`);
+		lines.push(`${mf("Skipped:")} ${tf(`${state.totalFeaturesSkipped}`)}`);
 	}
 	if (state.totalFixFeaturesCreated > 0) {
-		lines.push(`Fix features: ${state.totalFixFeaturesCreated}`);
+		lines.push(`${mf("Fix features:")} ${tf(`${state.totalFixFeaturesCreated}`)}`);
 	}
 	lines.push("");
 
 	const { passed, total } = countMilestonePassed(plan);
 	if (total > 0) {
-		lines.push(`Validation: ${passed}/${total} milestones passed`);
+		const validationFn = passed === total ? sf : ef;
+		lines.push(`${mf("Validation:")} ${validationFn(`${passed}/${total} milestones passed`)}`);
 		lines.push("");
 	}
 
 	const reportPath = join(basePath, "report.md");
 	lines.push(section("Output", contentWidth, style));
-	lines.push(`Report: ${reportPath}`);
+	lines.push(mf(`Report: ${reportPath}`));
 
 	return frame("Mission Complete", lines, width, "O: open report   Esc: close", style);
 }
@@ -90,22 +96,25 @@ export function renderModelView(
 	width = 80,
 	style?: FrameStyle,
 ): string[] {
+	const tf = style?.textFn ?? ((t: string) => t);
+	const af = style?.accentFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
 	if (viewState.selectedRoleIndex === null) {
-		lines.push("Select a role to change its model:");
+		lines.push(tf("Select a role to change its model:"));
 		lines.push("");
 		for (let i = 0; i < ROLE_NAMES.length; i++) {
 			const role = ROLE_NAMES[i];
 			const model = resolveRoleModel(role, config, plan);
-			lines.push(`${i + 1}. ${capitalize(role)}: ${model}`);
+			lines.push(`${tf(`${i + 1}.`)} ${tf(`${capitalize(role)}:`)} ${af(model)}`);
 		}
 	} else {
 		const role = ROLE_NAMES[viewState.selectedRoleIndex];
-		lines.push(`Changing model for: ${capitalize(role)}`);
+		lines.push(tf(`Changing model for: ${capitalize(role)}`));
 		lines.push("");
-		lines.push("Available models:");
-		lines.push("(select via number when models are listed)");
+		lines.push(tf("Available models:"));
+		lines.push(mf("(select via number when models are listed)"));
 	}
 
 	return frame("Model Assignment", lines, width, "Esc: back", style);
