@@ -1,11 +1,13 @@
 import type { TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import { savePlan, saveState } from "../state/manager.js";
+import { readHistory } from "../state/plan-history.js";
 import { transitionState } from "../state/transitions.js";
-import type { Feature, MissionConfig, MissionPlan, MissionState, ProgressEvent } from "../types.js";
+import type { Feature, MissionConfig, MissionPlan, MissionState, PlanMutation, ProgressEvent } from "../types.js";
 import { nowISO } from "../utils.js";
 import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
 import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
+import { handlePlanHistoryKey, renderPlanHistoryView } from "./plan-history.js";
 import { handlePlanningSetupKey, renderPlanningSetupView } from "./planning-setup.js";
 import { handleProgressLogKey, renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
 import {
@@ -177,7 +179,7 @@ export function renderProgressLog(state: MissionState): string[] {
 }
 
 export function renderKeyboardShortcuts(): string[] {
-	return ["P: Pause  S: Skip  D: Done  R: Redirect", "M: Models  V: Validate  L: Logs  Esc: Close"];
+	return ["P: Pause  S: Skip  D: Done  R: Redirect", "M: Models  V: Validate  L: Logs  H: History  Esc: Close"];
 }
 
 export type OverlayAction =
@@ -190,6 +192,7 @@ export type OverlayAction =
 	| { kind: "open_model_view" }
 	| { kind: "open_validation_view" }
 	| { kind: "open_logs_view" }
+	| { kind: "open_history_view" }
 	| { kind: "warn"; message: string }
 	| { kind: "noop" };
 
@@ -255,6 +258,13 @@ export function handleKeyboardAction(key: string, state: MissionState | null): O
 		return { kind: "open_logs_view" };
 	}
 
+	if (upper === "H") {
+		if (!state || !ACTIVE_STATUSES.has(state.status)) {
+			return { kind: "warn", message: "H: No active mission." };
+		}
+		return { kind: "open_history_view" };
+	}
+
 	return { kind: "noop" };
 }
 
@@ -264,6 +274,7 @@ export type SubView =
 	| { kind: "model" }
 	| { kind: "validation" }
 	| { kind: "logs" }
+	| { kind: "history" }
 	| { kind: "planning" }
 	| { kind: "draft_review" }
 	| { kind: "blocked"; featureId: string }
@@ -307,6 +318,7 @@ export class MissionControlComponent {
 	private state: MissionState | null;
 	private plan: MissionPlan | null;
 	private config: MissionConfig;
+	private planHistory: PlanMutation[];
 	private currentSubView: SubView | null = null;
 	private modelViewState: ModelViewState = { selectedRoleIndex: null };
 	private pollInterval: ReturnType<typeof setInterval> | null = null;
@@ -319,6 +331,7 @@ export class MissionControlComponent {
 		this.state = deps.loadState(deps.basePath);
 		this.plan = deps.loadPlan(deps.basePath);
 		this.config = deps.loadConfig(deps.basePath);
+		this.planHistory = readHistory(deps.basePath);
 		this.pollInterval = setInterval(() => this.poll(), POLL_INTERVAL_MS);
 	}
 
@@ -331,14 +344,17 @@ export class MissionControlComponent {
 		} catch {
 			nextConfig = this.config;
 		}
+		const nextHistory = readHistory(this.deps.basePath);
 		if (
 			JSON.stringify(nextState) !== JSON.stringify(this.state) ||
 			JSON.stringify(nextPlan) !== JSON.stringify(this.plan) ||
-			JSON.stringify(nextConfig) !== JSON.stringify(this.config)
+			JSON.stringify(nextConfig) !== JSON.stringify(this.config) ||
+			nextHistory.length !== this.planHistory.length
 		) {
 			this.state = nextState;
 			this.plan = nextPlan;
 			this.config = nextConfig;
+			this.planHistory = nextHistory;
 			this.tui.requestRender();
 		}
 	}
@@ -374,6 +390,14 @@ export class MissionControlComponent {
 			}
 			case "logs": {
 				const action = handleProgressLogKey(data);
+				if (action.kind === "close") {
+					this.currentSubView = null;
+					this.tui.requestRender();
+				}
+				return;
+			}
+			case "history": {
+				const action = handlePlanHistoryKey(data);
 				if (action.kind === "close") {
 					this.currentSubView = null;
 					this.tui.requestRender();
@@ -463,6 +487,11 @@ export class MissionControlComponent {
 				return;
 			case "open_logs_view":
 				this.currentSubView = { kind: "logs" };
+				this.tui.requestRender();
+				return;
+			case "open_history_view":
+				this.planHistory = readHistory(this.deps.basePath);
+				this.currentSubView = { kind: "history" };
 				this.tui.requestRender();
 				return;
 		}
@@ -629,6 +658,8 @@ export class MissionControlComponent {
 			}
 			case "logs":
 				return renderProgressLogStandalone(state.progressLog);
+			case "history":
+				return renderPlanHistoryView(this.planHistory);
 			case "planning": {
 				const goal = plan?.description;
 				return renderPlanningSetupView(state, goal);
