@@ -2,10 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { registerCommands } from "./commands.js";
+import { captureGitSnapshot, isGitAvailable } from "./git.js";
 import { buildOrchestratorProtocol } from "./orchestrator/protocol.js";
 import { acquireLock } from "./state/lock.js";
 import { loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
+import { registerCommitChangesTool } from "./tools/commit-changes.js";
 import { registerCompleteMissionTool } from "./tools/complete.js";
+import { registerCreateFixTool } from "./tools/create-fix.js";
+import { registerRunValidationTool } from "./tools/run-validation.js";
 import { registerSpawnWorkerTool } from "./tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
@@ -288,23 +292,29 @@ export default function (pi: ExtensionAPI): void {
 	}
 
 	// session_start: load state from filesystem (authoritative), fall back to
-	// session entry cache when filesystem is absent, run crash recovery, update widget, acquire lock.
+	// session entry cache when filesystem is absent, capture git snapshot if needed,
+	// run crash recovery, update widget, acquire lock.
 	pi.on("session_start", (_event, ctx) => {
 		latestCtx = ctx;
 
 		const fsState = loadState(basePath);
 
 		if (fsState !== null) {
+			// Capture git snapshot if not yet present and git is available.
+			const stateWithSnapshot = captureSnapshotIfNeeded(fsState, projectDir);
 			// Filesystem is authoritative — run crash recovery then render.
 			const {
 				state: recoveredState,
 				plan: recoveredPlan,
 				recoveryContext,
-			} = reconcileStateOnStart(fsState, basePath);
+			} = reconcileStateOnStart(stateWithSnapshot, basePath);
 			if (recoveryContext) {
 				saveState(basePath, recoveredState);
 				if (recoveredPlan) savePlan(basePath, recoveredPlan);
 				pendingRecoveryContext = recoveryContext;
+			} else if (stateWithSnapshot !== fsState) {
+				// Snapshot was captured — persist the updated state.
+				saveState(basePath, recoveredState);
 			}
 			renderWidget(ctx.ui, recoveredState, recoveredPlan ?? undefined);
 			if (!TERMINAL_STATUSES.has(recoveredState.status)) {
@@ -325,10 +335,12 @@ export default function (pi: ExtensionAPI): void {
 		}
 
 		// Restore from cache: write back to filesystem so it becomes authoritative.
-		saveState(basePath, cached);
+		// Also capture snapshot for the restored state.
+		const cachedWithSnapshot = captureSnapshotIfNeeded(cached, projectDir);
+		saveState(basePath, cachedWithSnapshot);
 		const plan = loadPlan(basePath);
-		renderWidget(ctx.ui, cached, plan ?? undefined);
-		if (!TERMINAL_STATUSES.has(cached.status)) {
+		renderWidget(ctx.ui, cachedWithSnapshot, plan ?? undefined);
+		if (!TERMINAL_STATUSES.has(cachedWithSnapshot.status)) {
 			tryAcquireLock(basePath, ctx);
 		}
 	});
@@ -366,6 +378,9 @@ export default function (pi: ExtensionAPI): void {
 	registerSpawnWorkerTool(pi, { basePath, projectDir, updateWidget });
 	registerUpdateStateTool(pi, { basePath, updateWidget });
 	registerCompleteMissionTool(pi, { basePath, updateWidget });
+	registerRunValidationTool(pi, { basePath, projectDir, updateWidget });
+	registerCommitChangesTool(pi, { basePath, projectDir, updateWidget });
+	registerCreateFixTool(pi, { basePath, updateWidget });
 
 	// Register all slash commands.
 	registerCommands(pi, { basePath, updateWidget, clearWidget });
@@ -377,6 +392,17 @@ export default function (pi: ExtensionAPI): void {
 			// Phase 3: open Mission Control overlay via ctx.ui.custom({ overlay: true })
 		},
 	});
+}
+
+function captureSnapshotIfNeeded(state: MissionState, projectDir: string): MissionState {
+	if (state.gitSnapshot !== undefined) return state;
+	try {
+		if (!isGitAvailable(projectDir)) return state;
+		const snapshot = captureGitSnapshot(projectDir);
+		return { ...state, gitSnapshot: snapshot };
+	} catch {
+		return state;
+	}
 }
 
 function tryAcquireLock(basePath: string, ctx: ExtensionContext): void {
