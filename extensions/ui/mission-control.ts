@@ -1,5 +1,5 @@
 import type { TUI } from "@mariozechner/pi-tui";
-import { matchesKey } from "@mariozechner/pi-tui";
+import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { saveConfig, savePlan, saveState } from "../state/manager.js";
 import { appendMutation, readHistory } from "../state/plan-history.js";
 import { transitionState } from "../state/transitions.js";
