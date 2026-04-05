@@ -131,6 +131,32 @@ export function sectionWithCount(title: string, count: string, contentWidth: num
 	return `${b(BOX_H + BOX_H)}${label}${b(BOX_H.repeat(fill))}${countLabel}`;
 }
 
+export function wrapText(text: string, maxWidth: number): string[] {
+	if (maxWidth < 1) return [text];
+	const vw = visibleWidth(text);
+	if (vw <= maxWidth) return [text];
+
+	const words = text.split(" ");
+	const lines: string[] = [];
+	let currentLine = "";
+
+	for (const word of words) {
+		const testLine = currentLine ? `${currentLine} ${word}` : word;
+		if (visibleWidth(testLine) <= maxWidth) {
+			currentLine = testLine;
+		} else {
+			if (currentLine) lines.push(currentLine);
+			if (visibleWidth(word) > maxWidth) {
+				currentLine = truncateToWidth(word, maxWidth);
+			} else {
+				currentLine = word;
+			}
+		}
+	}
+	if (currentLine) lines.push(currentLine);
+	return lines.length > 0 ? lines : [""];
+}
+
 const IDENTITY_FN = (t: string) => t;
 
 export function styledFeatureIcon(status: string, style?: FrameStyle): string {

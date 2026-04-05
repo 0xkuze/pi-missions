@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { visibleWidth } from "@mariozechner/pi-tui";
-import { frame, section, sectionWithCount, styledFeatureIcon, styledFeatureName } from "../../extensions/ui/frame.js";
+import { frame, section, sectionWithCount, styledFeatureIcon, styledFeatureName, wrapText } from "../../extensions/ui/frame.js";
 
 describe("frame", () => {
 	it("produces correct border characters", () => {
@@ -207,5 +207,47 @@ describe("styledFeatureName", () => {
 	it("applies textFn for pending status", () => {
 		const style = { textFn: (t: string) => `[T${t}T]` };
 		expect(styledFeatureName("feat", "pending", style)).toBe("[TfeatT]");
+	});
+});
+
+describe("wrapText", () => {
+	it("returns single-element array for short text", () => {
+		const result = wrapText("hello", 20);
+		expect(result).toEqual(["hello"]);
+	});
+
+	it("wraps long text across multiple lines", () => {
+		const result = wrapText("hello world foo bar", 12);
+		expect(result.length).toBeGreaterThan(1);
+		for (const line of result) {
+			expect(visibleWidth(line)).toBeLessThanOrEqual(12);
+		}
+	});
+
+	it("truncates single word that exceeds maxWidth", () => {
+		const result = wrapText("superlongword", 5);
+		expect(result.length).toBe(1);
+		expect(visibleWidth(result[0])).toBeLessThanOrEqual(5);
+	});
+
+	it("returns text as-is when maxWidth < 1", () => {
+		const result = wrapText("hello", 0);
+		expect(result).toEqual(["hello"]);
+	});
+
+	it("handles empty string", () => {
+		const result = wrapText("", 10);
+		expect(result).toEqual([""]);
+	});
+
+	it("wraps at word boundaries", () => {
+		const result = wrapText("one two three four", 10);
+		expect(result[0]).toBe("one two");
+		expect(result[1]).toBe("three four");
+	});
+
+	it("handles exact fit without wrapping", () => {
+		const result = wrapText("hello", 5);
+		expect(result).toEqual(["hello"]);
 	});
 });

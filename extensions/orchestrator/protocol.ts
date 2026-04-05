@@ -59,7 +59,9 @@ START EXECUTION NOW:
 1. Call \`update_mission_state\` with action \`start_milestone\` for the first milestone.
 2. Call \`spawn_worker\` with the first feature's ID to begin execution.
 
-TOOLS AVAILABLE: spawn_worker, update_mission_state, run_validation, commit_changes, create_fix_feature, complete_mission`;
+TOOLS AVAILABLE: spawn_worker, update_mission_state, run_validation, commit_changes, create_fix_feature, complete_mission
+
+NOTE: If a worker fails, do not debug it yourself. Use create_fix_feature to create a fix and spawn a new worker.`;
 }
 
 function progressSummary(state: MissionState, plan: MissionPlan | undefined): string {
@@ -100,6 +102,18 @@ function gitWarnings(state: MissionState): string {
 	return `\n${warnings.join("\n")}`;
 }
 
+function workerFailureInstructions(): string {
+	return `WORKER FAILURE HANDLING:
+When spawn_worker reports a failure:
+1. Do NOT try to debug or fix the issue yourself. You are the orchestrator, not a worker.
+2. Call create_fix_feature to create a new feature that describes what needs to be fixed, including:
+   - The original feature name and its acceptance criteria
+   - The error details from the worker failure
+   - Any relevant context about what the worker accomplished before failing
+3. Call spawn_worker with the new fix feature ID to let a fresh worker handle it.
+4. If a worker fails on non-critical issues (commit errors, formatting), consider calling spawn_worker on the NEXT pending feature instead, as the work may already be done.`;
+}
+
 function executingProtocol(
 	state: MissionState,
 	plan: MissionPlan | undefined,
@@ -115,6 +129,8 @@ ${progress}${warnings}
 TOOLS: spawn_worker, update_mission_state, run_validation, commit_changes, create_fix_feature, complete_mission
 
 NEXT STEP: Call spawn_worker with the next pending feature ID. After all features in a milestone complete, call run_validation before proceeding.
+
+${workerFailureInstructions()}
 
 ${autonomyInstructions(autonomy)}`;
 }

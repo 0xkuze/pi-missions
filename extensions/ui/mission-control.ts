@@ -8,7 +8,15 @@ import { nowISO } from "../utils.js";
 import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
 import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
 import type { FrameStyle } from "./frame.js";
-import { frame, section, sectionWithCount, styledFeatureIcon, styledFeatureName, themeFrameStyle } from "./frame.js";
+import {
+	frame,
+	section,
+	sectionWithCount,
+	styledFeatureIcon,
+	styledFeatureName,
+	themeFrameStyle,
+	wrapText,
+} from "./frame.js";
 import { handlePlanHistoryKey, renderPlanHistoryView } from "./plan-history.js";
 import { handlePlanningSetupKey, renderPlanningSetupView } from "./planning-setup.js";
 import { handleProgressLogKey, renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
@@ -24,8 +32,13 @@ import { type CommandDisplayEntry, handleValidationViewKey, renderValidationView
 const ICON_FIX = "\u27a1";
 
 const PROGRESS_BAR_DONE = "\u2588";
+const PROGRESS_BAR_ACTIVE = "\u2593";
 const PROGRESS_BAR_PENDING = "\u2591";
 const MAX_LOG_ENTRIES = 13;
+
+function capitalize(s: string): string {
+	return s.charAt(0).toUpperCase() + s.slice(1);
+}
 
 export function formatRelativeTime(timestamp: string): string {
 	const ms = Date.now() - new Date(timestamp).getTime();
@@ -147,7 +160,18 @@ function renderFeaturePanelContent(
 	lines.push(section("Current Feature", contentWidth, style));
 
 	if (!feature) {
-		lines.push(mf("No Active Feature"));
+		if (state.status === "executing" || state.status === "validating") {
+			const nextPending = plan.milestones.flatMap((m) => m.features).find((f) => f.status === "pending");
+			if (nextPending) {
+				lines.push(mf("Waiting to start:"));
+				lines.push(bf(tf(nextPending.name)));
+				if (milestone) lines.push(`${mf("Milestone:")} ${tf(milestone.name)}`);
+			} else {
+				lines.push(mf("All features dispatched"));
+			}
+		} else {
+			lines.push(mf("No Active Feature"));
+		}
 		return lines;
 	}
 
@@ -207,9 +231,16 @@ function renderOutlinePanelContent(plan: MissionPlan, contentWidth: number, styl
 		lines.push(tf(milestone.name));
 		for (const feature of milestone.features) {
 			const icon = styledFeatureIcon(feature.status, style);
-			const name = styledFeatureName(feature.name, feature.status, style);
 			const fixMarker = feature.fixOrigin ? ` ${ICON_FIX}` : "";
-			lines.push(`  ${icon} ${name}${fixMarker}`);
+			const prefix = `  ${icon} `;
+			const prefixWidth = visibleWidth(prefix);
+			const availableWidth = contentWidth - prefixWidth;
+			const rawName = `${feature.name}${fixMarker}`;
+			const wrappedRaw = wrapText(rawName, availableWidth);
+			lines.push(`${prefix}${styledFeatureName(wrappedRaw[0], feature.status, style)}`);
+			for (let i = 1; i < wrappedRaw.length; i++) {
+				lines.push(" ".repeat(prefixWidth) + styledFeatureName(wrappedRaw[i], feature.status, style));
+			}
 		}
 	}
 
@@ -261,7 +292,14 @@ function renderLogPanelContent(state: MissionState, contentWidth: number, style?
 	for (const event of displayed) {
 		const time = formatRelativeTime(event.timestamp);
 		const icon = styledProgressEventIcon(event.type, style);
-		lines.push(`${mf(time.padEnd(4))} ${icon} ${tf(event.detail)}`);
+		const prefix = `${mf(time.padEnd(4))} ${icon} `;
+		const prefixWidth = visibleWidth(prefix);
+		const availableWidth = contentWidth - prefixWidth;
+		const wrappedRaw = wrapText(event.detail, availableWidth);
+		lines.push(`${prefix}${tf(wrappedRaw[0])}`);
+		for (let i = 1; i < wrappedRaw.length; i++) {
+			lines.push(" ".repeat(prefixWidth) + tf(wrappedRaw[i]));
+		}
 	}
 
 	return lines;
@@ -451,7 +489,7 @@ export class MissionControlComponent {
 	private config: MissionConfig;
 	private planHistory: PlanMutation[];
 	private currentSubView: SubView | null = null;
-	private modelViewState: ModelViewState = { selectedRoleIndex: null };
+	private modelViewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 	private pollInterval: ReturnType<typeof setInterval> | null = null;
 	private style: FrameStyle | undefined;
 
@@ -648,7 +686,7 @@ export class MissionControlComponent {
 				this.applyRedirect();
 				return;
 			case "open_model_view":
-				this.modelViewState = { selectedRoleIndex: null };
+				this.modelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 				this.currentSubView = { kind: "model" };
 				this.tui.requestRender();
 				return;
@@ -823,7 +861,14 @@ export class MissionControlComponent {
 					modelAssignment: {},
 					createdAt: "",
 				};
-				return renderModelView(this.config, effectivePlan, this.modelViewState, width, this.style);
+				return renderModelView(
+					this.config,
+					effectivePlan,
+					this.modelViewState,
+					width,
+					this.style,
+					this.deps.availableModels,
+				);
 			}
 			case "validation": {
 				const milestone = plan?.milestones.find((m) => m.id === state.currentMilestoneId);
@@ -868,39 +913,41 @@ export class MissionControlComponent {
 		const mf = this.style?.mutedFn ?? ((t: string) => t);
 		const tf = this.style?.textFn ?? ((t: string) => t);
 
-		const statusLabel = state.status.toUpperCase();
-		let statusDot: string;
-		switch (state.status) {
-			case "executing":
-				statusDot = `${sf("\u25cf")} ${sf(statusLabel)}`;
-				break;
-			case "paused":
-				statusDot = `${wf("\u25cf")} ${wf(statusLabel)}`;
-				break;
-			case "validating":
-				statusDot = `${af("\u25cf")} ${af(statusLabel)}`;
-				break;
-			case "completed":
-				statusDot = `${sf("\u25cf")} ${sf(statusLabel)}`;
-				break;
-			case "failed":
-				statusDot = `${ef("\u25cf")} ${ef(statusLabel)}`;
-				break;
-			default:
-				statusDot = `${mf("\u25cf")} ${mf(statusLabel)}`;
-				break;
-		}
+		const statusLabels: Record<string, { label: string; fn: (t: string) => string }> = {
+			executing: { label: "Running", fn: sf },
+			paused: { label: "Paused", fn: wf },
+			validating: { label: "Validating", fn: af },
+			completed: { label: "Completed", fn: sf },
+			failed: { label: "Failed", fn: ef },
+		};
+		const entry = statusLabels[state.status] ?? { label: capitalize(state.status), fn: mf };
+		const statusDot = `${entry.fn("\u25cf")} ${entry.fn(entry.label)}`;
 
 		if (!plan) return statusDot;
 
 		const { done, total } = countFeatureStats(plan);
+		const hasActive = !!state.currentFeatureId;
 		const barWidth = Math.min(20, Math.max(5, contentWidth - 30));
-		const filledWidth = total === 0 ? barWidth : Math.round((done / total) * barWidth);
-		const emptyWidth = barWidth - filledWidth;
-		const bar = sf(PROGRESS_BAR_DONE.repeat(filledWidth)) + mf(PROGRESS_BAR_PENDING.repeat(emptyWidth));
+		const doneWidth = total === 0 ? barWidth : Math.round((done / total) * barWidth);
+		const activeWidth = hasActive ? 1 : 0;
+		const pendingWidth = Math.max(0, barWidth - doneWidth - activeWidth);
+		const actualDoneWidth = barWidth - activeWidth - pendingWidth;
+		const bar =
+			sf(PROGRESS_BAR_DONE.repeat(actualDoneWidth)) +
+			(activeWidth > 0 ? af(PROGRESS_BAR_ACTIVE) : "") +
+			mf(PROGRESS_BAR_PENDING.repeat(pendingWidth));
 		const count = tf(`${done}/${total}`);
 
-		return `${statusDot}  ${bar}  ${count}`;
+		const milestone = plan.milestones.find((m) => m.id === state.currentMilestoneId);
+		const feature = state.currentFeatureId
+			? plan.milestones.flatMap((m) => m.features).find((f) => f.id === state.currentFeatureId)
+			: undefined;
+		const parts: string[] = [];
+		if (milestone) parts.push(`${mf("Milestone:")} ${tf(milestone.name)}`);
+		if (feature) parts.push(`${mf("Feature:")} ${tf(feature.name)}`);
+		const suffix = parts.length > 0 ? ` \u00b7 ${parts.join(" \u00b7 ")}` : "";
+
+		return `${statusDot}  ${bar}  ${count}${suffix}`;
 	}
 
 	private renderMainOverlay(state: MissionState, plan: MissionPlan | null, width: number): string[] {

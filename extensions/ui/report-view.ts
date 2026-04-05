@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { matchesKey } from "@mariozechner/pi-tui";
+import { fuzzyFilter, matchesKey } from "@mariozechner/pi-tui";
 import { resolveModel } from "../config.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
@@ -15,10 +15,19 @@ export type ModelViewAction =
 
 export interface ModelViewState {
 	selectedRoleIndex: number | null;
+	searchQuery: string;
+	highlightedIndex: number;
 }
 
 const ROLE_NAMES = ["orchestrator", "worker", "validator"] as const;
 type RoleName = (typeof ROLE_NAMES)[number];
+
+const MAX_VISIBLE_MODELS = 8;
+
+function filterModels(models: string[], query: string): string[] {
+	if (!query) return models;
+	return fuzzyFilter(models, query, (m) => m);
+}
 
 function computeDurationMs(state: MissionState): number {
 	const start = new Date(state.startedAt).getTime();
@@ -95,6 +104,7 @@ export function renderModelView(
 	viewState: ModelViewState,
 	width = 80,
 	style?: FrameStyle,
+	availableModels: string[] = [],
 ): string[] {
 	const tf = style?.textFn ?? ((t: string) => t);
 	const af = style?.accentFn ?? ((t: string) => t);
@@ -102,22 +112,48 @@ export function renderModelView(
 	const lines: string[] = [];
 
 	if (viewState.selectedRoleIndex === null) {
-		lines.push(tf("Select a role to change its model:"));
+		lines.push(tf("Model Assignment"));
 		lines.push("");
 		for (let i = 0; i < ROLE_NAMES.length; i++) {
 			const role = ROLE_NAMES[i];
 			const model = resolveRoleModel(role, config, plan);
-			lines.push(`${tf(`${i + 1}.`)} ${tf(`${capitalize(role)}:`)} ${af(model)}`);
+			const pointer = i === viewState.highlightedIndex ? af(">") : " ";
+			const label =
+				i === viewState.highlightedIndex
+					? af(`${i + 1}. ${capitalize(role)}: ${model}`)
+					: tf(`${i + 1}. ${capitalize(role)}: ${model}`);
+			lines.push(`${pointer} ${label}`);
 		}
+		lines.push("");
+		lines.push(mf("Use arrow keys or 1-3 to select a role."));
 	} else {
 		const role = ROLE_NAMES[viewState.selectedRoleIndex];
-		lines.push(tf(`Changing model for: ${capitalize(role)}`));
+		lines.push(tf(`Select model for: ${capitalize(role)}`));
 		lines.push("");
-		lines.push(tf("Available models:"));
-		lines.push(mf("(select via number when models are listed)"));
+		const cursor = viewState.searchQuery ? viewState.searchQuery : "";
+		lines.push(`${mf("Search:")} ${tf(cursor)}${af("_")}`);
+		lines.push("");
+		const filtered = filterModels(availableModels, viewState.searchQuery);
+		const visible = filtered.slice(0, MAX_VISIBLE_MODELS);
+		for (let i = 0; i < visible.length; i++) {
+			const pointer = i === viewState.highlightedIndex ? af(">") : " ";
+			const label = i === viewState.highlightedIndex ? af(visible[i]) : tf(visible[i]);
+			lines.push(`${pointer} ${label}`);
+		}
+		const remaining = filtered.length - MAX_VISIBLE_MODELS;
+		if (remaining > 0) {
+			lines.push("");
+			lines.push(mf(`+${remaining} more`));
+		}
+		if (filtered.length === 0) {
+			lines.push(mf("No matching models"));
+		}
+		lines.push("");
+		lines.push(mf("Type to filter \u00b7 Enter: select \u00b7 Esc: back"));
 	}
 
-	return frame("Model Assignment", lines, width, "Esc: back", style);
+	const footer = viewState.selectedRoleIndex === null ? "Esc: close" : "Esc: back";
+	return frame("Model Assignment", lines, width, footer, style);
 }
 
 function capitalize(s: string): string {
@@ -134,46 +170,90 @@ export function handleModelViewKey(
 	viewState: ModelViewState,
 	availableModels: string[],
 ): ModelViewKeyResult {
-	if (viewState.selectedRoleIndex !== null) {
+	if (viewState.selectedRoleIndex === null) {
 		if (matchesKey(key, "escape")) {
+			return { action: { kind: "close" }, nextViewState: viewState };
+		}
+		if (matchesKey(key, "return")) {
 			return {
 				action: { kind: "noop" },
-				nextViewState: { selectedRoleIndex: null },
+				nextViewState: { selectedRoleIndex: viewState.highlightedIndex, searchQuery: "", highlightedIndex: 0 },
 			};
 		}
-
-		const digit = Number.parseInt(key, 10);
-		if (!Number.isNaN(digit) && digit >= 1 && digit <= availableModels.length) {
-			const model = availableModels[digit - 1];
+		if (matchesKey(key, "up") || matchesKey(key, "k")) {
 			return {
-				action: { kind: "select_model", roleIndex: viewState.selectedRoleIndex, model },
-				nextViewState: { selectedRoleIndex: null },
+				action: { kind: "noop" },
+				nextViewState: { ...viewState, highlightedIndex: Math.max(0, viewState.highlightedIndex - 1) },
 			};
 		}
-
-		return {
-			action: { kind: "noop" },
-			nextViewState: viewState,
-		};
+		if (matchesKey(key, "down") || matchesKey(key, "j")) {
+			return {
+				action: { kind: "noop" },
+				nextViewState: { ...viewState, highlightedIndex: Math.min(2, viewState.highlightedIndex + 1) },
+			};
+		}
+		const digit = Number.parseInt(key, 10);
+		if (digit >= 1 && digit <= 3) {
+			return {
+				action: { kind: "noop" },
+				nextViewState: { selectedRoleIndex: digit - 1, searchQuery: "", highlightedIndex: 0 },
+			};
+		}
+		return { action: { kind: "noop" }, nextViewState: viewState };
 	}
 
 	if (matchesKey(key, "escape")) {
 		return {
-			action: { kind: "close" },
-			nextViewState: viewState,
+			action: { kind: "noop" },
+			nextViewState: { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 },
 		};
 	}
 
-	const digit = Number.parseInt(key, 10);
-	if (!Number.isNaN(digit) && digit >= 1 && digit <= ROLE_NAMES.length) {
+	const filtered = filterModels(availableModels, viewState.searchQuery);
+
+	if (matchesKey(key, "return")) {
+		const selected = filtered[viewState.highlightedIndex];
+		if (selected) {
+			return {
+				action: { kind: "select_model", roleIndex: viewState.selectedRoleIndex, model: selected },
+				nextViewState: { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 },
+			};
+		}
+		return { action: { kind: "noop" }, nextViewState: viewState };
+	}
+
+	if (matchesKey(key, "up") || matchesKey(key, "k")) {
 		return {
 			action: { kind: "noop" },
-			nextViewState: { selectedRoleIndex: digit - 1 },
+			nextViewState: { ...viewState, highlightedIndex: Math.max(0, viewState.highlightedIndex - 1) },
+		};
+	}
+	if (matchesKey(key, "down") || matchesKey(key, "j")) {
+		const maxIdx = Math.min(filtered.length - 1, MAX_VISIBLE_MODELS - 1);
+		return {
+			action: { kind: "noop" },
+			nextViewState: {
+				...viewState,
+				highlightedIndex: Math.min(Math.max(0, maxIdx), viewState.highlightedIndex + 1),
+			},
 		};
 	}
 
-	return {
-		action: { kind: "noop" },
-		nextViewState: viewState,
-	};
+	if (matchesKey(key, "backspace")) {
+		const newQuery = viewState.searchQuery.slice(0, -1);
+		return {
+			action: { kind: "noop" },
+			nextViewState: { ...viewState, searchQuery: newQuery, highlightedIndex: 0 },
+		};
+	}
+
+	if (key.length === 1 && key >= " ") {
+		const newQuery = viewState.searchQuery + key;
+		return {
+			action: { kind: "noop" },
+			nextViewState: { ...viewState, searchQuery: newQuery, highlightedIndex: 0 },
+		};
+	}
+
+	return { action: { kind: "noop" }, nextViewState: viewState };
 }

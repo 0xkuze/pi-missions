@@ -204,6 +204,11 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
+
+		it("mentions worker failure policy", () => {
+			const result = buildOrchestratorProtocol(makeState({ status: "approved" }), makeProtocolPlan()) as string;
+			expect(result).toContain("create_fix_feature");
+		});
 	});
 
 	describe("executing state (VAL-PROTO-003)", () => {
@@ -284,6 +289,18 @@ describe("buildOrchestratorProtocol", () => {
 			const result = buildOrchestratorProtocol(stateWithFeature, undefined);
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
+		});
+
+		it("includes worker failure handling instructions", () => {
+			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result).toContain("WORKER FAILURE HANDLING");
+			expect(result).toContain("create_fix_feature");
+			expect(result.toLowerCase()).toContain("do not");
+		});
+
+		it("instructs orchestrator not to debug failures itself", () => {
+			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result).toContain("You are the orchestrator, not a worker");
 		});
 	});
 

@@ -261,7 +261,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 		it("shows all three roles", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
 			expect(text.toLowerCase()).toContain("orchestrator");
@@ -272,7 +272,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 		it("shows current orchestrator model when assigned", () => {
 			const config: MissionConfig = { models: { orchestrator: "claude-opus" } };
 			const plan = makePlan([]);
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
 			expect(text).toContain("claude-opus");
@@ -284,7 +284,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 				...makePlan([]),
 				modelAssignment: { worker: "gpt-4o" },
 			};
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
 			expect(text).toContain("gpt-4o");
@@ -293,7 +293,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 		it("shows unassigned placeholder when no model configured", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
 			expect(text).toMatch(/unassigned|\(none\)|\(current\)|default/i);
@@ -301,19 +301,28 @@ describe("renderModelView (VAL-UI-011)", () => {
 	});
 
 	describe("role selection state", () => {
-		it("shows selection indicator when role is selected", () => {
+		it("shows selection indicator for highlighted role", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
-			const viewState: ModelViewState = { selectedRoleIndex: 0 };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
-			expect(text).toMatch(/>|\*|\[|select/i);
+			expect(text).toContain(">");
+		});
+
+		it("shows search prompt when role is selected", () => {
+			const config: MissionConfig = {};
+			const plan = makePlan([]);
+			const viewState: ModelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
+			const lines = renderModelView(config, plan, viewState, 80, undefined, ["model-a"]);
+			const text = lines.join("\n");
+			expect(text).toMatch(/search/i);
 		});
 
 		it("shows all roles when none selected (role selection mode)", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
 			for (const role of roles) {
@@ -326,7 +335,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 		it("shows Esc hint", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
 			expect(text).toContain("Esc");
@@ -337,7 +346,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 		it("returns non-empty array", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan([]);
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			expect(lines).toBeArray();
 			expect(lines.length).toBeGreaterThan(0);
@@ -348,7 +357,7 @@ describe("renderModelView (VAL-UI-011)", () => {
 describe("handleModelViewKey (VAL-UI-011)", () => {
 	describe("Esc closes model view", () => {
 		it("returns close action for Esc", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("\x1B", viewState, []);
 			expect(result.action.kind).toBe("close");
 		});
@@ -356,28 +365,28 @@ describe("handleModelViewKey (VAL-UI-011)", () => {
 
 	describe("role selection (no role selected)", () => {
 		it("pressing 1 selects first role (index 0)", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("1", viewState, []);
 			expect(result.nextViewState.selectedRoleIndex).toBe(0);
 			expect(result.action.kind).toBe("noop");
 		});
 
 		it("pressing 2 selects second role (index 1)", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("2", viewState, []);
 			expect(result.nextViewState.selectedRoleIndex).toBe(1);
 			expect(result.action.kind).toBe("noop");
 		});
 
 		it("pressing 3 selects third role (index 2)", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("3", viewState, []);
 			expect(result.nextViewState.selectedRoleIndex).toBe(2);
 			expect(result.action.kind).toBe("noop");
 		});
 
 		it("pressing out-of-range number returns noop", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("9", viewState, []);
 			expect(result.nextViewState.selectedRoleIndex).toBeNull();
 			expect(result.action.kind).toBe("noop");
@@ -385,10 +394,10 @@ describe("handleModelViewKey (VAL-UI-011)", () => {
 	});
 
 	describe("model selection (role selected)", () => {
-		it("pressing 1 selects the first available model", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: 0 };
+		it("Enter selects the highlighted model", () => {
+			const viewState: ModelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
 			const models = ["claude-opus", "claude-sonnet"];
-			const result = handleModelViewKey("1", viewState, models);
+			const result = handleModelViewKey("\r", viewState, models);
 			expect(result.action.kind).toBe("select_model");
 			if (result.action.kind === "select_model") {
 				expect(result.action.roleIndex).toBe(0);
@@ -396,10 +405,10 @@ describe("handleModelViewKey (VAL-UI-011)", () => {
 			}
 		});
 
-		it("pressing 2 selects the second available model", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: 1 };
+		it("arrow down then Enter selects second model", () => {
+			const viewState: ModelViewState = { selectedRoleIndex: 1, searchQuery: "", highlightedIndex: 1 };
 			const models = ["model-a", "model-b", "model-c"];
-			const result = handleModelViewKey("2", viewState, models);
+			const result = handleModelViewKey("\r", viewState, models);
 			expect(result.action.kind).toBe("select_model");
 			if (result.action.kind === "select_model") {
 				expect(result.action.roleIndex).toBe(1);
@@ -407,31 +416,64 @@ describe("handleModelViewKey (VAL-UI-011)", () => {
 			}
 		});
 
-		it("pressing out-of-range number returns noop", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: 0 };
+		it("typing adds to search query", () => {
+			const viewState: ModelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
 			const models = ["model-a"];
-			const result = handleModelViewKey("5", viewState, models);
+			const result = handleModelViewKey("m", viewState, models);
 			expect(result.action.kind).toBe("noop");
+			expect(result.nextViewState.searchQuery).toBe("m");
+		});
+
+		it("backspace removes from search query", () => {
+			const viewState: ModelViewState = { selectedRoleIndex: 0, searchQuery: "cl", highlightedIndex: 0 };
+			const result = handleModelViewKey("\x7F", viewState, []);
+			expect(result.nextViewState.searchQuery).toBe("c");
 		});
 
 		it("after model selection view state resets selectedRoleIndex to null", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: 0 };
+			const viewState: ModelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
 			const models = ["claude-opus"];
-			const result = handleModelViewKey("1", viewState, models);
+			const result = handleModelViewKey("\r", viewState, models);
 			expect(result.nextViewState.selectedRoleIndex).toBeNull();
 		});
 
 		it("pressing Esc when role is selected goes back to role selection", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: 0 };
+			const viewState: ModelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("\x1B", viewState, []);
 			expect(result.nextViewState.selectedRoleIndex).toBeNull();
 			expect(result.action.kind).toBe("noop");
+		});
+
+		it("Enter on empty filtered list is noop", () => {
+			const viewState: ModelViewState = { selectedRoleIndex: 0, searchQuery: "zzz", highlightedIndex: 0 };
+			const result = handleModelViewKey("\r", viewState, ["model-a"]);
+			expect(result.action.kind).toBe("noop");
+		});
+	});
+
+	describe("arrow navigation in role selection", () => {
+		it("down arrow moves highlight down", () => {
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
+			const result = handleModelViewKey("\x1B[B", viewState, []);
+			expect(result.nextViewState.highlightedIndex).toBe(1);
+		});
+
+		it("up arrow does not go below 0", () => {
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
+			const result = handleModelViewKey("\x1B[A", viewState, []);
+			expect(result.nextViewState.highlightedIndex).toBe(0);
+		});
+
+		it("Enter on highlighted role opens model selection", () => {
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 1 };
+			const result = handleModelViewKey("\r", viewState, []);
+			expect(result.nextViewState.selectedRoleIndex).toBe(1);
 		});
 	});
 
 	describe("unknown keys", () => {
 		it("returns noop for letter keys when in role selection", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("a", viewState, []);
 			expect(result.action.kind).toBe("noop");
 		});

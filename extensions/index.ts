@@ -383,8 +383,19 @@ export default function (pi: ExtensionAPI): void {
 		return { systemPrompt: `${event.systemPrompt}\n\n${protocol}${suffix}` };
 	});
 
-	// session_compact: re-cache state from filesystem to keep session entries
-	// current after context compaction removes old entries.
+	pi.on("session_shutdown", (_event, _ctx) => {
+		const state = loadState(basePath);
+		if (!state) return;
+		const activeStatuses = new Set(["planning", "draft_review", "approved", "executing", "validating"]);
+		if (!activeStatuses.has(state.status)) return;
+		try {
+			const newState = transitionState(state, "paused");
+			saveState(basePath, newState);
+		} catch {
+			// why: best-effort pause — if transition fails (e.g. approved → paused not allowed), don't crash shutdown
+		}
+	});
+
 	pi.on("session_compact", (_event, _ctx) => {
 		const state = loadState(basePath);
 		if (state !== null) {
@@ -491,7 +502,7 @@ export default function (pi: ExtensionAPI): void {
 				getInput: (title: string, placeholder?: string) => ctx.ui.input(title, placeholder),
 				notify: (message: string, type?: "info" | "warning" | "error") => ctx.ui.notify(message, type),
 				updateWidget,
-				availableModels: [] as string[],
+				availableModels: ctx.modelRegistry.getAll().map((m) => m.id),
 				openFile: (_path: string) => {},
 				setModel: async (modelId: string) => {
 					const model = ctx.modelRegistry.getAll().find((m) => m.id === modelId);

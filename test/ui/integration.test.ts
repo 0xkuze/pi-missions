@@ -616,7 +616,7 @@ describe("integration: model switching view", () => {
 		it("shows all three roles", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan();
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n").toLowerCase();
 			expect(text).toContain("orchestrator");
@@ -627,7 +627,7 @@ describe("integration: model switching view", () => {
 		it("shows model assigned in plan.modelAssignment", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan({ modelAssignment: { worker: "claude-sonnet-4" } });
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
 			expect(text).toContain("claude-sonnet-4");
@@ -636,7 +636,7 @@ describe("integration: model switching view", () => {
 		it("config model overrides plan.modelAssignment", () => {
 			const config: MissionConfig = { models: { worker: "gpt-4o" } };
 			const plan = makePlan({ modelAssignment: { worker: "claude-sonnet-4" } });
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
 			expect(text).toContain("gpt-4o");
@@ -646,7 +646,7 @@ describe("integration: model switching view", () => {
 		it("shows default placeholder when no model configured", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan({ modelAssignment: {} });
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			const text = lines.join("\n");
 			expect(text).toMatch(/default|session|none|unassigned/i);
@@ -655,27 +655,27 @@ describe("integration: model switching view", () => {
 
 	describe("role selection and model assignment flow", () => {
 		it("pressing 1 enters orchestrator model selection", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("1", viewState, ["model-a", "model-b"]);
 			expect(result.nextViewState.selectedRoleIndex).toBe(0);
 		});
 
 		it("pressing 2 enters worker model selection", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("2", viewState, []);
 			expect(result.nextViewState.selectedRoleIndex).toBe(1);
 		});
 
 		it("pressing 3 enters validator model selection", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("3", viewState, []);
 			expect(result.nextViewState.selectedRoleIndex).toBe(2);
 		});
 
 		it("model selection returns select_model action with correct role and model", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: 1 };
+			const viewState: ModelViewState = { selectedRoleIndex: 1, searchQuery: "", highlightedIndex: 1 };
 			const models = ["claude-opus", "claude-sonnet-4", "gpt-4o"];
-			const result = handleModelViewKey("2", viewState, models);
+			const result = handleModelViewKey("\r", viewState, models);
 			expect(result.action.kind).toBe("select_model");
 			if (result.action.kind === "select_model") {
 				expect(result.action.roleIndex).toBe(1);
@@ -685,14 +685,14 @@ describe("integration: model switching view", () => {
 		});
 
 		it("Esc during model selection goes back to role selection", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: 0 };
+			const viewState: ModelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("\x1B", viewState, []);
 			expect(result.nextViewState.selectedRoleIndex).toBeNull();
 			expect(result.action.kind).toBe("noop");
 		});
 
 		it("Esc at role selection level closes model view", () => {
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const result = handleModelViewKey("\x1B", viewState, []);
 			expect(result.action.kind).toBe("close");
 		});
@@ -810,7 +810,7 @@ describe("integration: all views reachable via navigation", () => {
 			// And the model view itself renders
 			const config: MissionConfig = {};
 			const plan = makePlan();
-			const viewState: ModelViewState = { selectedRoleIndex: null };
+			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState);
 			expect(lines.length).toBeGreaterThan(0);
 		});

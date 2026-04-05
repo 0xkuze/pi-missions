@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -430,6 +430,43 @@ describe("extension entry point (index.ts)", () => {
 			const result = handler(event, ctx);
 
 			expect(result).toBeUndefined();
+		});
+	});
+
+	describe("session_shutdown handler", () => {
+		it("registers session_shutdown event handler", () => {
+			const { handlers } = registerExtension(tmpDir);
+			expect(handlers.has("session_shutdown")).toBe(true);
+		});
+
+		it("pauses an executing mission on shutdown", () => {
+			const state = makeExecutingState();
+			saveState(basePath, state);
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_shutdown")!;
+			handler({ type: "session_shutdown" }, ctx);
+
+			const saved = JSON.parse(readFileSync(join(basePath, "state.json"), "utf8"));
+			expect(saved.status).toBe("paused");
+		});
+
+		it("does not crash on completed state", () => {
+			const state = makeCompletedState();
+			saveState(basePath, state);
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_shutdown")!;
+			expect(() => handler({ type: "session_shutdown" }, ctx)).not.toThrow();
+		});
+
+		it("does not crash when no state exists", () => {
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_shutdown")!;
+			expect(() => handler({ type: "session_shutdown" }, ctx)).not.toThrow();
 		});
 	});
 

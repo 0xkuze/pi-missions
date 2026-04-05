@@ -814,8 +814,8 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const done = () => {};
 			const component = new MissionControlComponent(tui, done, deps);
 			component.currentSubView = { kind: "model" };
-			component.modelViewState = { selectedRoleIndex: 0 };
-			component.handleInput("1");
+			component.modelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
+			component.handleInput("\r");
 			await new Promise((r) => setTimeout(r, 10));
 			expect(setModelCalls).toEqual(["claude-opus"]);
 		} finally {
@@ -837,8 +837,8 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const done = () => {};
 			const component = new MissionControlComponent(tui, done, deps);
 			component.currentSubView = { kind: "model" };
-			component.modelViewState = { selectedRoleIndex: 1 };
-			component.handleInput("1");
+			component.modelViewState = { selectedRoleIndex: 1, searchQuery: "", highlightedIndex: 0 };
+			component.handleInput("\r");
 			await new Promise((r) => setTimeout(r, 10));
 			expect(setModelCalls).toEqual([]);
 		} finally {
@@ -855,8 +855,8 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const done = () => {};
 			const component = new MissionControlComponent(tui, done, deps);
 			component.currentSubView = { kind: "model" };
-			component.modelViewState = { selectedRoleIndex: 0 };
-			component.handleInput("1");
+			component.modelViewState = { selectedRoleIndex: 0, searchQuery: "", highlightedIndex: 0 };
+			component.handleInput("\r");
 			await new Promise((r) => setTimeout(r, 10));
 			const configPath = join(tmpDir, "config.json");
 			const { readFileSync } = await import("node:fs");
