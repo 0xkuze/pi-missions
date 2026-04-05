@@ -4,7 +4,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { registerCommands } from "./commands.js";
 import { captureGitSnapshot, isGitAvailable } from "./git.js";
 import { buildOrchestratorProtocol } from "./orchestrator/protocol.js";
-import { acquireLock } from "./state/lock.js";
+import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
 import { loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
 import { registerCommitChangesTool } from "./tools/commit-changes.js";
 import { registerCompleteMissionTool } from "./tools/complete.js";
@@ -295,7 +295,7 @@ export default function (pi: ExtensionAPI): void {
 	// session_start: load state from filesystem (authoritative), fall back to
 	// session entry cache when filesystem is absent, capture git snapshot if needed,
 	// run crash recovery, update widget, acquire lock.
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", async (_event, ctx) => {
 		latestCtx = ctx;
 
 		const fsState = loadState(basePath);
@@ -319,7 +319,7 @@ export default function (pi: ExtensionAPI): void {
 			}
 			renderWidget(ctx.ui, recoveredState, recoveredPlan ?? undefined);
 			if (!TERMINAL_STATUSES.has(recoveredState.status)) {
-				tryAcquireLock(basePath, ctx);
+				await handleLockConflict(basePath, ctx);
 			}
 			return;
 		}
@@ -342,7 +342,7 @@ export default function (pi: ExtensionAPI): void {
 		const plan = loadPlan(basePath);
 		renderWidget(ctx.ui, cachedWithSnapshot, plan ?? undefined);
 		if (!TERMINAL_STATUSES.has(cachedWithSnapshot.status)) {
-			tryAcquireLock(basePath, ctx);
+			await handleLockConflict(basePath, ctx);
 		}
 	});
 
@@ -445,12 +445,37 @@ function captureSnapshotIfNeeded(state: MissionState, projectDir: string): Missi
 	}
 }
 
-function tryAcquireLock(basePath: string, ctx: ExtensionContext): void {
+async function handleLockConflict(basePath: string, ctx: ExtensionContext): Promise<void> {
 	const sessionId = ctx.sessionManager.getSessionId();
-	acquireLock(basePath, {
-		sessionId,
-		pid: process.pid,
-		startedAt: nowISO(),
-		lastHeartbeatAt: nowISO(),
-	});
+	const sessionInfo = { sessionId, pid: process.pid, startedAt: nowISO(), lastHeartbeatAt: nowISO() };
+	const conflict = getLockConflict(basePath, sessionId);
+
+	if (conflict.kind === "none") {
+		acquireLock(basePath, sessionInfo);
+		return;
+	}
+
+	if (conflict.kind === "live") {
+		const observe = await ctx.ui.confirm(
+			"Mission Active in Another Session",
+			`Session ${conflict.session.sessionId} (PID ${conflict.session.pid}) is running this mission. Observe in read-only mode?`,
+		);
+		if (!observe) {
+			ctx.ui.setWidget("mission", undefined);
+			ctx.ui.notify("Another session holds the mission lock. Extension is idle.", "info");
+		}
+		return;
+	}
+
+	const takeover = await ctx.ui.confirm(
+		"Stale Mission Lock Detected",
+		`Session ${conflict.session.sessionId} (PID ${conflict.session.pid}) left a stale lock. Take over?`,
+	);
+	if (takeover) {
+		releaseLock(basePath);
+		acquireLock(basePath, sessionInfo);
+	} else {
+		ctx.ui.setWidget("mission", undefined);
+		ctx.ui.notify("Stale lock takeover declined. Extension is idle.", "info");
+	}
 }

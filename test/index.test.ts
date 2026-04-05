@@ -5,8 +5,9 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 // Import the default export directly
 import setup from "../extensions/index.js";
+import { acquireLock, isLocked } from "../extensions/state/lock.js";
 import { saveState } from "../extensions/state/manager.js";
-import type { MissionState } from "../extensions/types.js";
+import type { ActiveSession, MissionState } from "../extensions/types.js";
 import { nowISO } from "../extensions/utils.js";
 
 // ---------------------------------------------------------------------------
@@ -488,6 +489,180 @@ describe("extension entry point (index.ts)", () => {
 			// The cached data should be the current state
 			const cached = lastEntry.data as MissionState;
 			expect(cached.status).toBe("planning");
+		});
+	});
+
+	describe("lock observe/takeover UX u2014 VAL-LOCK-001, VAL-LOCK-002", () => {
+		function makeLiveLockSession(sessionId = "other-session"): ActiveSession {
+			return {
+				sessionId,
+				pid: process.pid,
+				startedAt: nowISO(),
+				lastHeartbeatAt: nowISO(),
+			};
+		}
+
+		function makeStaleLockSession(sessionId = "dead-session"): ActiveSession {
+			return {
+				sessionId,
+				pid: 999_999_999,
+				startedAt: nowISO(),
+				lastHeartbeatAt: nowISO(),
+			};
+		}
+
+		it("VAL-LOCK-001: live lock prompts user to observe (confirm called) u2014 not silent failure", async () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+			acquireLock(basePath, makeLiveLockSession());
+
+			const confirmCalls: Array<[string, string]> = [];
+			const ctx = buildMockCtx([], "my-session");
+			ctx.ui.confirm = async (title: string, message: string) => {
+				confirmCalls.push([title, message]);
+				return true;
+			};
+
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_start")!;
+			await handler({ type: "session_start", reason: "startup" }, ctx);
+
+			expect(confirmCalls.length).toBe(1);
+			expect(confirmCalls[0][0]).toContain("Session");
+		});
+
+		it("VAL-LOCK-001: live lock declined u2014 widget cleared, notify shown, extension idle", async () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+			acquireLock(basePath, makeLiveLockSession());
+
+			const notifyCalls: Array<[string, string | undefined]> = [];
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			const ctx = buildMockCtx([], "my-session");
+			ctx.ui.confirm = async () => false;
+			ctx.ui.notify = (msg: string, type?: "info" | "warning" | "error") => notifyCalls.push([msg, type]);
+			ctx.ui.setWidget = (_key: string, lines: unknown) => setWidgetCalls.push([_key as string, lines]);
+
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_start")!;
+			await handler({ type: "session_start", reason: "startup" }, ctx);
+
+			const clearCalls = setWidgetCalls.filter(([, lines]) => lines === undefined);
+			expect(clearCalls.length).toBeGreaterThan(0);
+			expect(notifyCalls.length).toBeGreaterThan(0);
+		});
+
+		it("VAL-LOCK-001: live lock confirmed observe u2014 widget shown, no lock acquired", async () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+			acquireLock(basePath, makeLiveLockSession());
+
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			const ctx = buildMockCtx([], "my-session");
+			ctx.ui.confirm = async () => true;
+			ctx.ui.setWidget = (_key: string, lines: unknown) => setWidgetCalls.push([_key as string, lines]);
+
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_start")!;
+			await handler({ type: "session_start", reason: "startup" }, ctx);
+
+			const contentCalls = setWidgetCalls.filter(([, lines]) => Array.isArray(lines) && (lines as string[]).length > 0);
+			expect(contentCalls.length).toBeGreaterThan(0);
+		});
+
+		it("VAL-LOCK-002: stale lock prompts user to take over (confirm called)", async () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+			acquireLock(basePath, makeStaleLockSession());
+
+			const confirmCalls: Array<[string, string]> = [];
+			const ctx = buildMockCtx([], "my-session");
+			ctx.ui.confirm = async (title: string, message: string) => {
+				confirmCalls.push([title, message]);
+				return true;
+			};
+
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_start")!;
+			await handler({ type: "session_start", reason: "startup" }, ctx);
+
+			expect(confirmCalls.length).toBe(1);
+			expect(confirmCalls[0][0]).toContain("Stale");
+		});
+
+		it("VAL-LOCK-002: stale lock confirmed takeover u2014 lock replaced with new session", async () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+			acquireLock(basePath, makeStaleLockSession());
+
+			const ctx = buildMockCtx([], "my-session");
+			ctx.ui.confirm = async () => true;
+
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_start")!;
+			await handler({ type: "session_start", reason: "startup" }, ctx);
+
+			const lockStatus = isLocked(basePath);
+			expect(lockStatus.locked).toBe(true);
+			expect(lockStatus.session?.sessionId).toBe("my-session");
+		});
+
+		it("VAL-LOCK-002: stale lock declined u2014 widget cleared, extension idle", async () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+			acquireLock(basePath, makeStaleLockSession());
+
+			const notifyCalls: Array<[string, string | undefined]> = [];
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			const ctx = buildMockCtx([], "my-session");
+			ctx.ui.confirm = async () => false;
+			ctx.ui.notify = (msg: string, type?: "info" | "warning" | "error") => notifyCalls.push([msg, type]);
+			ctx.ui.setWidget = (_key: string, lines: unknown) => setWidgetCalls.push([_key as string, lines]);
+
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_start")!;
+			await handler({ type: "session_start", reason: "startup" }, ctx);
+
+			const clearCalls = setWidgetCalls.filter(([, lines]) => lines === undefined);
+			expect(clearCalls.length).toBeGreaterThan(0);
+			expect(notifyCalls.length).toBeGreaterThan(0);
+		});
+
+		it("no lock conflict u2014 lock acquired normally without confirm prompt", async () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+
+			const confirmCalls: Array<[string, string]> = [];
+			const ctx = buildMockCtx([], "my-session");
+			ctx.ui.confirm = async (title: string, message: string) => {
+				confirmCalls.push([title, message]);
+				return true;
+			};
+
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_start")!;
+			await handler({ type: "session_start", reason: "startup" }, ctx);
+
+			expect(confirmCalls.length).toBe(0);
+		});
+
+		it("terminal state u2014 no lock acquisition attempted", async () => {
+			const state = makeCompletedState();
+			saveState(basePath, state);
+			acquireLock(basePath, makeLiveLockSession());
+
+			const confirmCalls: Array<[string, string]> = [];
+			const ctx = buildMockCtx([], "my-session");
+			ctx.ui.confirm = async (title: string, message: string) => {
+				confirmCalls.push([title, message]);
+				return true;
+			};
+
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_start")!;
+			await handler({ type: "session_start", reason: "startup" }, ctx);
+
+			expect(confirmCalls.length).toBe(0);
 		});
 	});
 });

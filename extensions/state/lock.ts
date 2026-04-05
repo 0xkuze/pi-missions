@@ -95,3 +95,17 @@ export function updateHeartbeat(basePath: string): void {
 	if (session === null) return;
 	writeSession(basePath, { ...session, lastHeartbeatAt: new Date().toISOString() });
 }
+
+type LockConflict =
+	| { kind: "none" }
+	| { kind: "live"; session: ActiveSession }
+	| { kind: "stale"; session: ActiveSession };
+
+export function getLockConflict(basePath: string, ownSessionId: string): LockConflict {
+	const { locked, session } = isLocked(basePath);
+	if (!locked) return { kind: "none" };
+	if (!session) return { kind: "none" };
+	if (session.sessionId === ownSessionId) return { kind: "none" };
+	if (isPidAlive(session.pid)) return { kind: "live", session };
+	return { kind: "stale", session };
+}
