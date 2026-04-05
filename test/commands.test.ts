@@ -97,6 +97,7 @@ function buildMockPi(): {
 	sessionNames: string[];
 	appendedEntries: Array<{ type: string; data: unknown }>;
 	notifications: Array<{ message: string; type?: string }>;
+	customCalls: Array<{ options?: { overlay?: boolean } }>;
 	commands: Map<string, (args: string, ctx: unknown) => Promise<void>>;
 	confirmResult: boolean;
 } {
@@ -104,6 +105,7 @@ function buildMockPi(): {
 	const sessionNames: string[] = [];
 	const appendedEntries: Array<{ type: string; data: unknown }> = [];
 	const notifications: Array<{ message: string; type?: string }> = [];
+	const customCalls: Array<{ options?: { overlay?: boolean } }> = [];
 	const commands = new Map<string, (args: string, ctx: unknown) => Promise<void>>();
 	let confirmResult = false;
 
@@ -139,6 +141,7 @@ function buildMockPi(): {
 		sessionNames,
 		appendedEntries,
 		notifications,
+		customCalls,
 		commands,
 		get confirmResult() {
 			return confirmResult;
@@ -194,7 +197,9 @@ describe("registerCommands", () => {
 				setHiddenThinkingLabel: () => {},
 				onTerminalInput: () => () => {},
 				setFooter: () => {},
-				custom: () => {},
+				custom: async (_factory: unknown, options?: { overlay?: boolean }) => {
+					mockPi.customCalls.push({ options });
+				},
 			},
 			cwd: tmpdir(),
 			hasUI: true,
@@ -569,43 +574,41 @@ describe("registerCommands", () => {
 		it("shows no mission message when idle (VAL-CMD-007)", async () => {
 			await runCommand(mockPi.commands, "mission-status", "", ctx);
 			expect(mockPi.notifications[0]!.message).toContain("No active mission");
+			expect(mockPi.customCalls.length).toBe(0);
 		});
 
-		it("shows planning status (VAL-CMD-007)", async () => {
+		it("opens TUI overlay when mission exists (VAL-CMD-007, VAL-NEWUI-004)", async () => {
 			saveState(basePath, makePlanningState());
 			await runCommand(mockPi.commands, "mission-status", "", ctx);
-			expect(mockPi.notifications[0]!.message).toContain("planning");
+			expect(mockPi.customCalls.length).toBe(1);
+			expect(mockPi.customCalls[0]!.options?.overlay).toBe(true);
+			expect(mockPi.notifications.length).toBe(0);
 		});
 
-		it("shows executing status with milestone and feature context (VAL-CMD-007)", async () => {
+		it("opens overlay for executing state (VAL-CMD-007, VAL-NEWUI-004)", async () => {
 			saveState(basePath, makeExecutingState("f1"));
 			savePlan(basePath, makeMinimalPlan());
 			await runCommand(mockPi.commands, "mission-status", "", ctx);
-			const msg = mockPi.notifications[0]!.message;
-			expect(msg).toContain("executing");
-			expect(msg).toContain("Milestone 1");
-			expect(msg).toContain("Feature 1");
+			expect(mockPi.customCalls.length).toBe(1);
+			expect(mockPi.customCalls[0]!.options?.overlay).toBe(true);
 		});
 
-		it("shows paused status with resume target (VAL-CMD-007)", async () => {
+		it("opens overlay for paused state (VAL-CMD-007, VAL-NEWUI-004)", async () => {
 			saveState(basePath, makePausedState("executing"));
 			await runCommand(mockPi.commands, "mission-status", "", ctx);
-			const msg = mockPi.notifications[0]!.message;
-			expect(msg).toContain("paused");
-			expect(msg).toContain("executing");
+			expect(mockPi.customCalls.length).toBe(1);
+			expect(mockPi.customCalls[0]!.options?.overlay).toBe(true);
 		});
 
-		it("shows completion summary with counts and duration (VAL-CMD-007)", async () => {
+		it("opens overlay for completed state (VAL-CMD-007, VAL-NEWUI-004)", async () => {
 			const state = makeCompletedState();
 			state.totalFeaturesCompleted = 5;
 			state.totalFeaturesSkipped = 1;
 			state.totalFeaturesFailed = 0;
 			saveState(basePath, state);
 			await runCommand(mockPi.commands, "mission-status", "", ctx);
-			const msg = mockPi.notifications[0]!.message;
-			expect(msg).toContain("completed");
-			expect(msg).toContain("5");
-			expect(msg).toContain("1");
+			expect(mockPi.customCalls.length).toBe(1);
+			expect(mockPi.customCalls[0]!.options?.overlay).toBe(true);
 		});
 	});
 
@@ -614,55 +617,61 @@ describe("registerCommands", () => {
 			saveState(basePath, makeDraftReviewState());
 			await runCommand(mockPi.commands, "mission-plan", "", ctx);
 			expect(mockPi.notifications[0]!.message).toContain("No plan");
+			expect(mockPi.customCalls.length).toBe(0);
 		});
 
-		it("displays formatted plan when plan exists (VAL-CMD-008)", async () => {
+		it("opens TUI overlay when plan exists (VAL-CMD-008, VAL-NEWUI-005)", async () => {
 			saveState(basePath, makeDraftReviewState());
 			savePlan(basePath, makeMinimalPlan());
 			await runCommand(mockPi.commands, "mission-plan", "", ctx);
-			const msg = mockPi.notifications[0]!.message;
-			expect(msg).toContain("Test mission");
-			expect(msg).toContain("Milestone 1");
-			expect(msg).toContain("Feature 1");
+			expect(mockPi.customCalls.length).toBe(1);
+			expect(mockPi.customCalls[0]!.options?.overlay).toBe(true);
+			expect(mockPi.notifications.length).toBe(0);
 		});
 
 		it("accessible from draft_review state (VAL-CMD-008, VAL-CMD-009)", async () => {
 			saveState(basePath, makeDraftReviewState());
 			savePlan(basePath, makeMinimalPlan());
 			await runCommand(mockPi.commands, "mission-plan", "", ctx);
-			expect(mockPi.notifications[0]!.type).not.toBe("error");
+			expect(mockPi.customCalls.length).toBe(1);
+			expect(mockPi.notifications.filter((n) => n.type === "error").length).toBe(0);
 		});
 
 		it("accessible from approved state (VAL-CMD-009)", async () => {
 			saveState(basePath, makeApprovedState());
 			savePlan(basePath, makeMinimalPlan());
 			await runCommand(mockPi.commands, "mission-plan", "", ctx);
-			expect(mockPi.notifications[0]!.type).not.toBe("error");
+			expect(mockPi.customCalls.length).toBe(1);
+			expect(mockPi.notifications.filter((n) => n.type === "error").length).toBe(0);
 		});
 
 		it("accessible from executing state (VAL-CMD-009)", async () => {
 			saveState(basePath, makeExecutingState());
 			savePlan(basePath, makeMinimalPlan());
 			await runCommand(mockPi.commands, "mission-plan", "", ctx);
-			expect(mockPi.notifications[0]!.type).not.toBe("error");
+			expect(mockPi.customCalls.length).toBe(1);
+			expect(mockPi.notifications.filter((n) => n.type === "error").length).toBe(0);
 		});
 
 		it("accessible from paused state (VAL-CMD-009)", async () => {
 			saveState(basePath, makePausedState("executing"));
 			savePlan(basePath, makeMinimalPlan());
 			await runCommand(mockPi.commands, "mission-plan", "", ctx);
-			expect(mockPi.notifications[0]!.type).not.toBe("error");
+			expect(mockPi.customCalls.length).toBe(1);
+			expect(mockPi.notifications.filter((n) => n.type === "error").length).toBe(0);
 		});
 
 		it("rejects from planning state (VAL-CMD-009)", async () => {
 			saveState(basePath, makePlanningState());
 			await runCommand(mockPi.commands, "mission-plan", "", ctx);
 			expect(mockPi.notifications[0]!.type).toBe("error");
+			expect(mockPi.customCalls.length).toBe(0);
 		});
 
 		it("rejects when no mission state", async () => {
 			await runCommand(mockPi.commands, "mission-plan", "", ctx);
 			expect(mockPi.notifications[0]!.message).toContain("No active mission");
+			expect(mockPi.customCalls.length).toBe(0);
 		});
 	});
 

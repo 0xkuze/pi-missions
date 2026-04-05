@@ -4,6 +4,8 @@ import { loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
 import { appendMutation } from "./state/plan-history.js";
 import { transitionState } from "./state/transitions.js";
 import type { MissionPlan, MissionState, MissionStatus } from "./types.js";
+import { PlanOverlayComponent } from "./ui/plan-overlay.js";
+import { StatusOverlayComponent } from "./ui/status-overlay.js";
 import { formatDuration, generateId, nowISO } from "./utils.js";
 
 const ALLOWED_COMMANDS: Record<MissionStatus, ReadonlySet<string>> = {
@@ -74,18 +76,6 @@ function formatStatus(state: MissionState, plan?: MissionPlan | null): string {
 		default:
 			return `Mission status: ${state.status}.`;
 	}
-}
-
-function formatPlan(plan: MissionPlan): string {
-	const lines: string[] = [`Mission: ${plan.description}`, ""];
-	for (const milestone of plan.milestones) {
-		lines.push(`Milestone: ${milestone.name} [${milestone.status}]`);
-		for (const feature of milestone.features) {
-			lines.push(`  - ${feature.name} [${feature.status}]`);
-		}
-		lines.push("");
-	}
-	return lines.join("\n").trim();
 }
 
 export interface CommandDeps {
@@ -327,7 +317,9 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
 				return;
 			}
 			const plan = loadPlan(deps.basePath);
-			ctx.ui.notify(formatStatus(state, plan), "info");
+			await ctx.ui.custom<void>((_tui, _theme, _kb, done) => new StatusOverlayComponent(state, plan, done), {
+				overlay: true,
+			});
 		},
 	});
 
@@ -349,7 +341,9 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
 				ctx.ui.notify("No plan available yet.", "info");
 				return;
 			}
-			ctx.ui.notify(formatPlan(plan), "info");
+			await ctx.ui.custom<void>((_tui, _theme, _kb, done) => new PlanOverlayComponent(plan, done), {
+				overlay: true,
+			});
 		},
 	});
 }
