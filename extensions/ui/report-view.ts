@@ -3,6 +3,7 @@ import { matchesKey } from "@mariozechner/pi-tui";
 import { resolveModel } from "../config.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
+import { frame, section } from "./frame.js";
 
 export type ReportViewAction = { kind: "close" } | { kind: "open_report" } | { kind: "noop" };
 
@@ -30,11 +31,9 @@ function countMilestonePassed(plan: MissionPlan): { passed: number; total: numbe
 	return { passed, total };
 }
 
-export function renderReportView(state: MissionState, plan: MissionPlan, basePath: string): string[] {
+export function renderReportView(state: MissionState, plan: MissionPlan, basePath: string, width = 80): string[] {
+	const contentWidth = width - 4;
 	const lines: string[] = [];
-
-	lines.push("Mission Complete");
-	lines.push("");
 
 	lines.push(`Goal: ${plan.description}`);
 	lines.push("");
@@ -43,13 +42,13 @@ export function renderReportView(state: MissionState, plan: MissionPlan, basePat
 	lines.push(`Duration: ${formatDuration(durationMs)}`);
 	lines.push("");
 
-	lines.push("Features");
-	lines.push(`  Completed: ${state.totalFeaturesCompleted}`);
+	lines.push(section("Features", contentWidth));
+	lines.push(`Completed: ${state.totalFeaturesCompleted}`);
 	if (state.totalFeaturesSkipped > 0) {
-		lines.push(`  Skipped: ${state.totalFeaturesSkipped}`);
+		lines.push(`Skipped: ${state.totalFeaturesSkipped}`);
 	}
 	if (state.totalFixFeaturesCreated > 0) {
-		lines.push(`  Fix features: ${state.totalFixFeaturesCreated}`);
+		lines.push(`Fix features: ${state.totalFixFeaturesCreated}`);
 	}
 	lines.push("");
 
@@ -60,13 +59,10 @@ export function renderReportView(state: MissionState, plan: MissionPlan, basePat
 	}
 
 	const reportPath = join(basePath, "report.md");
-	lines.push("Output");
-	lines.push(`  Report: ${reportPath}`);
-	lines.push("");
+	lines.push(section("Output", contentWidth));
+	lines.push(`Report: ${reportPath}`);
 
-	lines.push("O: open report.md   Esc: close");
-
-	return lines;
+	return frame("Mission Complete", lines, width, "O: open report   Esc: close");
 }
 
 export function handleReportViewKey(key: string): ReportViewAction {
@@ -80,11 +76,13 @@ function resolveRoleModel(role: RoleName, config: MissionConfig, plan: MissionPl
 	return model ?? "(current session default)";
 }
 
-export function renderModelView(config: MissionConfig, plan: MissionPlan, viewState: ModelViewState): string[] {
+export function renderModelView(
+	config: MissionConfig,
+	plan: MissionPlan,
+	viewState: ModelViewState,
+	width = 80,
+): string[] {
 	const lines: string[] = [];
-
-	lines.push("Model Configuration");
-	lines.push("");
 
 	if (viewState.selectedRoleIndex === null) {
 		lines.push("Select a role to change its model:");
@@ -92,20 +90,17 @@ export function renderModelView(config: MissionConfig, plan: MissionPlan, viewSt
 		for (let i = 0; i < ROLE_NAMES.length; i++) {
 			const role = ROLE_NAMES[i];
 			const model = resolveRoleModel(role, config, plan);
-			lines.push(`  ${i + 1}. ${capitalize(role)}: ${model}`);
+			lines.push(`${i + 1}. ${capitalize(role)}: ${model}`);
 		}
 	} else {
 		const role = ROLE_NAMES[viewState.selectedRoleIndex];
 		lines.push(`Changing model for: ${capitalize(role)}`);
 		lines.push("");
 		lines.push("Available models:");
-		lines.push("  (select via number when models are listed)");
+		lines.push("(select via number when models are listed)");
 	}
 
-	lines.push("");
-	lines.push("Esc: back");
-
-	return lines;
+	return frame("Model Assignment", lines, width, "Esc: back");
 }
 
 function capitalize(s: string): string {

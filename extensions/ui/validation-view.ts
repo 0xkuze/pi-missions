@@ -1,5 +1,6 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import { formatDuration } from "../utils.js";
+import { frame } from "./frame.js";
 
 export type ValidationViewAction = { kind: "close" } | { kind: "noop" };
 
@@ -28,6 +29,7 @@ export function renderValidationView(
 	milestoneName: string,
 	commands: CommandDisplayEntry[],
 	hasFailed: boolean,
+	width = 80,
 ): string[] {
 	const lines: string[] = [];
 
@@ -35,7 +37,7 @@ export function renderValidationView(
 	lines.push("");
 
 	if (commands.length === 0) {
-		lines.push("  (no validation commands)");
+		lines.push("(no validation commands)");
 	} else {
 		for (const cmd of commands) {
 			const icon = commandStatusIcon(cmd.status);
@@ -45,20 +47,16 @@ export function renderValidationView(
 						? ` (${formatDuration(cmd.durationMs)})`
 						: ""
 					: "";
-			lines.push(`  ${icon} ${cmd.label}${duration}`);
+			lines.push(`${icon} ${cmd.label}${duration}`);
 		}
 	}
 
-	lines.push("");
-
 	if (hasFailed) {
-		lines.push("One or more checks failed. A fix feature will be generated to address the failures.");
 		lines.push("");
+		lines.push("One or more checks failed. A fix feature will be generated to address the failures.");
 	}
 
-	lines.push("Esc: close");
-
-	return lines;
+	return frame("Milestone Validation", lines, width, "Esc: close");
 }
 
 export function handleValidationViewKey(key: string): ValidationViewAction {

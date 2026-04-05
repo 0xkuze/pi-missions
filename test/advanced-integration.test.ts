@@ -715,7 +715,7 @@ describe("advanced integration: all views connected", () => {
 		const lines = renderReportView(completedState, plan, basePath);
 		const text = lines.join("\n");
 		expect(text).toContain("Build a scalable auth system");
-		expect(text).toContain("report.md");
+		expect(text).toContain("Report:");
 		expect(text).toContain("O:");
 	});
 

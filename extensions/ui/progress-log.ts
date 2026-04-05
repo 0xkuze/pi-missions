@@ -1,5 +1,6 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { ProgressEvent } from "../types.js";
+import { frame } from "./frame.js";
 import { formatRelativeTime } from "./mission-control.js";
 
 export type ProgressLogAction = { kind: "close" } | { kind: "noop" };
@@ -41,26 +42,21 @@ function progressEventIcon(type: ProgressEvent["type"]): string {
 	}
 }
 
-export function renderProgressLog(progressLog: ProgressEvent[]): string[] {
-	const lines: string[] = ["Progress Log"];
-
+export function renderProgressLog(progressLog: ProgressEvent[], width = 80): string[] {
 	if (progressLog.length === 0) {
-		lines.push("  (no events yet)");
-		return lines;
+		return frame("Progress Log", ["(no events yet)"], width, "Esc: close");
 	}
 
 	const events = [...progressLog].sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+	const lines: string[] = [];
 
 	for (const event of events) {
 		const time = formatRelativeTime(event.timestamp);
 		const icon = progressEventIcon(event.type);
-		lines.push(`  ${time.padEnd(4)} ${icon} ${event.detail}`);
+		lines.push(`${time.padEnd(4)} ${icon} ${event.detail}`);
 	}
 
-	lines.push("");
-	lines.push("Esc: close");
-
-	return lines;
+	return frame("Progress Log", lines, width, "Esc: close");
 }
 
 export function handleProgressLogKey(key: string): ProgressLogAction {

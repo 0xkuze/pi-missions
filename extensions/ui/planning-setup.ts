@@ -1,13 +1,12 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionState } from "../types.js";
+import { frame, section } from "./frame.js";
 
 export type PlanningSetupAction = { kind: "close" } | { kind: "noop" };
 
-export function renderPlanningSetupView(state: MissionState, goal?: string): string[] {
+export function renderPlanningSetupView(state: MissionState, goal?: string, width = 80): string[] {
+	const contentWidth = width - 4;
 	const lines: string[] = [];
-
-	lines.push("Mission Setup");
-	lines.push("");
 
 	if (goal) {
 		lines.push(`Goal: ${goal}`);
@@ -23,16 +22,13 @@ export function renderPlanningSetupView(state: MissionState, goal?: string): str
 	const contextBullets = extractContextBullets(state);
 	if (contextBullets.length > 0) {
 		lines.push("");
-		lines.push("Context discovered");
+		lines.push(section("Context discovered", contentWidth));
 		for (const bullet of contextBullets) {
-			lines.push(`  \u2022 ${bullet}`);
+			lines.push(`\u2022 ${bullet}`);
 		}
 	}
 
-	lines.push("");
-	lines.push("Esc: close");
-
-	return lines;
+	return frame("Mission Setup", lines, width, "Esc: close");
 }
 
 function extractContextBullets(state: MissionState): string[] {

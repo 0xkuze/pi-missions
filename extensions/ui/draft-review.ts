@@ -1,5 +1,6 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../types.js";
+import { frame, section } from "./frame.js";
 
 export type DraftReviewAction = { kind: "approve" } | { kind: "close" } | { kind: "noop" };
 
@@ -32,41 +33,44 @@ function renderValidationCommands(plan: MissionPlan): string[] {
 	return lines;
 }
 
-export function renderDraftReview(plan: MissionPlan): string[] {
+export function renderDraftReview(plan: MissionPlan, width = 80): string[] {
+	const contentWidth = width - 4;
 	const lines: string[] = [];
 
-	lines.push("Draft Mission Plan");
 	lines.push(`Mission: ${plan.description}`);
 	lines.push("");
 
 	for (const milestone of plan.milestones) {
 		const count = milestone.features.length;
-		lines.push(`Milestone: ${milestone.name} (${count} feature${count !== 1 ? "s" : ""})`);
+		lines.push(section(`${milestone.name} (${count} feature${count !== 1 ? "s" : ""})`, contentWidth));
 		for (const feature of milestone.features) {
-			lines.push(`  • ${feature.name}: ${feature.description}`);
+			lines.push(`• ${feature.name}: ${feature.description}`);
 		}
 		lines.push("");
 	}
 
 	const validationLines = renderValidationCommands(plan);
 	if (validationLines.length > 0) {
-		lines.push(...validationLines);
+		lines.push(section("Validation", contentWidth));
+		for (const vl of validationLines.slice(1)) {
+			lines.push(vl.trimStart());
+		}
 		lines.push("");
 	}
 
 	const modelLines = renderModelAssignments(plan);
 	if (modelLines.length > 0) {
-		lines.push(...modelLines);
+		lines.push(section("Models", contentWidth));
+		for (const ml of modelLines.slice(1)) {
+			lines.push(ml.trimStart());
+		}
 	}
 
 	const total = countTotalFeatures(plan);
 	const runs = estimatedRuns(plan);
-	lines.push(`  • Estimated runs: ${total} features + ${plan.milestones.length * 2} validations = ~${runs}`);
-	lines.push("");
+	lines.push(`• Estimated runs: ${total} features + ${plan.milestones.length * 2} validations = ~${runs}`);
 
-	lines.push("A: approve   Esc: back to chat (continue planning)");
-
-	return lines;
+	return frame("Draft Mission Plan", lines, width, "A: approve   Esc: back to chat (continue planning)");
 }
 
 export function handleDraftReviewKey(key: string): DraftReviewAction {

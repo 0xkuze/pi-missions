@@ -1,31 +1,25 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { PlanMutation } from "../types.js";
+import { frame } from "./frame.js";
 import { formatRelativeTime } from "./mission-control.js";
 
 export type PlanHistoryAction = { kind: "close" } | { kind: "noop" };
 
-export function renderPlanHistoryView(mutations: PlanMutation[]): string[] {
-	const lines: string[] = ["Plan History"];
-
+export function renderPlanHistoryView(mutations: PlanMutation[], width = 80): string[] {
 	if (mutations.length === 0) {
-		lines.push("  (no history yet)");
-		lines.push("");
-		lines.push("Esc: close");
-		return lines;
+		return frame("Plan History", ["(no history yet)"], width, "Esc: close");
 	}
 
 	const sorted = [...mutations].sort((a, b) => a.planVersion - b.planVersion);
+	const lines: string[] = [];
 
 	for (const mutation of sorted) {
 		const time = formatRelativeTime(mutation.timestamp);
-		lines.push(`  v${mutation.planVersion}  ${time.padEnd(4)}  ${mutation.actor}  ${mutation.kind}`);
-		lines.push(`    ${mutation.summary}`);
+		lines.push(`v${mutation.planVersion}  ${time.padEnd(4)}  ${mutation.actor}  ${mutation.kind}`);
+		lines.push(`  ${mutation.summary}`);
 	}
 
-	lines.push("");
-	lines.push("Esc: close");
-
-	return lines;
+	return frame("Plan History", lines, width, "Esc: close");
 }
 
 export function handlePlanHistoryKey(key: string): PlanHistoryAction {

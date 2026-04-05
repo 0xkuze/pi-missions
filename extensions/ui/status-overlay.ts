@@ -1,11 +1,13 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
+import { frame, section } from "./frame.js";
 
 export type StatusOverlayAction = { kind: "close" } | { kind: "noop" };
 
-export function renderStatusOverlay(state: MissionState, plan: MissionPlan | null): string[] {
-	const lines: string[] = ["Mission Status", ""];
+export function renderStatusOverlay(state: MissionState, plan: MissionPlan | null, width = 80): string[] {
+	const contentWidth = width - 4;
+	const lines: string[] = [];
 
 	lines.push(`State: ${state.status}`);
 
@@ -27,21 +29,18 @@ export function renderStatusOverlay(state: MissionState, plan: MissionPlan | nul
 	}
 
 	lines.push("");
-	lines.push("Progress");
-	lines.push(`  Completed: ${state.totalFeaturesCompleted}`);
-	lines.push(`  Failed:    ${state.totalFeaturesFailed}`);
-	lines.push(`  Skipped:   ${state.totalFeaturesSkipped}`);
-	lines.push(`  Fix tasks: ${state.totalFixFeaturesCreated}`);
+	lines.push(section("Progress", contentWidth));
+	lines.push(`Completed: ${state.totalFeaturesCompleted}`);
+	lines.push(`Failed:    ${state.totalFeaturesFailed}`);
+	lines.push(`Skipped:   ${state.totalFeaturesSkipped}`);
+	lines.push(`Fix tasks: ${state.totalFixFeaturesCreated}`);
 
 	if (state.status === "paused" && state.resumeTargetState) {
 		lines.push("");
 		lines.push(`Paused (will resume to: ${state.resumeTargetState})`);
 	}
 
-	lines.push("");
-	lines.push("Esc: close");
-
-	return lines;
+	return frame("Mission Status", lines, width, "Esc: close");
 }
 
 export function handleStatusOverlayKey(key: string): StatusOverlayAction {
@@ -62,7 +61,7 @@ export class StatusOverlayComponent {
 	}
 
 	render(width: number): string[] {
-		return renderStatusOverlay(this.state, this.plan).map((l) => l.slice(0, width));
+		return renderStatusOverlay(this.state, this.plan, width);
 	}
 
 	invalidate(): void {}

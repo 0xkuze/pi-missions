@@ -7,6 +7,7 @@ import type { Feature, MissionConfig, MissionPlan, MissionState, PlanMutation, P
 import { nowISO } from "../utils.js";
 import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
 import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
+import { frame, section } from "./frame.js";
 import { handlePlanHistoryKey, renderPlanHistoryView } from "./plan-history.js";
 import { handlePlanningSetupKey, renderPlanningSetupView } from "./planning-setup.js";
 import { handleProgressLogKey, renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
@@ -77,63 +78,63 @@ function buildWarnings(state: MissionState): string[] {
 	return warnings;
 }
 
-export function renderCurrentFeaturePanel(state: MissionState, plan: MissionPlan): string[] {
+export function renderCurrentFeaturePanel(state: MissionState, plan: MissionPlan, width = 40): string[] {
+	const contentWidth = width - 4;
 	const feature = findCurrentFeature(state, plan);
 	const milestone = findCurrentMilestone(state, plan);
 
 	if (!feature) {
-		return ["Current Feature", "  (no feature active)"];
+		return frame("Current Feature", ["(no feature active)"], width);
 	}
 
 	const lines: string[] = [];
-	lines.push("Current Feature");
-	lines.push(`  ${feature.name}`);
+	lines.push(feature.name);
 
 	if (milestone) {
-		lines.push(`  Milestone: ${milestone.name}`);
+		lines.push(`Milestone: ${milestone.name}`);
 	}
 
 	const workerModel = plan.modelAssignment.worker;
 	if (workerModel) {
-		lines.push(`  Worker: ${workerModel}`);
+		lines.push(`Worker: ${workerModel}`);
 	}
 
 	const attemptCount = feature.attempts.length;
 	const maxRetries = 3;
-	lines.push(`  Attempt: ${attemptCount + 1}/${maxRetries}`);
+	lines.push(`Attempt: ${attemptCount + 1}/${maxRetries}`);
 
 	if (feature.acceptanceCriteria.length > 0) {
-		lines.push("  Acceptance Criteria");
+		lines.push(section("Acceptance Criteria", contentWidth));
 		for (const criterion of feature.acceptanceCriteria) {
-			lines.push(`   \u2022 ${criterion}`);
+			lines.push(`\u2022 ${criterion}`);
 		}
 	}
 
 	const warnings = buildWarnings(state);
 	if (warnings.length > 0) {
-		lines.push("  Warnings");
+		lines.push(section("Warnings", contentWidth));
 		for (const warning of warnings) {
-			lines.push(`   \u2022 ${warning}`);
+			lines.push(`\u2022 ${warning}`);
 		}
 	}
 
-	return lines;
+	return frame("Current Feature", lines, width);
 }
 
-export function renderMissionOutline(plan: MissionPlan): string[] {
-	const lines: string[] = ["Mission Outline"];
+export function renderMissionOutline(plan: MissionPlan, width = 40): string[] {
+	const lines: string[] = [];
 
 	for (const milestone of plan.milestones) {
-		lines.push(`  ${milestone.name}`);
+		lines.push(milestone.name);
 
 		for (const feature of milestone.features) {
 			const icon = featureStatusIcon(feature);
 			const fixMarker = feature.fixOrigin ? ` ${ICON_FIX}` : "";
-			lines.push(`    ${icon} ${feature.name}${fixMarker}`);
+			lines.push(`  ${icon} ${feature.name}${fixMarker}`);
 		}
 	}
 
-	return lines;
+	return frame("Mission Outline", lines, width);
 }
 
 function progressEventIcon(type: ProgressEvent["type"]): string {
@@ -157,29 +158,32 @@ function progressEventIcon(type: ProgressEvent["type"]): string {
 	}
 }
 
-export function renderProgressLog(state: MissionState): string[] {
-	const lines: string[] = ["Progress Log"];
-
+export function renderProgressLog(state: MissionState, width = 40): string[] {
 	if (state.progressLog.length === 0) {
-		lines.push("  (no events yet)");
-		return lines;
+		return frame("Progress Log", ["(no events yet)"], width);
 	}
 
 	const events = [...state.progressLog].sort(
 		(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
 	);
+	const lines: string[] = [];
 
 	for (const event of events) {
 		const time = formatRelativeTime(event.timestamp);
 		const icon = progressEventIcon(event.type);
-		lines.push(`  ${time.padEnd(4)} ${icon} ${event.detail}`);
+		lines.push(`${time.padEnd(4)} ${icon} ${event.detail}`);
 	}
 
-	return lines;
+	return frame("Progress Log", lines, width);
 }
 
-export function renderKeyboardShortcuts(): string[] {
-	return ["P: Pause  S: Skip  D: Done  R: Redirect", "M: Models  V: Validate  L: Logs  H: History  Esc: Close"];
+export function renderKeyboardShortcuts(width = 80): string[] {
+	const sep = "\u2500";
+	return [
+		sep.repeat(width),
+		"P: Pause  S: Skip  D: Done  R: Redirect",
+		"M: Models  V: Validate  L: Logs  H: History  Esc: Close",
+	];
 }
 
 export type OverlayAction =
@@ -657,7 +661,7 @@ export class MissionControlComponent {
 		return this.renderMainOverlay(state, plan, width);
 	}
 
-	private renderSubView(view: SubView, state: MissionState, plan: MissionPlan | null, _width: number): string[] {
+	private renderSubView(view: SubView, state: MissionState, plan: MissionPlan | null, width: number): string[] {
 		switch (view.kind) {
 			case "model": {
 				const effectivePlan = plan ?? {
@@ -669,7 +673,7 @@ export class MissionControlComponent {
 					modelAssignment: {},
 					createdAt: "",
 				};
-				return renderModelView(this.config, effectivePlan, this.modelViewState);
+				return renderModelView(this.config, effectivePlan, this.modelViewState, width);
 			}
 			case "validation": {
 				const milestone = plan?.milestones.find((m) => m.id === state.currentMilestoneId);
@@ -678,19 +682,19 @@ export class MissionControlComponent {
 					label: cmd,
 					status: "pending" as const,
 				}));
-				return renderValidationView(milestoneName, commands, false);
+				return renderValidationView(milestoneName, commands, false, width);
 			}
 			case "logs":
-				return renderProgressLogStandalone(state.progressLog);
+				return renderProgressLogStandalone(state.progressLog, width);
 			case "history":
-				return renderPlanHistoryView(this.planHistory);
+				return renderPlanHistoryView(this.planHistory, width);
 			case "planning": {
 				const goal = plan?.description;
-				return renderPlanningSetupView(state, goal);
+				return renderPlanningSetupView(state, goal, width);
 			}
 			case "draft_review":
 				if (!plan) return ["No plan to review.", "", "Esc: close"];
-				return renderDraftReview(plan);
+				return renderDraftReview(plan, width);
 			case "blocked": {
 				const feature = plan?.milestones.flatMap((m) => m.features).find((f) => f.id === view.featureId);
 				if (!feature) return ["Feature not found.", "", "Esc: close"];
@@ -698,11 +702,11 @@ export class MissionControlComponent {
 				const lastFailure: LastFailureDetails | undefined = lastAttempt
 					? { errorMessage: `Exit code: ${lastAttempt.exitCode ?? "unknown"}` }
 					: undefined;
-				return renderBlockedView(feature, 3, lastFailure);
+				return renderBlockedView(feature, 3, lastFailure, width);
 			}
 			case "report":
 				if (!plan) return ["No report available.", "", "Esc: close"];
-				return renderReportView(state, plan, this.deps.basePath);
+				return renderReportView(state, plan, this.deps.basePath, width);
 		}
 	}
 
@@ -710,9 +714,13 @@ export class MissionControlComponent {
 		const leftWidth = Math.floor(width / 2) - 1;
 		const rightWidth = width - leftWidth - 1;
 
-		const leftLines = plan ? renderCurrentFeaturePanel(state, plan) : ["Current Feature", "  (no plan loaded)"];
-		const rightOutline = plan ? renderMissionOutline(plan) : ["Mission Outline", "  (no plan loaded)"];
-		const rightLog = renderProgressLog(state);
+		const leftLines = plan
+			? renderCurrentFeaturePanel(state, plan, leftWidth)
+			: frame("Current Feature", ["(no plan loaded)"], leftWidth);
+		const rightOutline = plan
+			? renderMissionOutline(plan, rightWidth)
+			: frame("Mission Outline", ["(no plan loaded)"], rightWidth);
+		const rightLog = renderProgressLog(state, rightWidth);
 		const rightLines = [...rightOutline, "", ...rightLog];
 
 		const maxRows = Math.max(leftLines.length, rightLines.length);
@@ -725,7 +733,7 @@ export class MissionControlComponent {
 		}
 
 		output.push("");
-		for (const line of renderKeyboardShortcuts()) {
+		for (const line of renderKeyboardShortcuts(width)) {
 			output.push(line);
 		}
 

@@ -291,10 +291,9 @@ describe("renderMissionOutline (VAL-UI-004)", () => {
 		expect(featureLine).toBeDefined();
 		const milestoneLine = lines.find((l) => l.includes("Milestone m1"));
 		expect(milestoneLine).toBeDefined();
-		// Feature line should have more leading whitespace than milestone line
-		const featureIndent = (featureLine ?? "").match(/^(\s*)/)?.[1]?.length ?? 0;
-		const milestoneIndent = (milestoneLine ?? "").match(/^(\s*)/)?.[1]?.length ?? 0;
-		expect(featureIndent).toBeGreaterThan(milestoneIndent);
+		const milestoneIdx = milestoneLine!.indexOf("Milestone m1");
+		const featureIdx = featureLine!.indexOf("\u25cb");
+		expect(featureIdx).toBeGreaterThan(milestoneIdx);
 	});
 
 	it("distinguishes fix features from regular features", () => {
