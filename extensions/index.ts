@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { Container, Text } from "@mariozechner/pi-tui";
 import { registerCommands } from "./commands.js";
 import { captureGitSnapshot, isGitAvailable } from "./git.js";
 import { buildOrchestratorProtocol } from "./orchestrator/protocol.js";
@@ -19,7 +20,8 @@ import type { Feature, MissionPlan, MissionState, WorkerResult } from "./types.j
 import { handleDraftReviewKey, renderDraftReview } from "./ui/draft-review.js";
 import { themeFrameStyle } from "./ui/frame.js";
 import { MissionControlComponent } from "./ui/mission-control.js";
-import { updateWidget as renderWidget } from "./ui/widget.js";
+import type { ThemeStyler } from "./ui/widget.js";
+import { buildWidgetLines } from "./ui/widget.js";
 import { nowISO } from "./utils.js";
 
 const SESSION_CACHE_KEY = "mission-state-cache";
@@ -281,9 +283,21 @@ export default function (pi: ExtensionAPI): void {
 	// recoveryContext is set by session_start crash recovery and injected on the next before_agent_start.
 	let pendingRecoveryContext: string | null = null;
 
+	function renderMissionWidget(ctx: ExtensionContext, state: MissionState, plan?: MissionPlan): void {
+		ctx.ui.setWidget("mission", (_tui, theme) => {
+			const styler: ThemeStyler = { fg: theme.fg.bind(theme), bold: theme.bold.bind(theme) };
+			const lines = buildWidgetLines(state, plan, undefined, styler);
+			const container = new Container();
+			for (const line of lines) {
+				container.addChild(new Text(line, 1, 0));
+			}
+			return container;
+		});
+	}
+
 	function updateWidget(state: MissionState, plan?: MissionPlan): void {
 		if (latestCtx) {
-			renderWidget(latestCtx.ui, state, plan);
+			renderMissionWidget(latestCtx, state, plan);
 		}
 		// Mirror every state change to the session entry cache so the widget
 		// can be restored after /compact or a fresh session start.
@@ -321,7 +335,7 @@ export default function (pi: ExtensionAPI): void {
 				// Snapshot was captured — persist the updated state.
 				saveState(basePath, recoveredState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
 			}
-			renderWidget(ctx.ui, recoveredState, recoveredPlan ?? undefined);
+			renderMissionWidget(ctx, recoveredState, recoveredPlan ?? undefined);
 			if (!TERMINAL_STATUSES.has(recoveredState.status)) {
 				await handleLockConflict(basePath, ctx);
 			}
@@ -344,7 +358,7 @@ export default function (pi: ExtensionAPI): void {
 		const cachedWithSnapshot = captureSnapshotIfNeeded(cached, projectDir);
 		saveState(basePath, cachedWithSnapshot, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
 		const plan = loadPlan(basePath);
-		renderWidget(ctx.ui, cachedWithSnapshot, plan ?? undefined);
+		renderMissionWidget(ctx, cachedWithSnapshot, plan ?? undefined);
 		if (!TERMINAL_STATUSES.has(cachedWithSnapshot.status)) {
 			await handleLockConflict(basePath, ctx);
 		}

@@ -80,11 +80,11 @@ describe("buildWidgetLines", () => {
 			expect(line).toContain("analyzing codebase");
 		});
 
-		it("shows planning emoji ⏳", () => {
+		it("shows planning icon ◇", () => {
 			const state = makeState("planning");
 			const lines = buildWidgetLines(state);
 			const line = lines.join(" ");
-			expect(line).toContain("⏳");
+			expect(line).toContain("\u25c7");
 		});
 	});
 
@@ -104,12 +104,12 @@ describe("buildWidgetLines", () => {
 			expect(line).toContain("awaiting approval");
 		});
 
-		it("shows draft emoji 📋", () => {
+		it("shows draft icon ◆", () => {
 			const state = makeState("draft_review");
 			const plan = makePlan([makeMilestone("m1", [makeFeature("f1", "pending")])]);
 			const lines = buildWidgetLines(state, plan);
 			const line = lines.join(" ");
-			expect(line).toContain("📋");
+			expect(line).toContain("\u25c6");
 		});
 
 		it("shows counts without plan", () => {
@@ -432,6 +432,117 @@ describe("buildWidgetLines", () => {
 			expect(setWidget.calls.length).toBe(1);
 			expect(setWidget.calls[0]![0]).toBe("mission");
 			expect(Array.isArray(setWidget.calls[0]![1])).toBe(true);
+		});
+	});
+
+	describe("themed output", () => {
+		const mockTheme = {
+			fg: (color: string, text: string) => `[${color}:${text}]`,
+			bold: (text: string) => `[bold:${text}]`,
+		};
+
+		it("planning state uses accent color and shortcut hint", () => {
+			const state = makeState("planning");
+			const lines = buildWidgetLines(state, undefined, undefined, mockTheme);
+			const line = lines.join(" ");
+			expect(line).toContain("[bold:[accent:\u25c7 Planning]]");
+			expect(line).toContain("[text:analyzing codebase...]");
+			expect(line).toContain("[muted:(Ctrl+Shift+M)]");
+		});
+
+		it("draft_review state uses accent and text colors", () => {
+			const plan = makePlan([
+				makeMilestone("m1", [makeFeature("f1", "pending"), makeFeature("f2", "pending")]),
+			]);
+			const state = makeState("draft_review");
+			const lines = buildWidgetLines(state, plan, undefined, mockTheme);
+			const line = lines.join(" ");
+			expect(line).toContain("[bold:[accent:\u25c6 Draft]]");
+			expect(line).toContain("[text:1 milestones, 2 features]");
+			expect(line).toContain("[accent:awaiting approval]");
+			expect(line).toContain("[muted:(Ctrl+Shift+M)]");
+		});
+
+		it("executing state uses success color and styled progress bar", () => {
+			const features = [makeFeature("f1", "done"), makeFeature("f2", "active"), makeFeature("f3", "pending")];
+			const milestone = makeMilestone("m1", features, "active");
+			milestone.name = "auth";
+			const plan = makePlan([milestone]);
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+			});
+			const lines = buildWidgetLines(state, plan, 10, mockTheme);
+			const line = lines.join(" ");
+			expect(line).toContain("[bold:[success:\u25cf Running]]");
+			expect(line).toContain("[success:");
+			expect(line).toContain("[muted:Milestone:]");
+			expect(line).toContain("[text: auth]");
+			expect(line).toContain("[muted:(Ctrl+Shift+M)]");
+		});
+
+		it("paused state uses warning color", () => {
+			const features = [makeFeature("f1", "done"), makeFeature("f2", "pending")];
+			const plan = makePlan([makeMilestone("m1", features)]);
+			const state = makeState("paused", { totalFeaturesCompleted: 1 });
+			const lines = buildWidgetLines(state, plan, 10, mockTheme);
+			const line = lines.join(" ");
+			expect(line).toContain("[bold:[warning:\u23f8 Paused]]");
+			expect(line).toContain("[warning:waiting for input]");
+		});
+
+		it("completed state uses success color", () => {
+			const features = [makeFeature("f1", "done"), makeFeature("f2", "done")];
+			const plan = makePlan([makeMilestone("m1", features, "done")]);
+			const state = makeState("completed", { completedAt: nowISO(), totalFeaturesCompleted: 2 });
+			const lines = buildWidgetLines(state, plan, 10, mockTheme);
+			const line = lines.join(" ");
+			expect(line).toContain("[bold:[success:\u2713 Done]]");
+			expect(line).toContain("[success:report ready]");
+		});
+
+		it("failed state uses error color", () => {
+			const features = [makeFeature("f1", "done"), makeFeature("f2", "failed", "jwt-tokens")];
+			const plan = makePlan([makeMilestone("m1", features, "failed")]);
+			const state = makeState("failed", {
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+				totalFeaturesFailed: 1,
+			});
+			const lines = buildWidgetLines(state, plan, 10, mockTheme);
+			const line = lines.join(" ");
+			expect(line).toContain("[bold:[error:\u2717 Failed]]");
+			expect(line).toContain("[error:blocked on jwt-tokens]");
+		});
+
+		it("approved state uses success color", () => {
+			const state = makeState("approved");
+			const lines = buildWidgetLines(state, undefined, undefined, mockTheme);
+			const line = lines.join(" ");
+			expect(line).toContain("[bold:[success:\u2713 Approved]]");
+			expect(line).toContain("[muted:(Ctrl+Shift+M)]");
+		});
+
+		it("validating state uses accent color", () => {
+			const state = makeState("validating", { currentMilestoneId: "m1" });
+			const milestone = makeMilestone("m1", [makeFeature("f1", "done")], "active");
+			milestone.name = "core";
+			const plan = makePlan([milestone]);
+			const lines = buildWidgetLines(state, plan, 10, mockTheme);
+			const line = lines.join(" ");
+			expect(line).toContain("[bold:[accent:\u25cf Validating]]");
+			expect(line).toContain("[muted:(Ctrl+Shift+M)]");
+		});
+
+		it("without theme produces same plain text as before (backward compat)", () => {
+			const state = makeState("planning");
+			const withTheme = buildWidgetLines(state, undefined, 10, mockTheme);
+			const withoutTheme = buildWidgetLines(state);
+			expect(withoutTheme[0]).not.toContain("[accent:");
+			expect(withoutTheme[0]).not.toContain("(Ctrl+Shift+M)");
+			expect(withTheme[0]).toContain("[accent:");
+			expect(withTheme[0]).toContain("(Ctrl+Shift+M)");
 		});
 	});
 });

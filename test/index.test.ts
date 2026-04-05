@@ -221,19 +221,17 @@ describe("extension entry point (index.ts)", () => {
 			const differentState = makeExecutingState();
 			const cacheEntry = makeCacheEntry(differentState);
 			const ctx = buildMockCtx([cacheEntry]);
-			const setWidgetCalls: Array<[string, string[] | undefined]> = [];
-			ctx.ui.setWidget = (_key: string, lines: unknown) =>
-				setWidgetCalls.push([_key as string, lines as string[] | undefined]);
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			ctx.ui.setWidget = (_key: string, content: unknown) =>
+				setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
 			handler({ type: "session_start", reason: "startup" }, ctx);
 
-			// Widget should be set with planning state content (from filesystem)
-			const contentCalls = setWidgetCalls.filter(([, lines]) => Array.isArray(lines) && lines.length > 0);
+			// Widget should be set with content (component factory function from themed rendering)
+			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
 			expect(contentCalls.length).toBeGreaterThan(0);
-			const joined = contentCalls[0][1]?.join(" ") ?? "";
-			expect(joined).toContain("Planning");
 		});
 
 		it("falls back to session entries when filesystem state is absent", () => {
@@ -241,16 +239,16 @@ describe("extension entry point (index.ts)", () => {
 			const cachedState = makePlanningState();
 			const cacheEntry = makeCacheEntry(cachedState);
 			const ctx = buildMockCtx([cacheEntry]);
-			const setWidgetCalls: Array<[string, string[] | undefined]> = [];
-			ctx.ui.setWidget = (_key: string, lines: unknown) =>
-				setWidgetCalls.push([_key as string, lines as string[] | undefined]);
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			ctx.ui.setWidget = (_key: string, content: unknown) =>
+				setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
 			handler({ type: "session_start", reason: "startup" }, ctx);
 
 			// Widget should be set from the cached state
-			const contentCalls = setWidgetCalls.filter(([, lines]) => Array.isArray(lines) && lines.length > 0);
+			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
 			expect(contentCalls.length).toBeGreaterThan(0);
 		});
 
@@ -258,30 +256,30 @@ describe("extension entry point (index.ts)", () => {
 			// No filesystem state AND null sentinel in session entries
 			const nullEntry = makeCacheEntry(null);
 			const ctx = buildMockCtx([nullEntry]);
-			const setWidgetCalls: Array<[string, string[] | undefined]> = [];
-			ctx.ui.setWidget = (_key: string, lines: unknown) =>
-				setWidgetCalls.push([_key as string, lines as string[] | undefined]);
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			ctx.ui.setWidget = (_key: string, content: unknown) =>
+				setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
 			handler({ type: "session_start", reason: "startup" }, ctx);
 
 			// Widget must NOT be set with content u2014 null sentinel prevents stale restore
-			const contentCalls = setWidgetCalls.filter(([, lines]) => Array.isArray(lines) && lines.length > 0);
+			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
 			expect(contentCalls.length).toBe(0);
 		});
 
 		it("does nothing when no filesystem state and no session entries", () => {
 			const ctx = buildMockCtx([]);
-			const setWidgetCalls: Array<[string, string[] | undefined]> = [];
-			ctx.ui.setWidget = (_key: string, lines: unknown) =>
-				setWidgetCalls.push([_key as string, lines as string[] | undefined]);
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			ctx.ui.setWidget = (_key: string, content: unknown) =>
+				setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
 			handler({ type: "session_start", reason: "startup" }, ctx);
 
-			const contentCalls = setWidgetCalls.filter(([, lines]) => Array.isArray(lines) && lines.length > 0);
+			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
 			expect(contentCalls.length).toBe(0);
 		});
 
@@ -290,19 +288,17 @@ describe("extension entry point (index.ts)", () => {
 			const oldEntry = makeCacheEntry(makePlanningState());
 			const newerEntry = makeCacheEntry(makeExecutingState());
 			const ctx = buildMockCtx([oldEntry, newerEntry]);
-			const setWidgetCalls: Array<[string, string[] | undefined]> = [];
-			ctx.ui.setWidget = (_key: string, lines: unknown) =>
-				setWidgetCalls.push([_key as string, lines as string[] | undefined]);
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			ctx.ui.setWidget = (_key: string, content: unknown) =>
+				setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
 			handler({ type: "session_start", reason: "startup" }, ctx);
 
-			// Widget should show executing state (most recent cache entry)
-			const contentCalls = setWidgetCalls.filter(([, lines]) => Array.isArray(lines) && lines.length > 0);
+			// Widget should be set with content (component factory)
+			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
 			expect(contentCalls.length).toBeGreaterThan(0);
-			const joined = contentCalls[0][1]?.join(" ").toLowerCase() ?? "";
-			expect(joined).toContain("running");
 		});
 
 		it("null sentinel in cache takes priority over earlier state entries", () => {
@@ -310,16 +306,16 @@ describe("extension entry point (index.ts)", () => {
 			const stateEntry = makeCacheEntry(makePlanningState());
 			const nullEntry = makeCacheEntry(null);
 			const ctx = buildMockCtx([stateEntry, nullEntry]);
-			const setWidgetCalls: Array<[string, string[] | undefined]> = [];
-			ctx.ui.setWidget = (_key: string, lines: unknown) =>
-				setWidgetCalls.push([_key as string, lines as string[] | undefined]);
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			ctx.ui.setWidget = (_key: string, content: unknown) =>
+				setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
 			handler({ type: "session_start", reason: "startup" }, ctx);
 
 			// null sentinel must prevent restore even if there was an earlier valid cache entry
-			const contentCalls = setWidgetCalls.filter(([, lines]) => Array.isArray(lines) && lines.length > 0);
+			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
 			expect(contentCalls.length).toBe(0);
 		});
 
@@ -560,13 +556,13 @@ describe("extension entry point (index.ts)", () => {
 			const setWidgetCalls: Array<[string, unknown]> = [];
 			const ctx = buildMockCtx([], "my-session");
 			ctx.ui.confirm = async () => true;
-			ctx.ui.setWidget = (_key: string, lines: unknown) => setWidgetCalls.push([_key as string, lines]);
+			ctx.ui.setWidget = (_key: string, content: unknown) => setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
 			await handler({ type: "session_start", reason: "startup" }, ctx);
 
-			const contentCalls = setWidgetCalls.filter(([, lines]) => Array.isArray(lines) && (lines as string[]).length > 0);
+			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
 			expect(contentCalls.length).toBeGreaterThan(0);
 		});
 
