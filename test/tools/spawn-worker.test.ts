@@ -129,6 +129,8 @@ function makeMockSpawn(opts: MockSpawnOptions = {}) {
 	};
 }
 
+type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
+
 let testDir: string;
 let capturedCommand: string | null;
 let capturedArgs: string[] | null;
@@ -173,7 +175,12 @@ afterEach(() => {
 
 function registerTool(
 	spawnMock: ReturnType<typeof makeMockSpawn>,
-	extraOpts: { projectDir?: string; noAgentsMd?: boolean } = {},
+	extraOpts: {
+		projectDir?: string;
+		noAgentsMd?: boolean;
+		getThinkingLevel?: () => ThinkingLevel;
+		setThinkingLevel?: (level: ThinkingLevel) => void;
+	} = {},
 ): void {
 	const projectDir = extraOpts.projectDir ?? testDir;
 	if (extraOpts.noAgentsMd) {
@@ -188,6 +195,8 @@ function registerTool(
 		basePath: testDir,
 		projectDir,
 		updateWidget: () => {},
+		getThinkingLevel: extraOpts.getThinkingLevel,
+		setThinkingLevel: extraOpts.setThinkingLevel,
 		_spawnOverride: (command, args, opts) => {
 			capturedCommand = command;
 			capturedArgs = args;
@@ -774,6 +783,94 @@ describe("registerSpawnWorkerTool", () => {
 			const { loadPlan } = await import("../../extensions/state/manager.js");
 			const savedPlan = loadPlan(testDir);
 			expect(savedPlan?.milestones[0].features[0].status).toBe("done");
+		});
+	});
+
+	describe("VAL-API-002: thinking level saved and restored around worker spawn", () => {
+		it("saves thinking level before spawn and restores after success", async () => {
+			const state = makeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = makeFeature();
+			const plan = makePlan([makeMilestone([feature])]);
+			savePlan(testDir, plan);
+
+			const setLevelCalls: ThinkingLevel[] = [];
+			registerTool(mockSpawnFn, {
+				getThinkingLevel: () => "medium",
+				setThinkingLevel: (level) => setLevelCalls.push(level),
+			});
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(setLevelCalls).toEqual(["medium"]);
+		});
+
+		it("saves thinking level before spawn and restores after failure", async () => {
+			const failMock = makeMockSpawn({
+				stdoutLines: [makeMessageEndLine("assistant", "Failed.")],
+				exitCode: 1,
+			});
+			const state = makeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = makeFeature();
+			const plan = makePlan([makeMilestone([feature])]);
+			savePlan(testDir, plan);
+
+			const setLevelCalls: ThinkingLevel[] = [];
+			registerTool(failMock, {
+				getThinkingLevel: () => "high",
+				setThinkingLevel: (level) => setLevelCalls.push(level),
+			});
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(setLevelCalls).toEqual(["high"]);
+		});
+
+		it("restores thinking level even when pi binary not found (ENOENT)", async () => {
+			const errorMock = makeMockSpawn({ error: Object.assign(new Error("not found"), { code: "ENOENT" }) });
+			const state = makeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = makeFeature();
+			const plan = makePlan([makeMilestone([feature])]);
+			savePlan(testDir, plan);
+
+			const setLevelCalls: ThinkingLevel[] = [];
+			registerTool(errorMock, {
+				getThinkingLevel: () => "low",
+				setThinkingLevel: (level) => setLevelCalls.push(level),
+			});
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(setLevelCalls).toEqual(["low"]);
+		});
+
+		it("works without getThinkingLevel and setThinkingLevel deps (optional)", async () => {
+			const state = makeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = makeFeature();
+			const plan = makePlan([makeMilestone([feature])]);
+			savePlan(testDir, plan);
+
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("restores the exact level that was saved before spawn", async () => {
+			const state = makeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = makeFeature();
+			const plan = makePlan([makeMilestone([feature])]);
+			savePlan(testDir, plan);
+
+			let currentLevel: ThinkingLevel = "xhigh";
+			const setLevelCalls: ThinkingLevel[] = [];
+			registerTool(mockSpawnFn, {
+				getThinkingLevel: () => currentLevel,
+				setThinkingLevel: (level) => {
+					setLevelCalls.push(level);
+					currentLevel = level;
+				},
+			});
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(setLevelCalls[0]).toBe("xhigh");
+			expect(currentLevel).toBe("xhigh");
 		});
 	});
 });

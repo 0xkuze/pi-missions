@@ -376,7 +376,13 @@ export default function (pi: ExtensionAPI): void {
 
 	// Register all orchestrator tools.
 	registerSubmitPlanTool(pi, { basePath, updateWidget });
-	registerSpawnWorkerTool(pi, { basePath, projectDir, updateWidget });
+	registerSpawnWorkerTool(pi, {
+		basePath,
+		projectDir,
+		updateWidget,
+		getThinkingLevel: () => pi.getThinkingLevel(),
+		setThinkingLevel: (level) => pi.setThinkingLevel(level),
+	});
 	registerUpdateStateTool(pi, { basePath, updateWidget });
 	registerCompleteMissionTool(pi, { basePath, updateWidget });
 	registerRunValidationTool(pi, { basePath, projectDir, updateWidget });

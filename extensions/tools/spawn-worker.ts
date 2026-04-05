@@ -27,11 +27,14 @@ interface ProcLike {
 }
 
 type SpawnFn = (command: string, args: string[], options: Record<string, unknown>) => ProcLike;
+type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 interface Deps {
 	basePath: string;
 	projectDir: string;
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
+	getThinkingLevel?: () => ThinkingLevel;
+	setThinkingLevel?: (level: ThinkingLevel) => void;
 	_spawnOverride?: SpawnFn;
 }
 
@@ -318,8 +321,14 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			savePlan(deps.basePath, updatedPlan);
 			deps.updateWidget(activeState, updatedPlan);
 
+			const savedThinkingLevel = deps.getThinkingLevel ? deps.getThinkingLevel() : undefined;
+
 			const startTime = Date.now();
 			const procResult = await spawnWorkerProcess(spawnFn, command, commandArgs, deps.projectDir);
+
+			if (savedThinkingLevel !== undefined && deps.setThinkingLevel) {
+				deps.setThinkingLevel(savedThinkingLevel);
+			}
 
 			if (procResult.signal === "ENOENT") {
 				activeState = {
