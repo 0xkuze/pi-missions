@@ -680,10 +680,11 @@ describe("resolveStateView (VAL-WIRE-001..006)", () => {
 			expect(view).toBeNull();
 		});
 
-		it("returns null for planning state", () => {
+		it("returns planning view for planning state (VAL-NEWUI-001, VAL-XFLOW-002)", () => {
 			const state = makeState("planning");
 			const view = resolveStateView(state, null);
-			expect(view).toBeNull();
+			expect(view).not.toBeNull();
+			expect(view?.kind).toBe("planning");
 		});
 
 		it("returns null for paused state", () => {

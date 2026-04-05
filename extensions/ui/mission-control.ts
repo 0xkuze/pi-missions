@@ -6,6 +6,7 @@ import type { Feature, MissionConfig, MissionPlan, MissionState, ProgressEvent }
 import { nowISO } from "../utils.js";
 import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
 import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
+import { handlePlanningSetupKey, renderPlanningSetupView } from "./planning-setup.js";
 import { handleProgressLogKey, renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
 import {
 	handleModelViewKey,
@@ -263,6 +264,7 @@ export type SubView =
 	| { kind: "model" }
 	| { kind: "validation" }
 	| { kind: "logs" }
+	| { kind: "planning" }
 	| { kind: "draft_review" }
 	| { kind: "blocked"; featureId: string }
 	| { kind: "report" };
@@ -270,6 +272,7 @@ export type SubView =
 export function resolveStateView(state: MissionState, plan: MissionPlan | null): SubView | null {
 	if (state.status === "completed") return { kind: "report" };
 	if (state.status === "draft_review") return { kind: "draft_review" };
+	if (state.status === "planning") return { kind: "planning" };
 
 	if (state.currentFeatureId && plan) {
 		for (const milestone of plan.milestones) {
@@ -374,6 +377,13 @@ export class MissionControlComponent {
 				if (action.kind === "close") {
 					this.currentSubView = null;
 					this.tui.requestRender();
+				}
+				return;
+			}
+			case "planning": {
+				const action = handlePlanningSetupKey(data);
+				if (action.kind === "close") {
+					this.done();
 				}
 				return;
 			}
@@ -619,6 +629,10 @@ export class MissionControlComponent {
 			}
 			case "logs":
 				return renderProgressLogStandalone(state.progressLog);
+			case "planning": {
+				const goal = plan?.description;
+				return renderPlanningSetupView(state, goal);
+			}
 			case "draft_review":
 				if (!plan) return ["No plan to review.", "", "Esc: close"];
 				return renderDraftReview(plan);
