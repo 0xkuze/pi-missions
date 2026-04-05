@@ -2,79 +2,24 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { savePlan, saveState } from "../../extensions/state/manager.js";
 import { type ExecFn, registerRunValidationTool } from "../../extensions/tools/run-validation.js";
-import type { Feature, Milestone, MissionPlan, MissionState, ValidationResult } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
+import type { MissionPlan, MissionState, ValidationResult } from "../../extensions/types.js";
+import { createMockPi, makeFeature, makeMilestone, makePlan, makeState, type ToolResult } from "../helpers/index.js";
 
-type ToolResult = { content: Array<{ type: string; text: string }>; details: unknown };
-type ExecutableTool = { execute: (...args: unknown[]) => Promise<ToolResult> };
-
-function makeMockPi(): { pi: ExtensionAPI; getLastRegisteredTool: () => ExecutableTool | null } {
-	let registeredTool: ExecutableTool | null = null;
-	const pi = {
-		registerTool: (tool: ExecutableTool) => {
-			registeredTool = tool;
-		},
-	} as unknown as ExtensionAPI;
-	return {
-		pi,
-		getLastRegisteredTool: () => registeredTool,
-	};
-}
-
-function makeState(overrides: Partial<MissionState> = {}): MissionState {
-	return {
-		missionId: "test-mission",
-		status: "executing",
-		progressLog: [],
-		startedAt: nowISO(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-		...overrides,
-	};
-}
-
-function makeFeature(overrides: Partial<Feature> = {}): Feature {
-	return {
-		id: "feature-1",
-		name: "test-feature",
-		description: "Test feature",
-		acceptanceCriteria: ["It works"],
-		relevantFiles: [],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status: "done",
-		attempts: [],
-		...overrides,
-	};
-}
-
-function makeMilestone(overrides: Partial<Milestone> = {}): Milestone {
-	return {
-		id: "milestone-1",
-		name: "Foundation",
-		description: "Core milestone",
-		features: [makeFeature()],
-		status: "active",
-		...overrides,
-	};
-}
-
-function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test mission",
-		planVersion: 1,
-		milestones: [makeMilestone()],
+function localMakePlan(overrides: Partial<MissionPlan> = {}) {
+	return makePlan({
+		milestones: [
+			makeMilestone({
+				name: "Foundation",
+				description: "Core milestone",
+				features: [makeFeature({ status: "done" })],
+				status: "active",
+			}),
+		],
 		validationCommands: ["echo test"],
-		modelAssignment: {},
-		createdAt: nowISO(),
 		...overrides,
-	};
+	});
 }
 
 interface CallToolOptions {
@@ -91,7 +36,7 @@ async function callTool(
 ): Promise<ToolResult> {
 	const {
 		state = makeState(),
-		plan = makePlan(),
+		plan = localMakePlan(),
 		exec = async () => ({ exitCode: 0, stdout: "ok", stderr: "", timedOut: false }),
 		updateWidget = () => {},
 	} = options;
@@ -99,14 +44,14 @@ async function callTool(
 	saveState(basePath, state);
 	savePlan(basePath, plan);
 
-	const { pi, getLastRegisteredTool } = makeMockPi();
+	const { pi, getRegisteredTool } = createMockPi();
 	registerRunValidationTool(pi, {
 		basePath,
 		projectDir: basePath,
 		updateWidget,
 		exec,
 	});
-	const tool = getLastRegisteredTool()!;
+	const tool = getRegisteredTool("run_validation")!;
 	return tool.execute("tool-call-id", params, undefined, undefined, undefined) as Promise<ToolResult>;
 }
 
@@ -123,14 +68,14 @@ describe("registerRunValidationTool", () => {
 
 	describe("VAL-TOOL-010: preconditions and state transitions", () => {
 		it("returns error when no state exists", async () => {
-			const { pi, getLastRegisteredTool } = makeMockPi();
+			const { pi, getRegisteredTool: getTool } = createMockPi();
 			registerRunValidationTool(pi, {
 				basePath: tmpDir,
 				projectDir: tmpDir,
 				updateWidget: () => {},
 				exec: async () => ({ exitCode: 0, stdout: "", stderr: "", timedOut: false }),
 			});
-			const tool = getLastRegisteredTool()!;
+			const tool = getTool("run_validation")!;
 			const result = (await tool.execute(
 				"id",
 				{ milestoneId: "milestone-1" },
@@ -188,7 +133,7 @@ describe("registerRunValidationTool", () => {
 
 	describe("VAL-TOOL-008: command resolution and execution order", () => {
 		it("executes commands in canonical order (typecheck -> lint -> test -> build) regardless of input order", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						validationCommands: ["npm run build", "npm run lint", "npm run typecheck", "npm run test"],
@@ -210,7 +155,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("resolves milestone-specific validation commands over plan-level commands", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				validationCommands: ["plan-level-command"],
 				milestones: [
 					makeMilestone({
@@ -231,7 +176,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("uses plan-level commands when milestone has no overrides", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				validationCommands: ["npm run test"],
 				milestones: [makeMilestone({ validationCommands: undefined })],
 			});
@@ -247,7 +192,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("runs all commands even when earlier ones fail (no fail-fast)", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
@@ -284,7 +229,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("returns fail when any command exits non-zero", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test"],
@@ -305,7 +250,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("returns fail when any command times out", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						validationCommands: ["npm run test"],
@@ -326,7 +271,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("returns pass with explanatory summary when command list is empty", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				validationCommands: [],
 				milestones: [makeMilestone({ validationCommands: [] })],
 			});
@@ -345,7 +290,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("includes per-command results with all required fields", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [makeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan });
@@ -362,7 +307,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("failingChecks contains labels of failed commands", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test"],
@@ -384,7 +329,7 @@ describe("registerRunValidationTool", () => {
 
 	describe("VAL-VAL-003: timeout enforcement", () => {
 		it("passes the configured timeout to runCommand", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [makeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const { writeFileSync: wfs } = await import("node:fs");
@@ -404,7 +349,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("uses default timeout of 120000ms when not configured", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [makeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const receivedTimeouts: number[] = [];
@@ -419,7 +364,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("marks command as timedOut:true and exitCode:null when timeout occurs", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [makeMilestone({ validationCommands: ["npm run test"] })],
 			});
 			const exec: ExecFn = async () => ({
@@ -454,7 +399,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("captures stdout/stderr to per-command files", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [makeMilestone({ validationCommands: ["echo hello"] })],
 			});
 			const exec: ExecFn = async () => ({
@@ -490,7 +435,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("appends validation_fail event when commands fail", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [makeMilestone({ validationCommands: ["npm run test"] })],
 			});
 			const { loadState } = await import("../../extensions/state/manager.js");
@@ -517,7 +462,7 @@ describe("registerRunValidationTool", () => {
 
 	describe("VAL-VAL-006: human-readable summary", () => {
 		it("summary is non-empty and meaningful on pass", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [makeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan });
@@ -527,7 +472,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("summary mentions failing checks when commands fail", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test"],
@@ -555,7 +500,7 @@ describe("registerRunValidationTool", () => {
 
 	describe("VAL-CROSS-011: three commands, first fails, all three execute", () => {
 		it("runs all three commands even when first fails", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
@@ -574,7 +519,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("result.json stored to runtime/validation/<milestoneId>/<timestamp>/", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
@@ -603,7 +548,7 @@ describe("registerRunValidationTool", () => {
 		});
 
 		it("overall status is fail when any command fails", async () => {
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test", "npm run build"],

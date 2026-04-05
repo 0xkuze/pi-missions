@@ -2,24 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadPlan, loadState, saveState } from "../../extensions/state/manager.js";
 import { readHistory } from "../../extensions/state/plan-history.js";
 import { registerSubmitPlanTool } from "../../extensions/tools/submit-plan.js";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
+import { createMockPi, makeState, type ToolResult } from "../helpers/index.js";
 
 function makePlanningState(): MissionState {
-	return {
-		missionId: "test-mission",
-		status: "planning",
-		progressLog: [],
-		startedAt: nowISO(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-	};
+	return makeState({ status: "planning" });
 }
 
 interface PlanFeatureParam {
@@ -72,22 +62,6 @@ function makeMinimalPlanParams(): PlanParams {
 	};
 }
 
-type ToolResult = { content: Array<{ type: string; text: string }>; details: unknown };
-type ExecutableTool = { execute: (...args: unknown[]) => Promise<ToolResult> };
-
-function makeMockPi(): { pi: ExtensionAPI; getLastRegisteredTool: () => ExecutableTool | null } {
-	let registeredTool: ExecutableTool | null = null;
-	const pi = {
-		registerTool: (tool: ExecutableTool) => {
-			registeredTool = tool;
-		},
-	} as unknown as ExtensionAPI;
-	return {
-		pi,
-		getLastRegisteredTool: () => registeredTool,
-	};
-}
-
 async function callTool(
 	basePath: string,
 	params: unknown,
@@ -95,11 +69,11 @@ async function callTool(
 	updateWidget?: (state: MissionState, plan?: MissionPlan) => void,
 	showDraftReview?: (plan: MissionPlan) => void,
 ): Promise<ToolResult> {
-	const { pi, getLastRegisteredTool } = makeMockPi();
+	const { pi, getRegisteredTool } = createMockPi();
 	saveState(basePath, state);
 	registerSubmitPlanTool(pi, { basePath, updateWidget: updateWidget ?? (() => {}), showDraftReview });
-	const tool = getLastRegisteredTool()!;
-	return tool.execute("tool-call-id", params, undefined, undefined, undefined) as Promise<ToolResult>;
+	const tool = getRegisteredTool("submit_plan")!;
+	return tool.execute("tool-call-id", params, undefined, undefined, undefined as never) as Promise<ToolResult>;
 }
 
 describe("registerSubmitPlanTool", () => {
@@ -381,9 +355,9 @@ describe("registerSubmitPlanTool", () => {
 		});
 
 		it("returns error when no state exists", async () => {
-			const { pi, getLastRegisteredTool } = makeMockPi();
+			const { pi, getRegisteredTool: getTool } = createMockPi();
 			registerSubmitPlanTool(pi, { basePath: tmpDir, updateWidget: mock(() => {}) });
-			const tool = getLastRegisteredTool()!;
+			const tool = getTool("submit_plan")!;
 			const result = await tool.execute("id", makeMinimalPlanParams(), undefined, undefined, undefined);
 
 			expect(result.content[0].text).toContain("Error");

@@ -2,79 +2,35 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadPlan, loadState, savePlan, saveState } from "../../extensions/state/manager.js";
 import { readHistory } from "../../extensions/state/plan-history.js";
 import { registerUpdateStateTool } from "../../extensions/tools/update-state.js";
-import type { Feature, Milestone, MissionPlan, MissionState } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
+import type { MissionPlan, MissionState } from "../../extensions/types.js";
+import { createMockPi, makeFeature, makeMilestone, makePlan, makeState, type ToolResult } from "../helpers/index.js";
 
-function makeExecutingState(): MissionState {
-	return {
-		missionId: "test-mission",
-		status: "executing",
-		progressLog: [],
-		startedAt: nowISO(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-	};
+function makeExecutingState() {
+	return makeState();
 }
 
-function makeFeature(overrides: Partial<Feature> = {}): Feature {
-	return {
-		id: "feature-1",
-		name: "Feature One",
-		description: "First feature",
-		acceptanceCriteria: ["works"],
-		relevantFiles: [],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status: "pending",
-		attempts: [],
+function localMakePlan(overrides: Partial<MissionPlan> = {}) {
+	return makePlan({
+		milestones: [
+			makeMilestone({
+				id: "milestone-1",
+				name: "Milestone One",
+				description: "First milestone",
+				features: [
+					makeFeature({
+						id: "feature-1",
+						name: "Feature One",
+						description: "First feature",
+						acceptanceCriteria: ["works"],
+					}),
+				],
+			}),
+		],
 		...overrides,
-	};
-}
-
-function makeMilestone(overrides: Partial<Milestone> = {}): Milestone {
-	return {
-		id: "milestone-1",
-		name: "Milestone One",
-		description: "First milestone",
-		features: [makeFeature()],
-		status: "pending",
-		...overrides,
-	};
-}
-
-function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test plan",
-		planVersion: 1,
-		milestones: [makeMilestone()],
-		validationCommands: [],
-		modelAssignment: {},
-		createdAt: nowISO(),
-		...overrides,
-	};
-}
-
-type ToolResult = { content: Array<{ type: string; text: string }>; details: unknown };
-type ExecutableTool = { execute: (...args: unknown[]) => Promise<ToolResult> };
-
-function makeMockPi(): { pi: ExtensionAPI; getLastRegisteredTool: () => ExecutableTool | null } {
-	let registeredTool: ExecutableTool | null = null;
-	const pi = {
-		registerTool: (tool: ExecutableTool) => {
-			registeredTool = tool;
-		},
-	} as unknown as ExtensionAPI;
-	return {
-		pi,
-		getLastRegisteredTool: () => registeredTool,
-	};
+	});
 }
 
 async function callTool(
@@ -92,12 +48,12 @@ async function callTool(
 	plan: MissionPlan | null,
 	updateWidget?: (state: MissionState, plan?: MissionPlan) => void,
 ): Promise<ToolResult> {
-	const { pi, getLastRegisteredTool } = makeMockPi();
+	const { pi, getRegisteredTool } = createMockPi();
 	saveState(basePath, state);
 	if (plan) savePlan(basePath, plan);
 	registerUpdateStateTool(pi, { basePath, updateWidget: updateWidget ?? (() => {}) });
-	const tool = getLastRegisteredTool()!;
-	return tool.execute("tool-call-id", params, undefined, undefined, undefined) as Promise<ToolResult>;
+	const tool = getRegisteredTool("update_mission_state")!;
+	return tool.execute("tool-call-id", params, undefined, undefined, undefined as never) as Promise<ToolResult>;
 }
 
 describe("registerUpdateStateTool", () => {
@@ -113,9 +69,9 @@ describe("registerUpdateStateTool", () => {
 
 	describe("no state", () => {
 		it("returns error when no state exists", async () => {
-			const { pi, getLastRegisteredTool } = makeMockPi();
+			const { pi, getRegisteredTool: getTool } = createMockPi();
 			registerUpdateStateTool(pi, { basePath: tmpDir, updateWidget: () => {} });
-			const tool = getLastRegisteredTool()!;
+			const tool = getTool("update_mission_state")!;
 			const result = await tool.execute(
 				"id",
 				{ action: "start_milestone", targetId: "milestone-1" },
@@ -131,7 +87,7 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-TOOL-015: start_milestone", () => {
 		it("sets milestone to active and updates currentMilestoneId", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -142,7 +98,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("sets startedAt on the milestone", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
 
 			const savedPlan = loadPlan(tmpDir)!;
@@ -151,7 +107,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("appends milestone_start progress event", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -162,7 +118,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("records reason in event metadata when provided", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(
 				tmpDir,
 				{ action: "start_milestone", targetId: "milestone-1", reason: "ready to go" },
@@ -177,7 +133,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("persists plan.json and state.json", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
 
 			const savedPlan = loadPlan(tmpDir);
@@ -188,7 +144,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("calls updateWidget", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
 			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan, updateWidget);
 
@@ -199,7 +155,15 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-TOOL-015: complete_milestone", () => {
 		it("sets milestone to done and sets completedAt", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ milestones: [makeMilestone({ status: "active" })] });
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						name: "Milestone One",
+						status: "active",
+						features: [makeFeature({ id: "feature-1", name: "Feature One" })],
+					}),
+				],
+			});
 			await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
 
 			const savedPlan = loadPlan(tmpDir)!;
@@ -209,7 +173,15 @@ describe("registerUpdateStateTool", () => {
 
 		it("appends milestone_complete progress event", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ milestones: [makeMilestone({ status: "active" })] });
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						name: "Milestone One",
+						status: "active",
+						features: [makeFeature({ id: "feature-1", name: "Feature One" })],
+					}),
+				],
+			});
 			await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -220,7 +192,15 @@ describe("registerUpdateStateTool", () => {
 
 		it("records reason in event metadata", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ milestones: [makeMilestone({ status: "active" })] });
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						name: "Milestone One",
+						status: "active",
+						features: [makeFeature({ id: "feature-1", name: "Feature One" })],
+					}),
+				],
+			});
 			await callTool(
 				tmpDir,
 				{ action: "complete_milestone", targetId: "milestone-1", reason: "all done" },
@@ -235,7 +215,15 @@ describe("registerUpdateStateTool", () => {
 
 		it("calls updateWidget", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ milestones: [makeMilestone({ status: "active" })] });
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						name: "Milestone One",
+						status: "active",
+						features: [makeFeature({ id: "feature-1", name: "Feature One" })],
+					}),
+				],
+			});
 			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
 			await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan, updateWidget);
 
@@ -246,7 +234,7 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-TOOL-015: skip_feature", () => {
 		it("sets feature to skipped", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "skip_feature", targetId: "feature-1" }, state, plan);
 
 			const savedPlan = loadPlan(tmpDir)!;
@@ -255,7 +243,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("increments totalFeaturesSkipped", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "skip_feature", targetId: "feature-1" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -264,7 +252,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("appends feature_skipped progress event", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "skip_feature", targetId: "feature-1" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -275,7 +263,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("records reason in event metadata when provided", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "skip_feature", targetId: "feature-1", reason: "not needed" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -285,7 +273,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("calls updateWidget", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
 			await callTool(tmpDir, { action: "skip_feature", targetId: "feature-1" }, state, plan, updateWidget);
 
@@ -296,7 +284,7 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-TOOL-015 / VAL-CROSS-018: block_feature", () => {
 		it("sets feature to blocked", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "block_feature", targetId: "feature-1" }, state, plan);
 
 			const savedPlan = loadPlan(tmpDir)!;
@@ -305,7 +293,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("appends feature_blocked progress event", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "block_feature", targetId: "feature-1" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -316,7 +304,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("records reason in event metadata when provided", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(
 				tmpDir,
 				{ action: "block_feature", targetId: "feature-1", reason: "external dependency missing" },
@@ -331,7 +319,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("persists plan.json and state.json", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "block_feature", targetId: "feature-1" }, state, plan);
 
 			const savedPlan = loadPlan(tmpDir);
@@ -342,7 +330,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("calls updateWidget", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
 			await callTool(tmpDir, { action: "block_feature", targetId: "feature-1" }, state, plan, updateWidget);
 
@@ -353,7 +341,7 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-TOOL-015: note", () => {
 		it("appends a plan_mutated progress event with the reason as detail", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "note", targetId: "anything", reason: "Important note here" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -364,7 +352,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("uses targetId as detail when reason is absent", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "note", targetId: "note text here" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -375,7 +363,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("persists state.json after note", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "note", targetId: "note", reason: "hello" }, state, plan);
 
 			const savedState = loadState(tmpDir);
@@ -384,7 +372,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("calls updateWidget for note action", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
 			await callTool(tmpDir, { action: "note", targetId: "note", reason: "test" }, state, plan, updateWidget);
 
@@ -395,7 +383,7 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-TOOL-016: validation of unknown targetId", () => {
 		it("returns error for unknown milestoneId in start_milestone", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "does-not-exist" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
@@ -404,7 +392,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("returns error for unknown milestoneId in complete_milestone", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const result = await callTool(
 				tmpDir,
 				{ action: "complete_milestone", targetId: "no-such-milestone" },
@@ -418,7 +406,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("returns error for unknown featureId in skip_feature", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const result = await callTool(tmpDir, { action: "skip_feature", targetId: "missing-feature" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
@@ -427,7 +415,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("returns error for unknown featureId in block_feature", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const result = await callTool(tmpDir, { action: "block_feature", targetId: "unknown-feature" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
@@ -438,7 +426,7 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-TOOL-016: invalid state preconditions", () => {
 		it("rejects completing a non-active milestone (pending status)", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ milestones: [makeMilestone({ status: "pending" })] });
+			const plan = localMakePlan({ milestones: [makeMilestone({ status: "pending" })] });
 			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
@@ -447,7 +435,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("rejects completing a non-active milestone (done status)", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ milestones: [makeMilestone({ status: "done" })] });
+			const plan = localMakePlan({ milestones: [makeMilestone({ status: "done" })] });
 			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
@@ -456,7 +444,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("rejects completing a non-active milestone (failed status)", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ milestones: [makeMilestone({ status: "failed" })] });
+			const plan = localMakePlan({ milestones: [makeMilestone({ status: "failed" })] });
 			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
@@ -465,7 +453,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("rejects starting an already-active milestone", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ milestones: [makeMilestone({ status: "active" })] });
+			const plan = localMakePlan({ milestones: [makeMilestone({ status: "active" })] });
 			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
@@ -474,8 +462,8 @@ describe("registerUpdateStateTool", () => {
 
 		it("rejects skipping a completed (done) feature", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({
-				milestones: [makeMilestone({ features: [makeFeature({ status: "done" })] })],
+			const plan = localMakePlan({
+				milestones: [makeMilestone({ features: [makeFeature({ id: "feature-1", status: "done" })] })],
 			});
 			const result = await callTool(tmpDir, { action: "skip_feature", targetId: "feature-1" }, state, plan);
 
@@ -485,7 +473,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("does not modify state.json or plan.json when returning an error", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "start_milestone", targetId: "nonexistent" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
@@ -516,7 +504,7 @@ describe("registerUpdateStateTool", () => {
 	describe("multi-feature plan handling", () => {
 		it("correctly targets the right feature when multiple features exist", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					{
 						...makeMilestone(),
@@ -537,7 +525,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("correctly targets feature across multiple milestones", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({ id: "milestone-1", features: [makeFeature({ id: "feature-1" })] }),
 					makeMilestone({ id: "milestone-2", features: [makeFeature({ id: "feature-2" })] }),
@@ -554,7 +542,7 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-CROSS-017: tool errors return structured content, never throw", () => {
 		it("returns error in content for unknown targetId (not throws)", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const fn = () => callTool(tmpDir, { action: "start_milestone", targetId: "ghost" }, state, plan);
 			const result = await fn();
 			expect(result.content[0].text).toContain("Error");
@@ -562,7 +550,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("returns error in content for invalid precondition (not throws)", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const fn = () => callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
 			const result = await fn();
 			expect(result.content[0].text).toContain("Error");
@@ -572,7 +560,7 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-SCOPE-001: add_feature", () => {
 		it("adds a new pending feature to the specified milestone", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(
 				tmpDir,
 				{
@@ -600,7 +588,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("increments planVersion", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ planVersion: 3 });
+			const plan = localMakePlan({ planVersion: 3 });
 			await callTool(
 				tmpDir,
 				{
@@ -620,7 +608,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("appends an add-feature mutation to plan history", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(
 				tmpDir,
 				{
@@ -643,7 +631,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("calls updateWidget with the updated plan", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
 			await callTool(
 				tmpDir,
@@ -664,7 +652,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("returns error for unknown milestoneId", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const result = await callTool(
 				tmpDir,
 				{
@@ -684,7 +672,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("returns error when name is missing", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const result = await callTool(
 				tmpDir,
 				{ action: "add_feature", targetId: "milestone-1", description: "d", acceptanceCriteria: ["x"] },
@@ -697,7 +685,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("returns error when adding to a done milestone", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ milestones: [makeMilestone({ status: "done" })] });
+			const plan = localMakePlan({ milestones: [makeMilestone({ status: "done" })] });
 			const result = await callTool(
 				tmpDir,
 				{
@@ -719,7 +707,7 @@ describe("registerUpdateStateTool", () => {
 	describe("VAL-SCOPE-002: remove_feature", () => {
 		it("removes a pending feature from the plan", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [
 					makeMilestone({
 						features: [
@@ -739,7 +727,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("increments planVersion", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({ planVersion: 5 });
+			const plan = localMakePlan({ planVersion: 5 });
 			await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
 
 			const savedPlan = loadPlan(tmpDir)!;
@@ -748,7 +736,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("appends a remove-feature mutation to plan history", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
 
 			const history = readHistory(tmpDir);
@@ -760,7 +748,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("calls updateWidget with the updated plan", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
 			await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan, updateWidget);
 
@@ -769,8 +757,8 @@ describe("registerUpdateStateTool", () => {
 
 		it("rejects removing a completed (done) feature", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({
-				milestones: [makeMilestone({ features: [makeFeature({ status: "done" })] })],
+			const plan = localMakePlan({
+				milestones: [makeMilestone({ features: [makeFeature({ id: "feature-1", status: "done" })] })],
 			});
 			const result = await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
 
@@ -780,8 +768,8 @@ describe("registerUpdateStateTool", () => {
 
 		it("rejects removing an active feature", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({
-				milestones: [makeMilestone({ features: [makeFeature({ status: "active" })] })],
+			const plan = localMakePlan({
+				milestones: [makeMilestone({ features: [makeFeature({ id: "feature-1", status: "active" })] })],
 			});
 			const result = await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);
 
@@ -791,7 +779,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("returns error for unknown featureId", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan();
+			const plan = localMakePlan();
 			const result = await callTool(tmpDir, { action: "remove_feature", targetId: "does-not-exist" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
@@ -800,7 +788,7 @@ describe("registerUpdateStateTool", () => {
 
 		it("does not modify plan.json when returning an error", async () => {
 			const state = makeExecutingState();
-			const plan = makePlan({
+			const plan = localMakePlan({
 				milestones: [makeMilestone({ features: [makeFeature({ status: "done" })] })],
 			});
 			await callTool(tmpDir, { action: "remove_feature", targetId: "feature-1" }, state, plan);

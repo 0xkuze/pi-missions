@@ -2,80 +2,37 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { saveState } from "../../extensions/state/manager.js";
 import { registerCommitChangesTool } from "../../extensions/tools/commit-changes.js";
-import type { Feature, MissionPlan, MissionState } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
+import type { MissionPlan, MissionState } from "../../extensions/types.js";
+import { createMockPi, makeFeature, makeMilestone, makePlan, makeState, type ToolResult } from "../helpers/index.js";
 
-type ToolResult = { content: Array<{ type: string; text: string }>; details: unknown };
-type ExecutableTool = { execute: (...args: unknown[]) => Promise<ToolResult> };
+const COMMIT_DEFAULTS = {
+	gitSnapshot: { headCommit: "abc123", dirtyFiles: [] as string[], autoCommitEnabled: true },
+};
 
-function makeMockPi(): { pi: ExtensionAPI; getLastRegisteredTool: () => ExecutableTool | null } {
-	let registeredTool: ExecutableTool | null = null;
-	const pi = {
-		registerTool: (tool: ExecutableTool) => {
-			registeredTool = tool;
-		},
-	} as unknown as ExtensionAPI;
-	return {
-		pi,
-		getLastRegisteredTool: () => registeredTool,
-	};
+const FEATURE_DEFAULTS = {
+	id: "feature-1",
+	name: "user-model",
+	description: "Create user entity",
+	acceptanceCriteria: ["User entity created"],
+	relevantFiles: ["src/models/user.ts"],
+	status: "done" as const,
+};
+
+function localMakeState(overrides: Partial<MissionState> = {}) {
+	return makeState({ ...COMMIT_DEFAULTS, ...overrides });
 }
 
-function makeState(overrides: Partial<MissionState> = {}): MissionState {
-	return {
-		missionId: "test-mission",
-		status: "executing",
-		progressLog: [],
-		startedAt: nowISO(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-		gitSnapshot: {
-			headCommit: "abc123",
-			dirtyFiles: [],
-			autoCommitEnabled: true,
-		},
-		...overrides,
-	};
+function localMakeFeature(overrides: Partial<Parameters<typeof makeFeature>[0]> = {}) {
+	return makeFeature({ ...FEATURE_DEFAULTS, ...overrides });
 }
 
-function makeFeature(overrides: Partial<Feature> = {}): Feature {
-	return {
-		id: "feature-1",
-		name: "user-model",
-		description: "Create user entity",
-		acceptanceCriteria: ["User entity created"],
-		relevantFiles: ["src/models/user.ts"],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status: "done",
-		attempts: [],
-		...overrides,
-	};
-}
-
-function makePlan(features: Feature[] = [makeFeature()]): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test mission",
-		planVersion: 1,
-		milestones: [
-			{
-				id: "milestone-1",
-				name: "Foundation",
-				description: "Core",
-				features,
-				status: "active",
-			},
-		],
+function localMakePlan(features = [localMakeFeature()]) {
+	return makePlan({
+		milestones: [makeMilestone({ id: "milestone-1", name: "Foundation", features, status: "active" })],
 		validationCommands: ["bun test"],
-		modelAssignment: {},
-		createdAt: nowISO(),
-	};
+	});
 }
 
 interface CallToolOptions {
@@ -97,8 +54,8 @@ async function callTool(
 		getChangedFiles = () => ["src/models/user.ts"],
 		stageAndCommit = () => "deadbeef1234567890123456789012345678901234",
 		updateWidget = () => {},
-		state = makeState(),
-		plan = makePlan(),
+		state = localMakeState(),
+		plan = localMakePlan(),
 	} = options;
 
 	saveState(basePath, state);
@@ -107,7 +64,7 @@ async function callTool(
 	const { join: pathJoin } = await import("node:path");
 	writeFileSync(pathJoin(basePath, "plan.json"), JSON.stringify(plan, null, 2), "utf8");
 
-	const { pi, getLastRegisteredTool } = makeMockPi();
+	const { pi, getRegisteredTool } = createMockPi();
 	registerCommitChangesTool(pi, {
 		basePath,
 		projectDir: basePath,
@@ -116,8 +73,8 @@ async function callTool(
 		_getChangedFilesOverride: getChangedFiles,
 		_stageAndCommitOverride: stageAndCommit,
 	});
-	const tool = getLastRegisteredTool()!;
-	return tool.execute("tool-call-id", params, undefined, undefined, undefined) as Promise<ToolResult>;
+	const tool = getRegisteredTool("commit_changes")!;
+	return tool.execute("tool-call-id", params, undefined, undefined, undefined as never) as Promise<ToolResult>;
 }
 
 describe("registerCommitChangesTool", () => {
@@ -174,10 +131,10 @@ describe("registerCommitChangesTool", () => {
 		});
 
 		it("uses 'mission: fix <name>' for fix features", async () => {
-			const fixFeature = makeFeature({
+			const fixFeature = localMakeFeature({
 				fixOrigin: { sourceKind: "worker-failure", sourceFeatureId: "other-feature" },
 			});
-			const plan = makePlan([fixFeature]);
+			const plan = localMakePlan([fixFeature]);
 			const stageAndCommit = mock(() => "abc123");
 			await callTool(tmpDir, { featureId: "feature-1" }, { plan, stageAndCommit });
 			const [, , message] = stageAndCommit.mock.calls[0] as unknown as [string, string[], string];

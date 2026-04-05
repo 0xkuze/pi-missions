@@ -2,84 +2,37 @@ import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadPlan, savePlan, saveState } from "../../extensions/state/manager.js";
 import { readHistory } from "../../extensions/state/plan-history.js";
 import { registerCreateFixTool } from "../../extensions/tools/create-fix.js";
-import type { Feature, MissionPlan, MissionState } from "../../extensions/types.js";
+import type { MissionPlan, MissionState } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
+import { createMockPi, makeFeature, makeMilestone, makePlan, makeState, type ToolResult } from "../helpers/index.js";
 
-type ToolResult = { content: Array<{ type: string; text: string }>; details: unknown };
-type ExecutableTool = { execute: (...args: unknown[]) => Promise<ToolResult> };
+const EXISTING_FEATURE = {
+	id: "feature-1",
+	name: "existing-feature",
+	description: "An existing feature",
+	acceptanceCriteria: ["Feature works"],
+	relevantFiles: ["src/feature.ts"],
+	status: "done" as const,
+};
 
-function makeMockPi(): { pi: ExtensionAPI; getLastRegisteredTool: () => ExecutableTool | null } {
-	let registeredTool: ExecutableTool | null = null;
-	const pi = {
-		registerTool: (tool: ExecutableTool) => {
-			registeredTool = tool;
-		},
-	} as unknown as ExtensionAPI;
-	return {
-		pi,
-		getLastRegisteredTool: () => registeredTool,
-	};
-}
-
-function makeState(overrides: Partial<MissionState> = {}): MissionState {
-	return {
-		missionId: "test-mission",
-		status: "executing",
-		progressLog: [],
-		startedAt: nowISO(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-		...overrides,
-	};
-}
-
-function makeFeature(overrides: Partial<Feature> = {}): Feature {
-	return {
-		id: "feature-1",
-		name: "existing-feature",
-		description: "An existing feature",
-		acceptanceCriteria: ["Feature works"],
-		relevantFiles: ["src/feature.ts"],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status: "done",
-		attempts: [],
-		...overrides,
-	};
-}
-
-function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test mission",
-		planVersion: 1,
+function localMakePlan(overrides: Partial<MissionPlan> = {}) {
+	return makePlan({
 		milestones: [
-			{
+			makeMilestone({
 				id: "milestone-1",
 				name: "Foundation",
 				description: "Core foundation",
-				features: [makeFeature()],
+				features: [makeFeature(EXISTING_FEATURE)],
 				status: "active",
-			},
-			{
-				id: "milestone-2",
-				name: "Validation",
-				description: "Validation milestone",
-				features: [],
-				status: "pending",
-			},
+			}),
+			makeMilestone({ id: "milestone-2", name: "Validation", description: "Validation milestone" }),
 		],
 		validationCommands: ["bun test"],
-		modelAssignment: {},
-		createdAt: nowISO(),
 		...overrides,
-	};
+	});
 }
 
 interface CallToolOptions {
@@ -102,7 +55,7 @@ async function callTool(
 	},
 	options: CallToolOptions = {},
 ): Promise<ToolResult> {
-	const { state = makeState(), plan = makePlan(), updateWidget = () => {}, saveStateToo = true } = options;
+	const { state = makeState(), plan = localMakePlan(), updateWidget = () => {}, saveStateToo = true } = options;
 
 	savePlan(basePath, plan);
 	if (saveStateToo) {
@@ -126,10 +79,10 @@ async function callTool(
 		});
 	}
 
-	const { pi, getLastRegisteredTool } = makeMockPi();
+	const { pi, getRegisteredTool } = createMockPi();
 	registerCreateFixTool(pi, { basePath, updateWidget });
-	const tool = getLastRegisteredTool()!;
-	return tool.execute("tool-call-id", params, undefined, undefined, undefined) as Promise<ToolResult>;
+	const tool = getRegisteredTool("create_fix_feature")!;
+	return tool.execute("tool-call-id", params, undefined, undefined, undefined as never) as Promise<ToolResult>;
 }
 
 describe("registerCreateFixTool", () => {
@@ -237,7 +190,7 @@ describe("registerCreateFixTool", () => {
 		});
 
 		it("increments planVersion in plan.json", async () => {
-			const originalPlan = makePlan();
+			const originalPlan = localMakePlan();
 			await callTool(tmpDir, {
 				milestoneId: "milestone-1",
 				name: "fix-auth-bug",
@@ -352,7 +305,7 @@ describe("registerCreateFixTool", () => {
 		});
 
 		it("does not modify plan on unknown milestoneId", async () => {
-			const planBefore = makePlan();
+			const planBefore = localMakePlan();
 			await callTool(tmpDir, {
 				milestoneId: "nonexistent-milestone",
 				name: "fix",
@@ -468,9 +421,9 @@ describe("registerCreateFixTool", () => {
 		it("returns error when no plan exists", async () => {
 			const emptyDir = mkdtempSync(join(tmpdir(), "no-plan-"));
 			try {
-				const { pi, getLastRegisteredTool } = makeMockPi();
+				const { pi, getRegisteredTool } = createMockPi();
 				registerCreateFixTool(pi, { basePath: emptyDir, updateWidget: () => {} });
-				const tool = getLastRegisteredTool()!;
+				const tool = getRegisteredTool("create_fix_feature")!;
 				const result = (await tool.execute(
 					"tool-call-id",
 					{
@@ -528,7 +481,7 @@ describe("registerCreateFixTool", () => {
 		});
 
 		it("does not alter other milestones features", async () => {
-			const originalPlan = makePlan();
+			const originalPlan = localMakePlan();
 			const m1FeatureCount = originalPlan.milestones.find((m) => m.id === "milestone-1")!.features.length;
 
 			await callTool(tmpDir, {

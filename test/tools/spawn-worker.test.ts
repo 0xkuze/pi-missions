@@ -2,66 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { savePlan, saveState } from "../../extensions/state/manager.js";
 import { registerSpawnWorkerTool } from "../../extensions/tools/spawn-worker.js";
-import type { Feature, Milestone, MissionPlan, MissionState } from "../../extensions/types.js";
-
-function makeFeature(overrides: Partial<Feature> = {}): Feature {
-	return {
-		id: "feat-1",
-		name: "Feature One",
-		description: "Implement feature one",
-		acceptanceCriteria: ["It works"],
-		relevantFiles: ["src/index.ts"],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status: "pending",
-		attempts: [],
-		...overrides,
-	};
-}
-
-function makeMilestone(features: Feature[] = [], overrides: Partial<Milestone> = {}): Milestone {
-	return {
-		id: "milestone-1",
-		name: "Core",
-		description: "Core milestone",
-		features,
-		status: "pending",
-		...overrides,
-	};
-}
-
-function makePlan(milestones: Milestone[] = [], overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test mission",
-		planVersion: 1,
-		milestones,
-		validationCommands: [],
-		modelAssignment: {},
-		createdAt: new Date().toISOString(),
-		approvedAt: new Date().toISOString(),
-		...overrides,
-	};
-}
-
-function makeState(overrides: Partial<MissionState> = {}): MissionState {
-	return {
-		missionId: "mission-1",
-		status: "approved",
-		currentMilestoneId: undefined,
-		currentFeatureId: undefined,
-		progressLog: [],
-		startedAt: new Date().toISOString(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-		...overrides,
-	};
-}
+import { createMockPi, makeFeature, makeMilestone, makePlan, makeState } from "../helpers/index.js";
 
 function makeMessageEndLine(role: string, text: string): string {
 	return JSON.stringify({
@@ -141,13 +84,42 @@ let mockSpawnFn: ReturnType<typeof makeMockSpawn>;
 let executeFn: ((_id: string, params: unknown) => Promise<{ content: Array<{ type: string; text: string }> }>) | null =
 	null;
 
-function makePiMock(_updateWidgetFn?: () => void): ExtensionAPI {
-	const pi = {
-		registerTool: (_opts: { name: string; execute: (...args: unknown[]) => unknown }) => {
-			executeFn = _opts.execute as typeof executeFn;
+function localMakeState(overrides: Partial<Parameters<typeof makeState>[0]> = {}) {
+	return makeState({ status: "approved", ...overrides });
+}
+
+function localMakeFeature(overrides: Partial<Parameters<typeof makeFeature>[0]> = {}) {
+	return makeFeature({
+		id: "feat-1",
+		name: "Feature One",
+		description: "Implement feature one",
+		acceptanceCriteria: ["It works"],
+		relevantFiles: ["src/index.ts"],
+		...overrides,
+	});
+}
+
+function localMakeMilestone(
+	features: ReturnType<typeof makeFeature>[] = [],
+	overrides: Partial<Parameters<typeof makeMilestone>[0]> = {},
+) {
+	return makeMilestone({ id: "milestone-1", name: "Core", description: "Core milestone", features, ...overrides });
+}
+
+function localMakePlan(
+	milestones: ReturnType<typeof makeMilestone>[] = [],
+	overrides: Partial<Parameters<typeof makePlan>[0]> = {},
+) {
+	return makePlan({ milestones, approvedAt: new Date().toISOString(), ...overrides });
+}
+
+function makePiMock(_updateWidgetFn?: () => void) {
+	const mock = createMockPi({
+		registerTool: (opts: { name: string; execute: (...args: unknown[]) => unknown }) => {
+			executeFn = opts.execute as typeof executeFn;
 		},
-	} as unknown as ExtensionAPI;
-	return pi;
+	});
+	return mock.pi;
 }
 
 beforeEach(() => {
@@ -217,7 +189,7 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("returns error when state is not approved or executing", async () => {
-			const state = makeState({ status: "planning" });
+			const state = localMakeState({ status: "planning" });
 			saveState(testDir, state);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -226,7 +198,7 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("returns error when state is draft_review", async () => {
-			const state = makeState({ status: "draft_review" });
+			const state = localMakeState({ status: "draft_review" });
 			saveState(testDir, state);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -235,9 +207,9 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("returns error when feature not found in plan", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const plan = makePlan([makeMilestone([makeFeature()])]);
+			const plan = localMakePlan([localMakeMilestone([localMakeFeature()])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "nonexistent-feature" });
@@ -246,7 +218,7 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("returns error when no plan.json exists", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -258,10 +230,10 @@ describe("registerSpawnWorkerTool", () => {
 	describe("VAL-TOOL-020: rejects blocked, skipped, done features", () => {
 		for (const status of ["blocked", "skipped", "done"] as const) {
 			it(`returns error for feature with status '${status}'`, async () => {
-				const state = makeState({ status: "executing" });
+				const state = localMakeState({ status: "executing" });
 				saveState(testDir, state);
-				const feature = makeFeature({ status });
-				const plan = makePlan([makeMilestone([feature])]);
+				const feature = localMakeFeature({ status });
+				const plan = localMakePlan([localMakeMilestone([feature])]);
 				savePlan(testDir, plan);
 				registerTool(mockSpawnFn);
 				const result = await executeFn!("id", { featureId: "feat-1" });
@@ -273,10 +245,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-TOOL-021: rejects concurrent execution", () => {
 		it("returns error when currentFeatureId is set", async () => {
-			const state = makeState({ status: "executing", currentFeatureId: "some-other-feature" });
+			const state = localMakeState({ status: "executing", currentFeatureId: "some-other-feature" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -287,11 +259,11 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-TOOL-019: enforces feature dependency ordering", () => {
 		it("returns error when a dependency is not done", async () => {
-			const state = makeState({ status: "executing" });
+			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
-			const dep = makeFeature({ id: "dep-1", status: "pending" });
-			const feature = makeFeature({ id: "feat-1", dependencies: ["dep-1"] });
-			const plan = makePlan([makeMilestone([dep, feature])]);
+			const dep = localMakeFeature({ id: "dep-1", status: "pending" });
+			const feature = localMakeFeature({ id: "feat-1", dependencies: ["dep-1"] });
+			const plan = localMakePlan([localMakeMilestone([dep, feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -300,11 +272,11 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("succeeds when all dependencies are done", async () => {
-			const state = makeState({ status: "executing" });
+			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
-			const dep = makeFeature({ id: "dep-1", status: "done" });
-			const feature = makeFeature({ id: "feat-1", dependencies: ["dep-1"] });
-			const plan = makePlan([makeMilestone([dep, feature])]);
+			const dep = localMakeFeature({ id: "dep-1", status: "done" });
+			const feature = localMakeFeature({ id: "feat-1", dependencies: ["dep-1"] });
+			const plan = localMakePlan([localMakeMilestone([dep, feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -312,10 +284,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("succeeds when there are no dependencies", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature({ id: "feat-1", dependencies: [] });
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature({ id: "feat-1", dependencies: [] });
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -325,10 +297,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-TOOL-007: transitions approved -> executing on first spawn_worker call", () => {
 		it("transitions state from approved to executing", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -338,10 +310,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("does not re-transition if already executing", async () => {
-			const state = makeState({ status: "executing" });
+			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -353,10 +325,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-TOOL-004: generates skill and prompt files, spawns blocking process", () => {
 		it("spawns the pi process and blocks until exit", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -365,10 +337,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("passes --mode json, -p, --no-session, --model, --skill, --append-system-prompt to pi process", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -381,10 +353,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("passes --model arg when config or plan has worker model", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])], {
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])], {
 				modelAssignment: { worker: "claude-sonnet-4" },
 			});
 			savePlan(testDir, plan);
@@ -396,10 +368,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("does not pass --model when no worker model configured", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -409,10 +381,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-WORKER-009: worker spawned with correct cwd", () => {
 		it("sets cwd to the projectDir", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -422,10 +394,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-WORKER-009: spawned process uses stdio ['ignore', 'pipe', 'pipe']", () => {
 		it("uses correct stdio config", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -435,10 +407,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-WORKER-004: files written to correct runtime directory", () => {
 		it("writes worker-skill.md to runtime/<featureId>/1/ on first attempt", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -447,10 +419,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("writes worker-prompt.md to runtime/<featureId>/1/", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -459,10 +431,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("writes worker-context.md to runtime/<featureId>/1/", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -475,9 +447,9 @@ describe("registerSpawnWorkerTool", () => {
 				stdoutLines: [makeMessageEndLine("assistant", "Worker failed.")],
 				exitCode: 1,
 			});
-			const state = makeState({ status: "executing" });
+			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
-			const feature = makeFeature({
+			const feature = localMakeFeature({
 				status: "active",
 				attempts: [
 					{
@@ -491,7 +463,7 @@ describe("registerSpawnWorkerTool", () => {
 					},
 				],
 			});
-			const plan = makePlan([makeMilestone([feature])]);
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(failMock);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -502,10 +474,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-TOOL-005: captures output and synthesizes WorkerResult", () => {
 		it("writes stdout.log to runtime directory", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -514,10 +486,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("writes stderr.log to runtime directory", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -526,10 +498,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("writes result.json with WorkerResult to runtime directory", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -541,10 +513,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("writes metadata.json to runtime directory", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -562,10 +534,10 @@ describe("registerSpawnWorkerTool", () => {
 				stdoutLines: [makeMessageEndLine("assistant", "Done!")],
 				exitCode: 0,
 			});
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(successMock);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -582,10 +554,10 @@ describe("registerSpawnWorkerTool", () => {
 				stdoutLines: [makeMessageEndLine("assistant", "Failed.")],
 				exitCode: 1,
 			});
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(failMock);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -602,9 +574,9 @@ describe("registerSpawnWorkerTool", () => {
 				stdoutLines: [makeMessageEndLine("assistant", "Failed.")],
 				exitCode: 1,
 			});
-			const state = makeState({ status: "executing" });
+			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
-			const feature = makeFeature({
+			const feature = localMakeFeature({
 				status: "active",
 				attempts: [
 					{
@@ -627,7 +599,7 @@ describe("registerSpawnWorkerTool", () => {
 					},
 				],
 			});
-			const plan = makePlan([makeMilestone([feature])]);
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(failMock);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -637,10 +609,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("clears currentFeatureId after completion", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -650,10 +622,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("appends worker_spawn and worker_complete progress events", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -667,9 +639,9 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-TOOL-007: retry increments attempt number", () => {
 		it("attempt number is 2 when feature already has 1 failed attempt", async () => {
-			const state = makeState({ status: "executing" });
+			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
-			const feature = makeFeature({
+			const feature = localMakeFeature({
 				status: "active",
 				attempts: [
 					{
@@ -683,7 +655,7 @@ describe("registerSpawnWorkerTool", () => {
 					},
 				],
 			});
-			const plan = makePlan([makeMilestone([feature])]);
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -695,9 +667,9 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("additionalContext included in prompt on retry", async () => {
-			const state = makeState({ status: "executing" });
+			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
-			const feature = makeFeature({
+			const feature = localMakeFeature({
 				status: "active",
 				attempts: [
 					{
@@ -711,7 +683,7 @@ describe("registerSpawnWorkerTool", () => {
 					},
 				],
 			});
-			const plan = makePlan([makeMilestone([feature])]);
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1", additionalContext: "Fix the broken tests" });
@@ -724,10 +696,10 @@ describe("registerSpawnWorkerTool", () => {
 	describe("VAL-WORKER-010: returns tool error if pi binary not found", () => {
 		it("returns error when spawning fails with ENOENT", async () => {
 			const errorMock = makeMockSpawn({ error: Object.assign(new Error("not found"), { code: "ENOENT" }) });
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(errorMock);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -737,10 +709,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("feature status transitions tracked (VAL-CROSS-013)", () => {
 		it("records completedAt and durationMs on successful attempt", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -755,10 +727,10 @@ describe("registerSpawnWorkerTool", () => {
 
 		it("records completedAt and durationMs on failed attempt", async () => {
 			const failMock = makeMockSpawn({ exitCode: 1, stdoutLines: [makeMessageEndLine("assistant", "Err.")] });
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(failMock);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -773,10 +745,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("active feature state", () => {
 		it("sets feature to active during execution", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature({ status: "pending" });
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature({ status: "pending" });
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
@@ -788,10 +760,10 @@ describe("registerSpawnWorkerTool", () => {
 
 	describe("VAL-API-002: thinking level saved and restored around worker spawn", () => {
 		it("saves thinking level before spawn and restores after success", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 
 			const setLevelCalls: ThinkingLevel[] = [];
@@ -808,10 +780,10 @@ describe("registerSpawnWorkerTool", () => {
 				stdoutLines: [makeMessageEndLine("assistant", "Failed.")],
 				exitCode: 1,
 			});
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 
 			const setLevelCalls: ThinkingLevel[] = [];
@@ -825,10 +797,10 @@ describe("registerSpawnWorkerTool", () => {
 
 		it("restores thinking level even when pi binary not found (ENOENT)", async () => {
 			const errorMock = makeMockSpawn({ error: Object.assign(new Error("not found"), { code: "ENOENT" }) });
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 
 			const setLevelCalls: ThinkingLevel[] = [];
@@ -841,10 +813,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("works without getThinkingLevel and setThinkingLevel deps (optional)", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 
 			registerTool(mockSpawnFn);
@@ -853,10 +825,10 @@ describe("registerSpawnWorkerTool", () => {
 		});
 
 		it("restores the exact level that was saved before spawn", async () => {
-			const state = makeState({ status: "approved" });
+			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
-			const feature = makeFeature();
-			const plan = makePlan([makeMilestone([feature])]);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 
 			let currentLevel: ThinkingLevel = "xhigh";
