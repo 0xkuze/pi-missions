@@ -143,6 +143,96 @@ export function renderMissionOutline(plan: MissionPlan, width = 40, style?: Fram
 	return frame("Mission Outline", lines, width, undefined, style);
 }
 
+function renderFeaturePanelContent(
+	state: MissionState,
+	plan: MissionPlan,
+	contentWidth: number,
+	style?: FrameStyle,
+): string[] {
+	const feature = findCurrentFeature(state, plan);
+	const milestone = findCurrentMilestone(state, plan);
+	const lines: string[] = [];
+
+	lines.push(section("Current Feature", contentWidth, style));
+
+	if (!feature) {
+		lines.push("(no feature active)");
+		return lines;
+	}
+
+	lines.push(feature.name);
+
+	if (milestone) {
+		lines.push(`Milestone: ${milestone.name}`);
+	}
+
+	const workerModel = plan.modelAssignment.worker;
+	if (workerModel) {
+		lines.push(`Worker: ${workerModel}`);
+	}
+
+	const attemptCount = feature.attempts.length;
+	const maxRetries = 3;
+	lines.push(`Attempt: ${attemptCount + 1}/${maxRetries}`);
+
+	if (feature.acceptanceCriteria.length > 0) {
+		lines.push(section("Acceptance Criteria", contentWidth, style));
+		for (const criterion of feature.acceptanceCriteria) {
+			lines.push(`\u2022 ${criterion}`);
+		}
+	}
+
+	const warnings = buildWarnings(state);
+	if (warnings.length > 0) {
+		lines.push(section("Warnings", contentWidth, style));
+		for (const warning of warnings) {
+			lines.push(`\u2022 ${warning}`);
+		}
+	}
+
+	return lines;
+}
+
+function renderOutlinePanelContent(plan: MissionPlan, contentWidth: number, style?: FrameStyle): string[] {
+	const lines: string[] = [];
+
+	lines.push(section("Mission Outline", contentWidth, style));
+
+	for (const milestone of plan.milestones) {
+		lines.push(milestone.name);
+		for (const feature of milestone.features) {
+			const icon = featureStatusIcon(feature);
+			const fixMarker = feature.fixOrigin ? ` ${ICON_FIX}` : "";
+			lines.push(`  ${icon} ${feature.name}${fixMarker}`);
+		}
+	}
+
+	return lines;
+}
+
+function renderLogPanelContent(state: MissionState, contentWidth: number, style?: FrameStyle): string[] {
+	const lines: string[] = [];
+
+	lines.push(section("Progress Log", contentWidth, style));
+
+	if (state.progressLog.length === 0) {
+		lines.push("(no events yet)");
+		return lines;
+	}
+
+	const events = [...state.progressLog].sort(
+		(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+	);
+
+	for (const event of events) {
+		const time = formatRelativeTime(event.timestamp);
+		const icon = progressEventIcon(event.type);
+		lines.push(`${time.padEnd(4)} ${icon} ${event.detail}`);
+	}
+
+	return lines;
+}
+
 function progressEventIcon(type: ProgressEvent["type"]): string {
 	switch (type) {
 		case "feature_complete":
@@ -748,36 +838,34 @@ export class MissionControlComponent {
 	}
 
 	private renderMainOverlay(state: MissionState, plan: MissionPlan | null, width: number): string[] {
-		const leftWidth = Math.floor(width / 2) - 1;
-		const rightWidth = width - leftWidth - 1;
+		const contentWidth = width - 4;
+		const colWidth = Math.floor(contentWidth / 2);
+		const rightColWidth = contentWidth - colWidth;
 
-		const leftLines = plan
-			? renderCurrentFeaturePanel(state, plan, leftWidth, this.style)
-			: frame("Current Feature", ["(no plan loaded)"], leftWidth, undefined, this.style);
+		const leftContent = plan
+			? renderFeaturePanelContent(state, plan, colWidth, this.style)
+			: [section("Current Feature", colWidth, this.style), "(no plan loaded)"];
+
 		const rightOutline = plan
-			? renderMissionOutline(plan, rightWidth, this.style)
-			: frame("Mission Outline", ["(no plan loaded)"], rightWidth, undefined, this.style);
-		const rightLog = renderProgressLog(state, rightWidth, this.style);
-		const rightLines = [...rightOutline, "", ...rightLog];
+			? renderOutlinePanelContent(plan, rightColWidth, this.style)
+			: [section("Mission Outline", rightColWidth, this.style), "(no plan loaded)"];
+		const rightLog = renderLogPanelContent(state, rightColWidth, this.style);
+		const rightContent = [...rightOutline, "", ...rightLog];
 
-		const maxRows = Math.max(leftLines.length, rightLines.length);
-		const output: string[] = [];
+		const maxRows = Math.max(leftContent.length, rightContent.length);
+		const bodyLines: string[] = [];
 
 		for (let i = 0; i < maxRows; i++) {
-			const rawLeft = leftLines[i] ?? "";
-			const leftTrunc = truncateToWidth(rawLeft, leftWidth);
-			const leftPad = leftWidth - visibleWidth(leftTrunc);
+			const rawLeft = leftContent[i] ?? "";
+			const leftTrunc = truncateToWidth(rawLeft, colWidth);
+			const leftPad = colWidth - visibleWidth(leftTrunc);
 			const left = leftPad > 0 ? leftTrunc + " ".repeat(leftPad) : leftTrunc;
-			const right = truncateToWidth(rightLines[i] ?? "", rightWidth);
-			output.push(`${left} ${right}`);
+			const right = truncateToWidth(rightContent[i] ?? "", rightColWidth);
+			bodyLines.push(`${left}${right}`);
 		}
 
-		output.push("");
-		for (const line of renderKeyboardShortcuts(width)) {
-			output.push(line);
-		}
-
-		return output;
+		const footer = "P: Pause  S: Skip  D: Done  R: Redirect  M: Models  V: Validate  L: Logs  H: History  Esc: Close";
+		return frame("Mission Control", bodyLines, width, footer, this.style);
 	}
 
 	invalidate(): void {}

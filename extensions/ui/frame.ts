@@ -67,7 +67,7 @@ export function frame(
 	const styledTitle = tf(title);
 	const titleText = ` ${styledTitle} `;
 	const titleVW = visibleWidth(titleText);
-	const topFill = Math.max(0, width - 2 - titleVW);
+	const topFill = Math.max(0, width - 3 - titleVW);
 	const topBorder = `${b(BOX_TL + BOX_H)}${titleText}${b(BOX_H.repeat(topFill) + BOX_TR)}`;
 
 	let bottomBorder: string;
@@ -75,7 +75,7 @@ export function frame(
 		const styledFooter = styleFooter(footerLine, style?.accentFn);
 		const footerText = ` ${styledFooter} `;
 		const footerVW = visibleWidth(footerText);
-		const bottomFill = Math.max(0, width - 2 - footerVW);
+		const bottomFill = Math.max(0, width - 3 - footerVW);
 		bottomBorder = `${b(BOX_BL + BOX_H)}${footerText}${b(BOX_H.repeat(bottomFill) + BOX_BR)}`;
 	} else {
 		bottomBorder = b(`${BOX_BL}${BOX_H.repeat(width - 2)}${BOX_BR}`);

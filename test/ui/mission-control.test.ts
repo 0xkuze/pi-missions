@@ -920,6 +920,51 @@ describe("MissionControlComponent draft_review approve", () => {
 	});
 });
 
+describe("MissionControlComponent main overlay frame wrapping", () => {
+	it("wraps main overlay in a single frame with title and footer", () => {
+		const tmpDir = join(tmpdir(), `mc-frame-test-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const feature = makeFeature("f1", "active", "jwt-tokens");
+			const milestone = makeMilestone("m1", [feature], "active");
+			const plan = makePlan([milestone]);
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f1",
+				progressLog: [makeEvent("feature_start", "started jwt-tokens", 60_000)],
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI();
+			const component = new MissionControlComponent(tui, () => {}, deps);
+
+			const width = 80;
+			const lines = component.render(width);
+			const text = lines.join("\n");
+
+			expect(lines[0]).toContain("\u250c");
+			expect(lines[0]).toContain("Mission Control");
+
+			const lastLine = lines[lines.length - 1]!;
+			expect(lastLine).toContain("\u2518");
+
+			expect(text).toContain("Esc: Close");
+			expect(text).toContain("P: Pause");
+			expect(text).toContain("S: Skip");
+
+			expect(text).toContain("Current Feature");
+			expect(text).toContain("Mission Outline");
+			expect(text).toContain("Progress Log");
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+});
+
 describe("MissionControlComponent ANSI-aware two-column layout", () => {
 	it("handles ANSI codes in two-column layout without clipping", () => {
 		const tmpDir = join(tmpdir(), `mc-ansi-test-${Date.now()}`);
@@ -952,8 +997,6 @@ describe("MissionControlComponent ANSI-aware two-column layout", () => {
 
 			const width = 80;
 			const lines = component.render(width);
-
-			const leftWidth = Math.floor(width / 2) - 1;
 
 			for (const line of lines) {
 				expect(visibleWidth(line)).toBeLessThanOrEqual(width);
