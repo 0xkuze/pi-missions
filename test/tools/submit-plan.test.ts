@@ -93,10 +93,11 @@ async function callTool(
 	params: unknown,
 	state: MissionState,
 	updateWidget?: (state: MissionState, plan?: MissionPlan) => void,
+	showDraftReview?: (plan: MissionPlan) => void,
 ): Promise<ToolResult> {
 	const { pi, getLastRegisteredTool } = makeMockPi();
 	saveState(basePath, state);
-	registerSubmitPlanTool(pi, { basePath, updateWidget: updateWidget ?? (() => {}) });
+	registerSubmitPlanTool(pi, { basePath, updateWidget: updateWidget ?? (() => {}), showDraftReview });
 	const tool = getLastRegisteredTool()!;
 	return tool.execute("tool-call-id", params, undefined, undefined, undefined) as Promise<ToolResult>;
 }
@@ -496,6 +497,42 @@ describe("registerSubmitPlanTool", () => {
 			// must not throw
 			const result = await fn();
 			expect(result.content[0].text).toContain("Error");
+		});
+	});
+
+	describe("showDraftReview callback", () => {
+		it("calls showDraftReview with the plan after successful submission", async () => {
+			const state = makePlanningState();
+			const showDraftReview = mock((_plan: MissionPlan) => {});
+			await callTool(tmpDir, makeMinimalPlanParams(), state, undefined, showDraftReview);
+
+			expect(showDraftReview).toHaveBeenCalledTimes(1);
+			const [calledPlan] = showDraftReview.mock.calls[0] as [MissionPlan];
+			expect(calledPlan.description).toBe("Build an auth system");
+			expect(calledPlan.milestones).toHaveLength(1);
+		});
+
+		it("calls showDraftReview after resubmission", async () => {
+			const state = makePlanningState();
+			await callTool(tmpDir, makeMinimalPlanParams(), state);
+
+			const draftState = loadState(tmpDir)!;
+			const showDraftReview = mock((_plan: MissionPlan) => {});
+			const newParams = { ...makeMinimalPlanParams(), description: "Updated plan" };
+			await callTool(tmpDir, newParams, draftState, undefined, showDraftReview);
+
+			expect(showDraftReview).toHaveBeenCalledTimes(1);
+			const [calledPlan] = showDraftReview.mock.calls[0] as [MissionPlan];
+			expect(calledPlan.description).toBe("Updated plan");
+		});
+
+		it("does not call showDraftReview when validation fails", async () => {
+			const state = makePlanningState();
+			const showDraftReview = mock((_plan: MissionPlan) => {});
+			const params = { ...makeMinimalPlanParams(), description: "" };
+			await callTool(tmpDir, params, state, undefined, showDraftReview);
+
+			expect(showDraftReview).not.toHaveBeenCalled();
 		});
 	});
 });

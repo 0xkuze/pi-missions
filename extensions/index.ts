@@ -6,6 +6,8 @@ import { captureGitSnapshot, isGitAvailable } from "./git.js";
 import { buildOrchestratorProtocol } from "./orchestrator/protocol.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
 import { loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
+import { appendMutation } from "./state/plan-history.js";
+import { transitionState } from "./state/transitions.js";
 import { registerCommitChangesTool } from "./tools/commit-changes.js";
 import { registerCompleteMissionTool } from "./tools/complete.js";
 import { registerCreateFixTool } from "./tools/create-fix.js";
@@ -14,6 +16,8 @@ import { registerSpawnWorkerTool } from "./tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
 import type { Feature, MissionPlan, MissionState, WorkerResult } from "./types.js";
+import { handleDraftReviewKey, renderDraftReview } from "./ui/draft-review.js";
+import { themeFrameStyle } from "./ui/frame.js";
 import { MissionControlComponent } from "./ui/mission-control.js";
 import { updateWidget as renderWidget } from "./ui/widget.js";
 import { nowISO } from "./utils.js";
@@ -374,8 +378,61 @@ export default function (pi: ExtensionAPI): void {
 		}
 	});
 
+	function showDraftReview(plan: MissionPlan): void {
+		setTimeout(() => {
+			const ctx = latestCtx;
+			if (!ctx) return;
+			ctx.ui.custom<void>(
+				(_tui, theme, _kb, done) => {
+					const style = themeFrameStyle(theme);
+					return {
+						handleInput(data: string) {
+							const action = handleDraftReviewKey(data);
+							if (action.kind === "approve") {
+								const state = loadState(basePath);
+								const currentPlan = loadPlan(basePath);
+								if (state && currentPlan) {
+									const now = nowISO();
+									const newPlanVersion = currentPlan.planVersion + 1;
+									const updatedPlan: MissionPlan = {
+										...currentPlan,
+										approvedAt: now,
+										planVersion: newPlanVersion,
+									};
+									savePlan(basePath, updatedPlan);
+									appendMutation(basePath, {
+										planVersion: newPlanVersion,
+										timestamp: now,
+										actor: "user",
+										kind: "plan-approved",
+										summary: "Plan approved by user",
+										payload: {},
+									});
+									const newState = transitionState(state, "approved");
+									saveState(basePath, newState);
+									updateWidget(newState, updatedPlan);
+									pi.sendUserMessage(
+										"I have approved the mission plan. Please begin execution by calling spawn_worker for the first feature.",
+									);
+								}
+								done();
+							} else if (action.kind === "close") {
+								done();
+							}
+						},
+						render(width: number) {
+							return renderDraftReview(plan, width, style);
+						},
+						invalidate() {},
+					};
+				},
+				{ overlay: true },
+			);
+		}, 0);
+	}
+
 	// Register all orchestrator tools.
-	registerSubmitPlanTool(pi, { basePath, updateWidget });
+	registerSubmitPlanTool(pi, { basePath, updateWidget, showDraftReview });
 	registerSpawnWorkerTool(pi, {
 		basePath,
 		projectDir,

@@ -11,6 +11,7 @@ const VALID_COMPLEXITIES = new Set(["low", "medium", "high"]);
 interface Deps {
 	basePath: string;
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
+	showDraftReview?: (plan: MissionPlan) => void;
 }
 
 function collectAllFeatureIds(milestones: Array<{ id: string; features: Array<{ id: string }> }>): Set<string> {
@@ -259,6 +260,7 @@ export function registerSubmitPlanTool(pi: ExtensionAPI, deps: Deps): void {
 
 			saveState(deps.basePath, newState);
 			deps.updateWidget(newState, plan);
+			deps.showDraftReview?.(plan);
 
 			const featureCount = plan.milestones.reduce((sum, m) => sum + m.features.length, 0);
 			const action = isResubmission ? "revised" : "submitted";
