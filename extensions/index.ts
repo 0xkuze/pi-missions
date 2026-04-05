@@ -390,7 +390,15 @@ export default function (pi: ExtensionAPI): void {
 	pi.registerShortcut("ctrl+shift+m", {
 		description: "Open Mission Control overlay",
 		handler: async (ctx) => {
-			const deps = { basePath, loadState, loadPlan };
+			const deps = {
+				basePath,
+				loadState,
+				loadPlan,
+				sendUserMessage: (content: string) => pi.sendUserMessage(content),
+				getInput: (title: string, placeholder?: string) => ctx.ui.input(title, placeholder),
+				notify: (message: string, type?: "info" | "warning" | "error") => ctx.ui.notify(message, type),
+				updateWidget,
+			};
 			await ctx.ui.custom<void>((tui, _theme, _kb, done) => new MissionControlComponent(tui, done, deps), {
 				overlay: true,
 			});

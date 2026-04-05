@@ -3,6 +3,7 @@ import type { Feature, Milestone, MissionPlan, MissionState, ProgressEvent } fro
 import { nowISO } from "../utils.js";
 import {
 	formatRelativeTime,
+	handleKeyboardAction,
 	renderCurrentFeaturePanel,
 	renderKeyboardShortcuts,
 	renderMissionOutline,
@@ -388,5 +389,239 @@ describe("renderKeyboardShortcuts (VAL-UI-006)", () => {
 	it("returns non-empty lines", () => {
 		const lines = renderKeyboardShortcuts();
 		expect(lines.length).toBeGreaterThan(0);
+	});
+});
+
+describe("handleKeyboardAction (VAL-UI-006)", () => {
+	function makeExecutingState(overrides: Partial<MissionState> = {}): MissionState {
+		return makeState("executing", { currentFeatureId: "f1", currentMilestoneId: "m1", ...overrides });
+	}
+
+	describe("Esc closes overlay", () => {
+		it("returns close action for escape", () => {
+			const action = handleKeyboardAction("\x1B", null);
+			expect(action.kind).toBe("close");
+		});
+
+		it("returns close regardless of state", () => {
+			const action = handleKeyboardAction("\x1B", makeState("executing"));
+			expect(action.kind).toBe("close");
+		});
+	});
+
+	describe("P: pause/resume", () => {
+		it("returns pause when executing", () => {
+			const action = handleKeyboardAction("p", makeState("executing"));
+			expect(action.kind).toBe("pause");
+		});
+
+		it("returns pause when validating", () => {
+			const action = handleKeyboardAction("p", makeState("validating"));
+			expect(action.kind).toBe("pause");
+		});
+
+		it("returns pause when planning", () => {
+			const action = handleKeyboardAction("p", makeState("planning"));
+			expect(action.kind).toBe("pause");
+		});
+
+		it("returns pause when draft_review", () => {
+			const action = handleKeyboardAction("p", makeState("draft_review"));
+			expect(action.kind).toBe("pause");
+		});
+
+		it("returns pause when approved", () => {
+			const action = handleKeyboardAction("p", makeState("approved"));
+			expect(action.kind).toBe("pause");
+		});
+
+		it("returns resume when paused", () => {
+			const action = handleKeyboardAction("p", makeState("paused"));
+			expect(action.kind).toBe("resume");
+		});
+
+		it("returns P (uppercase) pause action too", () => {
+			const action = handleKeyboardAction("P", makeState("executing"));
+			expect(action.kind).toBe("pause");
+		});
+
+		it("returns warn when no state", () => {
+			const action = handleKeyboardAction("p", null);
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns warn when completed", () => {
+			const action = handleKeyboardAction("p", makeState("completed"));
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns warn when failed", () => {
+			const action = handleKeyboardAction("p", makeState("failed"));
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns warn when aborted", () => {
+			const action = handleKeyboardAction("p", makeState("aborted"));
+			expect(action.kind).toBe("warn");
+		});
+	});
+
+	describe("S: skip feature", () => {
+		it("returns skip when executing with current feature", () => {
+			const action = handleKeyboardAction("s", makeExecutingState());
+			expect(action.kind).toBe("skip");
+		});
+
+		it("returns S (uppercase) skip action too", () => {
+			const action = handleKeyboardAction("S", makeExecutingState());
+			expect(action.kind).toBe("skip");
+		});
+
+		it("returns warn when executing without current feature", () => {
+			const action = handleKeyboardAction("s", makeState("executing"));
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns warn when not executing", () => {
+			const action = handleKeyboardAction("s", makeState("paused"));
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns warn when no state", () => {
+			const action = handleKeyboardAction("s", null);
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns warn when completed", () => {
+			const action = handleKeyboardAction("s", makeState("completed"));
+			expect(action.kind).toBe("warn");
+		});
+	});
+
+	describe("D: done/completion", () => {
+		it("returns done action when executing", () => {
+			const action = handleKeyboardAction("d", makeState("executing"));
+			expect(action.kind).toBe("done");
+		});
+
+		it("returns D (uppercase) done action too", () => {
+			const action = handleKeyboardAction("D", makeState("executing"));
+			expect(action.kind).toBe("done");
+		});
+
+		it("returns done action when paused", () => {
+			const action = handleKeyboardAction("d", makeState("paused"));
+			expect(action.kind).toBe("done");
+		});
+
+		it("returns warn when no state", () => {
+			const action = handleKeyboardAction("d", null);
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns warn when completed", () => {
+			const action = handleKeyboardAction("d", makeState("completed"));
+			expect(action.kind).toBe("warn");
+		});
+	});
+
+	describe("R: redirect", () => {
+		it("returns redirect when executing", () => {
+			const action = handleKeyboardAction("r", makeState("executing"));
+			expect(action.kind).toBe("redirect");
+		});
+
+		it("returns R (uppercase) redirect action too", () => {
+			const action = handleKeyboardAction("R", makeState("executing"));
+			expect(action.kind).toBe("redirect");
+		});
+
+		it("returns redirect when paused", () => {
+			const action = handleKeyboardAction("r", makeState("paused"));
+			expect(action.kind).toBe("redirect");
+		});
+
+		it("returns redirect when planning", () => {
+			const action = handleKeyboardAction("r", makeState("planning"));
+			expect(action.kind).toBe("redirect");
+		});
+
+		it("returns warn when no state", () => {
+			const action = handleKeyboardAction("r", null);
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns warn when completed", () => {
+			const action = handleKeyboardAction("r", makeState("completed"));
+			expect(action.kind).toBe("warn");
+		});
+	});
+
+	describe("M: model view", () => {
+		it("returns open_model_view when executing", () => {
+			const action = handleKeyboardAction("m", makeState("executing"));
+			expect(action.kind).toBe("open_model_view");
+		});
+
+		it("returns M (uppercase) model view action too", () => {
+			const action = handleKeyboardAction("M", makeState("executing"));
+			expect(action.kind).toBe("open_model_view");
+		});
+
+		it("returns warn when no state", () => {
+			const action = handleKeyboardAction("m", null);
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns warn when completed", () => {
+			const action = handleKeyboardAction("m", makeState("completed"));
+			expect(action.kind).toBe("warn");
+		});
+	});
+
+	describe("V: validation view", () => {
+		it("returns open_validation_view when executing", () => {
+			const action = handleKeyboardAction("v", makeState("executing"));
+			expect(action.kind).toBe("open_validation_view");
+		});
+
+		it("returns V (uppercase) validation view action too", () => {
+			const action = handleKeyboardAction("V", makeState("executing"));
+			expect(action.kind).toBe("open_validation_view");
+		});
+
+		it("returns warn when no state", () => {
+			const action = handleKeyboardAction("v", null);
+			expect(action.kind).toBe("warn");
+		});
+	});
+
+	describe("L: logs view", () => {
+		it("returns open_logs_view when executing", () => {
+			const action = handleKeyboardAction("l", makeState("executing"));
+			expect(action.kind).toBe("open_logs_view");
+		});
+
+		it("returns L (uppercase) logs view action too", () => {
+			const action = handleKeyboardAction("L", makeState("executing"));
+			expect(action.kind).toBe("open_logs_view");
+		});
+
+		it("returns warn when no state", () => {
+			const action = handleKeyboardAction("l", null);
+			expect(action.kind).toBe("warn");
+		});
+	});
+
+	describe("unknown keys", () => {
+		it("returns noop for unknown key", () => {
+			const action = handleKeyboardAction("x", makeState("executing"));
+			expect(action.kind).toBe("noop");
+		});
+
+		it("returns noop for numeric key", () => {
+			const action = handleKeyboardAction("1", makeState("executing"));
+			expect(action.kind).toBe("noop");
+		});
 	});
 });

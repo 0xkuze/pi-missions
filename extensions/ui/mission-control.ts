@@ -1,6 +1,9 @@
 import type { TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
+import { savePlan, saveState } from "../state/manager.js";
+import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionPlan, MissionState, ProgressEvent } from "../types.js";
+import { nowISO } from "../utils.js";
 
 const ICON_DONE = "\u2713";
 const ICON_ACTIVE = "\u25cf";
@@ -165,12 +168,94 @@ export function renderKeyboardShortcuts(): string[] {
 	return ["P: Pause  S: Skip  D: Done  R: Redirect", "M: Models  V: Validate  L: Logs  Esc: Close"];
 }
 
+export type OverlayAction =
+	| { kind: "close" }
+	| { kind: "pause" }
+	| { kind: "resume" }
+	| { kind: "skip" }
+	| { kind: "done" }
+	| { kind: "redirect" }
+	| { kind: "open_model_view" }
+	| { kind: "open_validation_view" }
+	| { kind: "open_logs_view" }
+	| { kind: "warn"; message: string }
+	| { kind: "noop" };
+
+const PAUSABLE_STATUSES = new Set(["planning", "draft_review", "approved", "executing", "validating"]);
+const ACTIVE_STATUSES = new Set(["planning", "draft_review", "approved", "executing", "validating", "paused"]);
+
+export function handleKeyboardAction(key: string, state: MissionState | null): OverlayAction {
+	if (matchesKey(key, "escape")) return { kind: "close" };
+
+	const upper = key.toUpperCase();
+
+	if (upper === "P") {
+		if (!state || !ACTIVE_STATUSES.has(state.status)) {
+			return { kind: "warn", message: "P: No active mission to pause or resume." };
+		}
+		if (state.status === "paused") return { kind: "resume" };
+		if (PAUSABLE_STATUSES.has(state.status)) return { kind: "pause" };
+		return { kind: "warn", message: `P: Cannot pause from '${state.status}' state.` };
+	}
+
+	if (upper === "S") {
+		if (!state || state.status !== "executing") {
+			return { kind: "warn", message: "S: Skip is only available while executing." };
+		}
+		if (!state.currentFeatureId) {
+			return { kind: "warn", message: "S: No current feature to skip." };
+		}
+		return { kind: "skip" };
+	}
+
+	if (upper === "D") {
+		if (!state || !ACTIVE_STATUSES.has(state.status)) {
+			return { kind: "warn", message: "D: No active mission." };
+		}
+		return { kind: "done" };
+	}
+
+	if (upper === "R") {
+		if (!state || !ACTIVE_STATUSES.has(state.status)) {
+			return { kind: "warn", message: "R: No active mission to redirect." };
+		}
+		return { kind: "redirect" };
+	}
+
+	if (upper === "M") {
+		if (!state || !ACTIVE_STATUSES.has(state.status)) {
+			return { kind: "warn", message: "M: No active mission." };
+		}
+		return { kind: "open_model_view" };
+	}
+
+	if (upper === "V") {
+		if (!state || !ACTIVE_STATUSES.has(state.status)) {
+			return { kind: "warn", message: "V: No active mission." };
+		}
+		return { kind: "open_validation_view" };
+	}
+
+	if (upper === "L") {
+		if (!state || !ACTIVE_STATUSES.has(state.status)) {
+			return { kind: "warn", message: "L: No active mission." };
+		}
+		return { kind: "open_logs_view" };
+	}
+
+	return { kind: "noop" };
+}
+
 const POLL_INTERVAL_MS = 2_000;
 
 export interface MissionControlDeps {
 	basePath: string;
 	loadState: (basePath: string) => MissionState | null;
 	loadPlan: (basePath: string) => MissionPlan | null;
+	sendUserMessage: (content: string) => void;
+	getInput: (title: string, placeholder?: string) => Promise<string | undefined>;
+	notify: (message: string, type?: "info" | "warning" | "error") => void;
+	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
 }
 
 export class MissionControlComponent {
@@ -202,9 +287,160 @@ export class MissionControlComponent {
 	}
 
 	handleInput(data: string): void {
-		if (matchesKey(data, "escape")) {
-			this.done();
+		const action = handleKeyboardAction(data, this.state);
+		this.dispatchAction(action);
+	}
+
+	private dispatchAction(action: OverlayAction): void {
+		switch (action.kind) {
+			case "close":
+				this.done();
+				return;
+			case "warn":
+				this.deps.notify(action.message, "warning");
+				return;
+			case "noop":
+				return;
+			case "pause":
+				this.applyPause();
+				return;
+			case "resume":
+				this.applyResume();
+				return;
+			case "skip":
+				this.applySkip();
+				return;
+			case "done":
+				this.deps.sendUserMessage("Please call complete_mission to finalize the mission and generate the report.");
+				this.done();
+				return;
+			case "redirect":
+				this.applyRedirect();
+				return;
+			case "open_model_view":
+				this.deps.notify("Model view not yet available. Use /mission config to change models.", "info");
+				return;
+			case "open_validation_view":
+				this.deps.notify("Validation view not yet available.", "info");
+				return;
+			case "open_logs_view":
+				this.deps.notify("Logs view not yet available.", "info");
+				return;
 		}
+	}
+
+	private applyPause(): void {
+		const state = this.deps.loadState(this.deps.basePath);
+		if (!state) return;
+		try {
+			const newState = transitionState(state, "paused");
+			saveState(this.deps.basePath, newState);
+			const plan = this.deps.loadPlan(this.deps.basePath);
+			this.state = newState;
+			this.plan = plan;
+			this.deps.updateWidget(newState, plan ?? undefined);
+			this.tui.requestRender();
+			this.deps.notify("Mission paused.", "info");
+		} catch (err) {
+			this.deps.notify(`Error: ${(err as Error).message}`, "error");
+		}
+	}
+
+	private applyResume(): void {
+		const state = this.deps.loadState(this.deps.basePath);
+		if (!state || state.status !== "paused") return;
+		const target = state.resumeTargetState;
+		if (!target) {
+			this.deps.notify("Error: paused state has no resumeTargetState.", "error");
+			return;
+		}
+		try {
+			const newState = transitionState(state, target);
+			saveState(this.deps.basePath, newState);
+			const plan = this.deps.loadPlan(this.deps.basePath);
+			this.state = newState;
+			this.plan = plan;
+			this.deps.updateWidget(newState, plan ?? undefined);
+			this.tui.requestRender();
+			this.deps.sendUserMessage("Mission resumed. Please continue from where you left off.");
+		} catch (err) {
+			this.deps.notify(`Error: ${(err as Error).message}`, "error");
+		}
+	}
+
+	private applySkip(): void {
+		const state = this.deps.loadState(this.deps.basePath);
+		if (!state || state.status !== "executing" || !state.currentFeatureId) return;
+
+		const plan = this.deps.loadPlan(this.deps.basePath);
+		if (!plan) {
+			this.deps.notify("Error: no plan found.", "error");
+			return;
+		}
+
+		const featureId = state.currentFeatureId;
+		let featureName = featureId;
+		const updatedPlan: MissionPlan = {
+			...plan,
+			milestones: plan.milestones.map((m) => ({
+				...m,
+				features: m.features.map((f) => {
+					if (f.id === featureId) {
+						featureName = f.name;
+						return { ...f, status: "skipped" as const };
+					}
+					return f;
+				}),
+			})),
+		};
+		savePlan(this.deps.basePath, updatedPlan);
+
+		const updatedState: MissionState = {
+			...state,
+			currentFeatureId: undefined,
+			totalFeaturesSkipped: state.totalFeaturesSkipped + 1,
+			progressLog: [
+				...state.progressLog,
+				{
+					timestamp: nowISO(),
+					type: "feature_skipped" as const,
+					detail: `Feature '${featureName}' skipped by user`,
+				},
+			],
+		};
+		saveState(this.deps.basePath, updatedState);
+		this.state = updatedState;
+		this.plan = updatedPlan;
+		this.deps.updateWidget(updatedState, updatedPlan);
+		this.tui.requestRender();
+		this.deps.sendUserMessage(`Feature '${featureName}' has been skipped. Please continue with the next feature.`);
+	}
+
+	private applyRedirect(): void {
+		this.deps.getInput("Redirect Mission", "Enter new instruction for the orchestrator...").then((message) => {
+			if (!message?.trim()) return;
+
+			const state = this.deps.loadState(this.deps.basePath);
+			if (state) {
+				const updatedState: MissionState = {
+					...state,
+					progressLog: [
+						...state.progressLog,
+						{
+							timestamp: nowISO(),
+							type: "redirect" as const,
+							detail: `User redirect: ${message.slice(0, 80)}`,
+						},
+					],
+				};
+				saveState(this.deps.basePath, updatedState);
+				this.state = updatedState;
+				this.deps.updateWidget(updatedState, this.plan ?? undefined);
+			}
+
+			this.deps.sendUserMessage(message);
+			this.done();
+		});
 	}
 
 	render(width: number): string[] {
