@@ -7,7 +7,8 @@ import type { Feature, MissionConfig, MissionPlan, MissionState, PlanMutation, P
 import { nowISO } from "../utils.js";
 import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
 import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
-import { frame, section } from "./frame.js";
+import type { FrameStyle } from "./frame.js";
+import { frame, section, themeFrameStyle } from "./frame.js";
 import { handlePlanHistoryKey, renderPlanHistoryView } from "./plan-history.js";
 import { handlePlanningSetupKey, renderPlanningSetupView } from "./planning-setup.js";
 import { handleProgressLogKey, renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
@@ -78,13 +79,18 @@ function buildWarnings(state: MissionState): string[] {
 	return warnings;
 }
 
-export function renderCurrentFeaturePanel(state: MissionState, plan: MissionPlan, width = 40): string[] {
+export function renderCurrentFeaturePanel(
+	state: MissionState,
+	plan: MissionPlan,
+	width = 40,
+	style?: FrameStyle,
+): string[] {
 	const contentWidth = width - 4;
 	const feature = findCurrentFeature(state, plan);
 	const milestone = findCurrentMilestone(state, plan);
 
 	if (!feature) {
-		return frame("Current Feature", ["(no feature active)"], width);
+		return frame("Current Feature", ["(no feature active)"], width, undefined, style);
 	}
 
 	const lines: string[] = [];
@@ -104,7 +110,7 @@ export function renderCurrentFeaturePanel(state: MissionState, plan: MissionPlan
 	lines.push(`Attempt: ${attemptCount + 1}/${maxRetries}`);
 
 	if (feature.acceptanceCriteria.length > 0) {
-		lines.push(section("Acceptance Criteria", contentWidth));
+		lines.push(section("Acceptance Criteria", contentWidth, style));
 		for (const criterion of feature.acceptanceCriteria) {
 			lines.push(`\u2022 ${criterion}`);
 		}
@@ -112,16 +118,16 @@ export function renderCurrentFeaturePanel(state: MissionState, plan: MissionPlan
 
 	const warnings = buildWarnings(state);
 	if (warnings.length > 0) {
-		lines.push(section("Warnings", contentWidth));
+		lines.push(section("Warnings", contentWidth, style));
 		for (const warning of warnings) {
 			lines.push(`\u2022 ${warning}`);
 		}
 	}
 
-	return frame("Current Feature", lines, width);
+	return frame("Current Feature", lines, width, undefined, style);
 }
 
-export function renderMissionOutline(plan: MissionPlan, width = 40): string[] {
+export function renderMissionOutline(plan: MissionPlan, width = 40, style?: FrameStyle): string[] {
 	const lines: string[] = [];
 
 	for (const milestone of plan.milestones) {
@@ -134,7 +140,7 @@ export function renderMissionOutline(plan: MissionPlan, width = 40): string[] {
 		}
 	}
 
-	return frame("Mission Outline", lines, width);
+	return frame("Mission Outline", lines, width, undefined, style);
 }
 
 function progressEventIcon(type: ProgressEvent["type"]): string {
@@ -158,9 +164,9 @@ function progressEventIcon(type: ProgressEvent["type"]): string {
 	}
 }
 
-export function renderProgressLog(state: MissionState, width = 40): string[] {
+export function renderProgressLog(state: MissionState, width = 40, style?: FrameStyle): string[] {
 	if (state.progressLog.length === 0) {
-		return frame("Progress Log", ["(no events yet)"], width);
+		return frame("Progress Log", ["(no events yet)"], width, undefined, style);
 	}
 
 	const events = [...state.progressLog].sort(
@@ -174,7 +180,7 @@ export function renderProgressLog(state: MissionState, width = 40): string[] {
 		lines.push(`${time.padEnd(4)} ${icon} ${event.detail}`);
 	}
 
-	return frame("Progress Log", lines, width);
+	return frame("Progress Log", lines, width, undefined, style);
 }
 
 export function renderKeyboardShortcuts(width = 80): string[] {
@@ -341,17 +347,21 @@ export class MissionControlComponent {
 	private currentSubView: SubView | null = null;
 	private modelViewState: ModelViewState = { selectedRoleIndex: null };
 	private pollInterval: ReturnType<typeof setInterval> | null = null;
+	private style: FrameStyle | undefined;
 
 	constructor(
 		private tui: TUI,
 		private done: () => void,
 		private deps: MissionControlDeps,
+		// why: pi Theme uses branded union types for color parameters; we accept `any` at this boundary
+		theme?: { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string },
 	) {
 		this.state = deps.loadState(deps.basePath);
 		this.plan = deps.loadPlan(deps.basePath);
 		this.config = deps.loadConfig(deps.basePath);
 		this.planHistory = readHistory(deps.basePath);
 		this.pollInterval = setInterval(() => this.poll(), POLL_INTERVAL_MS);
+		this.style = theme ? themeFrameStyle(theme) : undefined;
 	}
 
 	private poll(): void {
@@ -673,7 +683,7 @@ export class MissionControlComponent {
 					modelAssignment: {},
 					createdAt: "",
 				};
-				return renderModelView(this.config, effectivePlan, this.modelViewState, width);
+				return renderModelView(this.config, effectivePlan, this.modelViewState, width, this.style);
 			}
 			case "validation": {
 				const milestone = plan?.milestones.find((m) => m.id === state.currentMilestoneId);
@@ -682,19 +692,19 @@ export class MissionControlComponent {
 					label: cmd,
 					status: "pending" as const,
 				}));
-				return renderValidationView(milestoneName, commands, false, width);
+				return renderValidationView(milestoneName, commands, false, width, this.style);
 			}
 			case "logs":
-				return renderProgressLogStandalone(state.progressLog, width);
+				return renderProgressLogStandalone(state.progressLog, width, this.style);
 			case "history":
-				return renderPlanHistoryView(this.planHistory, width);
+				return renderPlanHistoryView(this.planHistory, width, this.style);
 			case "planning": {
 				const goal = plan?.description;
-				return renderPlanningSetupView(state, goal, width);
+				return renderPlanningSetupView(state, goal, width, this.style);
 			}
 			case "draft_review":
 				if (!plan) return ["No plan to review.", "", "Esc: close"];
-				return renderDraftReview(plan, width);
+				return renderDraftReview(plan, width, this.style);
 			case "blocked": {
 				const feature = plan?.milestones.flatMap((m) => m.features).find((f) => f.id === view.featureId);
 				if (!feature) return ["Feature not found.", "", "Esc: close"];
@@ -702,11 +712,11 @@ export class MissionControlComponent {
 				const lastFailure: LastFailureDetails | undefined = lastAttempt
 					? { errorMessage: `Exit code: ${lastAttempt.exitCode ?? "unknown"}` }
 					: undefined;
-				return renderBlockedView(feature, 3, lastFailure, width);
+				return renderBlockedView(feature, 3, lastFailure, width, this.style);
 			}
 			case "report":
 				if (!plan) return ["No report available.", "", "Esc: close"];
-				return renderReportView(state, plan, this.deps.basePath, width);
+				return renderReportView(state, plan, this.deps.basePath, width, this.style);
 		}
 	}
 
@@ -715,12 +725,12 @@ export class MissionControlComponent {
 		const rightWidth = width - leftWidth - 1;
 
 		const leftLines = plan
-			? renderCurrentFeaturePanel(state, plan, leftWidth)
-			: frame("Current Feature", ["(no plan loaded)"], leftWidth);
+			? renderCurrentFeaturePanel(state, plan, leftWidth, this.style)
+			: frame("Current Feature", ["(no plan loaded)"], leftWidth, undefined, this.style);
 		const rightOutline = plan
-			? renderMissionOutline(plan, rightWidth)
-			: frame("Mission Outline", ["(no plan loaded)"], rightWidth);
-		const rightLog = renderProgressLog(state, rightWidth);
+			? renderMissionOutline(plan, rightWidth, this.style)
+			: frame("Mission Outline", ["(no plan loaded)"], rightWidth, undefined, this.style);
+		const rightLog = renderProgressLog(state, rightWidth, this.style);
 		const rightLines = [...rightOutline, "", ...rightLog];
 
 		const maxRows = Math.max(leftLines.length, rightLines.length);

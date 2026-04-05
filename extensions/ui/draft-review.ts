@@ -1,5 +1,6 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../types.js";
+import type { FrameStyle } from "./frame.js";
 import { frame, section } from "./frame.js";
 
 export type DraftReviewAction = { kind: "approve" } | { kind: "close" } | { kind: "noop" };
@@ -33,7 +34,7 @@ function renderValidationCommands(plan: MissionPlan): string[] {
 	return lines;
 }
 
-export function renderDraftReview(plan: MissionPlan, width = 80): string[] {
+export function renderDraftReview(plan: MissionPlan, width = 80, style?: FrameStyle): string[] {
 	const contentWidth = width - 4;
 	const lines: string[] = [];
 
@@ -42,7 +43,7 @@ export function renderDraftReview(plan: MissionPlan, width = 80): string[] {
 
 	for (const milestone of plan.milestones) {
 		const count = milestone.features.length;
-		lines.push(section(`${milestone.name} (${count} feature${count !== 1 ? "s" : ""})`, contentWidth));
+		lines.push(section(`${milestone.name} (${count} feature${count !== 1 ? "s" : ""})`, contentWidth, style));
 		for (const feature of milestone.features) {
 			lines.push(`• ${feature.name}: ${feature.description}`);
 		}
@@ -51,7 +52,7 @@ export function renderDraftReview(plan: MissionPlan, width = 80): string[] {
 
 	const validationLines = renderValidationCommands(plan);
 	if (validationLines.length > 0) {
-		lines.push(section("Validation", contentWidth));
+		lines.push(section("Validation", contentWidth, style));
 		for (const vl of validationLines.slice(1)) {
 			lines.push(vl.trimStart());
 		}
@@ -60,7 +61,7 @@ export function renderDraftReview(plan: MissionPlan, width = 80): string[] {
 
 	const modelLines = renderModelAssignments(plan);
 	if (modelLines.length > 0) {
-		lines.push(section("Models", contentWidth));
+		lines.push(section("Models", contentWidth, style));
 		for (const ml of modelLines.slice(1)) {
 			lines.push(ml.trimStart());
 		}
@@ -70,7 +71,7 @@ export function renderDraftReview(plan: MissionPlan, width = 80): string[] {
 	const runs = estimatedRuns(plan);
 	lines.push(`• Estimated runs: ${total} features + ${plan.milestones.length * 2} validations = ~${runs}`);
 
-	return frame("Draft Mission Plan", lines, width, "A: approve   Esc: back to chat (continue planning)");
+	return frame("Draft Mission Plan", lines, width, "A: approve   Esc: back to chat (continue planning)", style);
 }
 
 export function handleDraftReviewKey(key: string): DraftReviewAction {

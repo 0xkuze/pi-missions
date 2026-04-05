@@ -3,6 +3,7 @@ import { matchesKey } from "@mariozechner/pi-tui";
 import { resolveModel } from "../config.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
+import type { FrameStyle } from "./frame.js";
 import { frame, section } from "./frame.js";
 
 export type ReportViewAction = { kind: "close" } | { kind: "open_report" } | { kind: "noop" };
@@ -31,7 +32,13 @@ function countMilestonePassed(plan: MissionPlan): { passed: number; total: numbe
 	return { passed, total };
 }
 
-export function renderReportView(state: MissionState, plan: MissionPlan, basePath: string, width = 80): string[] {
+export function renderReportView(
+	state: MissionState,
+	plan: MissionPlan,
+	basePath: string,
+	width = 80,
+	style?: FrameStyle,
+): string[] {
 	const contentWidth = width - 4;
 	const lines: string[] = [];
 
@@ -42,7 +49,7 @@ export function renderReportView(state: MissionState, plan: MissionPlan, basePat
 	lines.push(`Duration: ${formatDuration(durationMs)}`);
 	lines.push("");
 
-	lines.push(section("Features", contentWidth));
+	lines.push(section("Features", contentWidth, style));
 	lines.push(`Completed: ${state.totalFeaturesCompleted}`);
 	if (state.totalFeaturesSkipped > 0) {
 		lines.push(`Skipped: ${state.totalFeaturesSkipped}`);
@@ -59,10 +66,10 @@ export function renderReportView(state: MissionState, plan: MissionPlan, basePat
 	}
 
 	const reportPath = join(basePath, "report.md");
-	lines.push(section("Output", contentWidth));
+	lines.push(section("Output", contentWidth, style));
 	lines.push(`Report: ${reportPath}`);
 
-	return frame("Mission Complete", lines, width, "O: open report   Esc: close");
+	return frame("Mission Complete", lines, width, "O: open report   Esc: close", style);
 }
 
 export function handleReportViewKey(key: string): ReportViewAction {
@@ -81,6 +88,7 @@ export function renderModelView(
 	plan: MissionPlan,
 	viewState: ModelViewState,
 	width = 80,
+	style?: FrameStyle,
 ): string[] {
 	const lines: string[] = [];
 
@@ -100,7 +108,7 @@ export function renderModelView(
 		lines.push("(select via number when models are listed)");
 	}
 
-	return frame("Model Assignment", lines, width, "Esc: back");
+	return frame("Model Assignment", lines, width, "Esc: back", style);
 }
 
 function capitalize(s: string): string {

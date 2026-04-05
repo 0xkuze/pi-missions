@@ -427,7 +427,7 @@ export default function (pi: ExtensionAPI): void {
 					if (model) await pi.setModel(model);
 				},
 			};
-			await ctx.ui.custom<void>((tui, _theme, _kb, done) => new MissionControlComponent(tui, done, deps), {
+			await ctx.ui.custom<void>((tui, theme, _kb, done) => new MissionControlComponent(tui, done, deps, theme), {
 				overlay: true,
 			});
 		},

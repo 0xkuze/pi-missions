@@ -1,13 +1,14 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { PlanMutation } from "../types.js";
+import type { FrameStyle } from "./frame.js";
 import { frame } from "./frame.js";
 import { formatRelativeTime } from "./mission-control.js";
 
 export type PlanHistoryAction = { kind: "close" } | { kind: "noop" };
 
-export function renderPlanHistoryView(mutations: PlanMutation[], width = 80): string[] {
+export function renderPlanHistoryView(mutations: PlanMutation[], width = 80, style?: FrameStyle): string[] {
 	if (mutations.length === 0) {
-		return frame("Plan History", ["(no history yet)"], width, "Esc: close");
+		return frame("Plan History", ["(no history yet)"], width, "Esc: close", style);
 	}
 
 	const sorted = [...mutations].sort((a, b) => a.planVersion - b.planVersion);
@@ -19,7 +20,7 @@ export function renderPlanHistoryView(mutations: PlanMutation[], width = 80): st
 		lines.push(`  ${mutation.summary}`);
 	}
 
-	return frame("Plan History", lines, width, "Esc: close");
+	return frame("Plan History", lines, width, "Esc: close", style);
 }
 
 export function handlePlanHistoryKey(key: string): PlanHistoryAction {

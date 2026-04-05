@@ -1,5 +1,6 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../types.js";
+import type { FrameStyle } from "./frame.js";
 import { frame } from "./frame.js";
 
 export type PlanOverlayAction = { kind: "close" } | { kind: "noop" };
@@ -44,7 +45,7 @@ function milestoneIcon(status: string): string {
 	}
 }
 
-export function renderPlanOverlay(plan: MissionPlan, width = 80): string[] {
+export function renderPlanOverlay(plan: MissionPlan, width = 80, style?: FrameStyle): string[] {
 	const lines: string[] = [`${plan.description}`, ""];
 
 	for (const milestone of plan.milestones) {
@@ -59,7 +60,7 @@ export function renderPlanOverlay(plan: MissionPlan, width = 80): string[] {
 		lines.push("");
 	}
 
-	return frame("Mission Plan", lines, width, "Esc: close");
+	return frame("Mission Plan", lines, width, "Esc: close", style);
 }
 
 export function handlePlanOverlayKey(key: string): PlanOverlayAction {
@@ -68,10 +69,15 @@ export function handlePlanOverlayKey(key: string): PlanOverlayAction {
 }
 
 export class PlanOverlayComponent {
+	private style: FrameStyle | undefined;
+
 	constructor(
 		private plan: MissionPlan,
 		private done: () => void,
-	) {}
+		style?: FrameStyle,
+	) {
+		this.style = style;
+	}
 
 	handleInput(data: string): void {
 		const action = handlePlanOverlayKey(data);
@@ -79,7 +85,7 @@ export class PlanOverlayComponent {
 	}
 
 	render(width: number): string[] {
-		return renderPlanOverlay(this.plan, width);
+		return renderPlanOverlay(this.plan, width, this.style);
 	}
 
 	invalidate(): void {}

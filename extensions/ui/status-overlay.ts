@@ -1,11 +1,17 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
+import type { FrameStyle } from "./frame.js";
 import { frame, section } from "./frame.js";
 
 export type StatusOverlayAction = { kind: "close" } | { kind: "noop" };
 
-export function renderStatusOverlay(state: MissionState, plan: MissionPlan | null, width = 80): string[] {
+export function renderStatusOverlay(
+	state: MissionState,
+	plan: MissionPlan | null,
+	width = 80,
+	style?: FrameStyle,
+): string[] {
 	const contentWidth = width - 4;
 	const lines: string[] = [];
 
@@ -29,7 +35,7 @@ export function renderStatusOverlay(state: MissionState, plan: MissionPlan | nul
 	}
 
 	lines.push("");
-	lines.push(section("Progress", contentWidth));
+	lines.push(section("Progress", contentWidth, style));
 	lines.push(`Completed: ${state.totalFeaturesCompleted}`);
 	lines.push(`Failed:    ${state.totalFeaturesFailed}`);
 	lines.push(`Skipped:   ${state.totalFeaturesSkipped}`);
@@ -40,7 +46,7 @@ export function renderStatusOverlay(state: MissionState, plan: MissionPlan | nul
 		lines.push(`Paused (will resume to: ${state.resumeTargetState})`);
 	}
 
-	return frame("Mission Status", lines, width, "Esc: close");
+	return frame("Mission Status", lines, width, "Esc: close", style);
 }
 
 export function handleStatusOverlayKey(key: string): StatusOverlayAction {
@@ -49,11 +55,16 @@ export function handleStatusOverlayKey(key: string): StatusOverlayAction {
 }
 
 export class StatusOverlayComponent {
+	private style: FrameStyle | undefined;
+
 	constructor(
 		private state: MissionState,
 		private plan: MissionPlan | null,
 		private done: () => void,
-	) {}
+		style?: FrameStyle,
+	) {
+		this.style = style;
+	}
 
 	handleInput(data: string): void {
 		const action = handleStatusOverlayKey(data);
@@ -61,7 +72,7 @@ export class StatusOverlayComponent {
 	}
 
 	render(width: number): string[] {
-		return renderStatusOverlay(this.state, this.plan, width);
+		return renderStatusOverlay(this.state, this.plan, width, this.style);
 	}
 
 	invalidate(): void {}

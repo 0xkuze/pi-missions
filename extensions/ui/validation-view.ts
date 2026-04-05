@@ -1,5 +1,6 @@
 import { matchesKey } from "@mariozechner/pi-tui";
 import { formatDuration } from "../utils.js";
+import type { FrameStyle } from "./frame.js";
 import { frame } from "./frame.js";
 
 export type ValidationViewAction = { kind: "close" } | { kind: "noop" };
@@ -30,6 +31,7 @@ export function renderValidationView(
 	commands: CommandDisplayEntry[],
 	hasFailed: boolean,
 	width = 80,
+	style?: FrameStyle,
 ): string[] {
 	const lines: string[] = [];
 
@@ -56,7 +58,7 @@ export function renderValidationView(
 		lines.push("One or more checks failed. A fix feature will be generated to address the failures.");
 	}
 
-	return frame("Milestone Validation", lines, width, "Esc: close");
+	return frame("Milestone Validation", lines, width, "Esc: close", style);
 }
 
 export function handleValidationViewKey(key: string): ValidationViewAction {
