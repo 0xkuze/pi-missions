@@ -1,6 +1,11 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
+import type { TUI } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../../extensions/types.js";
-import { handlePlanOverlayKey, renderPlanOverlay } from "../../extensions/ui/plan-overlay.js";
+import {
+	PlanOverlayComponent,
+	handlePlanOverlayKey,
+	renderPlanOverlay,
+} from "../../extensions/ui/plan-overlay.js";
 import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp } from "../helpers/index.js";
 
 const DEFAULT_WIDTH = 80;
@@ -135,6 +140,102 @@ describe("renderPlanOverlay (VAL-NEWUI-005)", () => {
 			const lines = render(plan);
 			const text = lines.join(" ");
 			expect(text).toContain("\u27a1");
+		});
+	});
+});
+
+function makeMockTui(requestRender?: () => void): TUI {
+	return { terminal: { rows: 40 }, requestRender: requestRender ?? (() => {}) } as any;
+}
+
+function makeComponent(
+	opts: { plan?: MissionPlan; theme?: any; requestRender?: () => void } = {},
+): PlanOverlayComponent {
+	const plan = opts.plan ?? makePlan();
+	const tui = makeMockTui(opts.requestRender);
+	return new PlanOverlayComponent(tui, () => {}, plan, opts.theme);
+}
+
+describe("PlanOverlayComponent (VAL-NEWUI-005)", () => {
+	describe("focused property", () => {
+		it("has focused property defaulting to false", () => {
+			const comp = makeComponent();
+			expect(comp.focused).toBe(false);
+		});
+
+		it("can set focused to true", () => {
+			const comp = makeComponent();
+			comp.focused = true;
+			expect(comp.focused).toBe(true);
+		});
+	});
+
+	describe("render caching", () => {
+		it("returns same array ref for same width and version", () => {
+			const comp = makeComponent();
+			const first = comp.render(80);
+			const second = comp.render(80);
+			expect(second).toBe(first);
+		});
+
+		it("returns different array ref for different width", () => {
+			const comp = makeComponent();
+			const first = comp.render(80);
+			const second = comp.render(100);
+			expect(second).not.toBe(first);
+		});
+
+		it("returns different array ref after scroll changes version", () => {
+			const comp = makeComponent();
+			const first = comp.render(80);
+			comp.handleInput("\x1B[B");
+			const second = comp.render(80);
+			expect(second).not.toBe(first);
+		});
+	});
+
+	describe("requestRender on scroll", () => {
+		it("calls requestRender when scrolling", () => {
+			const mockFn = mock(() => {});
+			const comp = makeComponent({ requestRender: mockFn });
+			comp.handleInput("\x1B[B");
+			expect(mockFn).toHaveBeenCalledTimes(1);
+		});
+
+		it("does not call requestRender for non-scroll keys", () => {
+			const mockFn = mock(() => {});
+			const comp = makeComponent({ requestRender: mockFn });
+			comp.handleInput("a");
+			expect(mockFn).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("invalidate", () => {
+		it("resets cache so next render returns new array ref", () => {
+			const comp = makeComponent();
+			const first = comp.render(80);
+			comp.invalidate();
+			const second = comp.render(80);
+			expect(second).not.toBe(first);
+		});
+
+		it("rebuilds style when theme was provided", () => {
+			const theme = {
+				fg: (t: string) => `\x1b[37m${t}\x1b[0m`,
+				bg: (t: string) => `\x1b[40m${t}\x1b[0m`,
+				bold: (t: string) => `\x1b[1m${t}\x1b[0m`,
+			};
+			const comp = makeComponent({ theme });
+			const before = comp.render(80);
+			comp.invalidate();
+			const after = comp.render(80);
+			expect(after).not.toBe(before);
+			expect(after.length).toBeGreaterThan(0);
+		});
+
+		it("does not throw when no theme was provided", () => {
+			const comp = makeComponent();
+			expect(() => comp.invalidate()).not.toThrow();
 		});
 	});
 });
