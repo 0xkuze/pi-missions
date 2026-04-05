@@ -2,55 +2,22 @@ import { describe, expect, it } from "bun:test";
 import type { Feature, Milestone, MissionPlan, MissionState } from "../../extensions/types.js";
 import { buildWidgetLines } from "../../extensions/ui/widget.js";
 import { nowISO } from "../../extensions/utils.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";
 
 function makeState(status: MissionState["status"], overrides: Partial<MissionState> = {}): MissionState {
-	return {
-		missionId: "test-mission",
-		status,
-		progressLog: [],
-		startedAt: new Date(Date.now() - 60_000).toISOString(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-		...overrides,
-	};
+	return _ss({ status, startedAt: new Date(Date.now() - 60_000).toISOString(), ...overrides });
 }
 
 function makeFeature(id: string, status: Feature["status"], name?: string): Feature {
-	return {
-		id,
-		name: name ?? `Feature ${id}`,
-		description: "A feature",
-		acceptanceCriteria: ["criterion"],
-		relevantFiles: [],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status,
-		attempts: [],
-	};
+	return _sf({ id, name: name ?? `Feature ${id}`, status });
 }
 
 function makeMilestone(id: string, features: Feature[], status: Milestone["status"] = "pending"): Milestone {
-	return {
-		id,
-		name: `Milestone ${id}`,
-		description: "A milestone",
-		features,
-		status,
-	};
+	return _sm({ id, name: `Milestone ${id}`, features, status });
 }
 
 function makePlan(milestones: Milestone[]): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test mission",
-		planVersion: 1,
-		milestones,
-		validationCommands: [],
-		modelAssignment: {},
-		createdAt: nowISO(),
-	};
+	return _sp({ milestones });
 }
 
 describe("buildWidgetLines", () => {

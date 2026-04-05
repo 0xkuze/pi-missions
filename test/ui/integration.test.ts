@@ -29,6 +29,7 @@ import {
 	renderValidationView,
 } from "../../extensions/ui/validation-view.js";
 import { nowISO } from "../../extensions/utils.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";
 
 // ---------------------------------------------------------------------------
 // Test factories
@@ -47,58 +48,35 @@ function makeAttempt(n: number, status: WorkerAttempt["status"] = "failure"): Wo
 }
 
 function makeFeature(id: string, status: Feature["status"] = "pending", overrides: Partial<Feature> = {}): Feature {
-	return {
+	return _sf({
 		id,
 		name: `Feature ${id}`,
-		description: `Implements ${id}`,
+		status,
 		acceptanceCriteria: ["Works correctly", "Tests pass"],
 		relevantFiles: ["src/index.ts"],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status,
-		attempts: [],
 		...overrides,
-	};
+	});
 }
 
 function makeMilestone(id: string, features: Feature[], status: Milestone["status"] = "pending"): Milestone {
-	return {
-		id,
-		name: `Milestone ${id}`,
-		description: `Milestone ${id} description`,
-		features,
-		status,
-	};
+	return _sm({ id, name: `Milestone ${id}`, features, status });
 }
 
 function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
+	return _sp({
 		description: "Build a multi-tenant auth system",
-		planVersion: 1,
 		milestones: [
 			makeMilestone("m1", [makeFeature("f1"), makeFeature("f2")]),
 			makeMilestone("m2", [makeFeature("f3")]),
 		],
 		validationCommands: ["bun test", "npx tsc --noEmit"],
 		modelAssignment: { worker: "claude-sonnet-4", orchestrator: "claude-opus" },
-		createdAt: nowISO(),
 		...overrides,
-	};
+	});
 }
 
 function makeState(status: MissionState["status"] = "executing", overrides: Partial<MissionState> = {}): MissionState {
-	return {
-		missionId: "test-mission",
-		status,
-		progressLog: [],
-		startedAt: new Date(Date.now() - 3600_000).toISOString(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-		...overrides,
-	};
+	return _ss({ status, startedAt: new Date(Date.now() - 60_000).toISOString(), ...overrides });
 }
 
 // ---------------------------------------------------------------------------

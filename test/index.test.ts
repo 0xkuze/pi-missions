@@ -9,30 +9,22 @@ import { acquireLock, isLocked } from "../extensions/state/lock.js";
 import { saveState } from "../extensions/state/manager.js";
 import type { ActiveSession, MissionState } from "../extensions/types.js";
 import { nowISO } from "../extensions/utils.js";
+import { makeState as _ss } from "./helpers/index.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
 function makePlanningState(): MissionState {
-	return {
-		missionId: "test-mission",
-		status: "planning",
-		progressLog: [],
-		startedAt: new Date(Date.now() - 60_000).toISOString(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-	};
+	return _ss({ status: "planning" });
 }
 
 function makeExecutingState(): MissionState {
-	return { ...makePlanningState(), status: "executing" };
+	return _ss({ status: "executing", currentMilestoneId: "m1" });
 }
 
 function makeCompletedState(): MissionState {
-	return { ...makePlanningState(), status: "completed", completedAt: nowISO() };
+	return _ss({ status: "completed", completedAt: new Date().toISOString() });
 }
 
 type SessionCacheEntry = { type: "custom"; customType: string; data?: unknown };

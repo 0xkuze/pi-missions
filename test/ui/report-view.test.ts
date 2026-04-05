@@ -9,58 +9,22 @@ import {
 	renderReportView,
 } from "../../extensions/ui/report-view.js";
 import { nowISO } from "../../extensions/utils.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";
 
 function makeFeature(id: string, status: Feature["status"], name?: string, overrides: Partial<Feature> = {}): Feature {
-	return {
-		id,
-		name: name ?? `Feature ${id}`,
-		description: "A feature",
-		acceptanceCriteria: ["criterion 1"],
-		relevantFiles: [],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status,
-		attempts: [],
-		...overrides,
-	};
+	return _sf({ id, name: name ?? `Feature ${id}`, status, ...overrides });
 }
 
 function makeMilestone(id: string, features: Feature[], status: Milestone["status"] = "pending"): Milestone {
-	return {
-		id,
-		name: `Milestone ${id}`,
-		description: "A milestone",
-		features,
-		status,
-	};
+	return _sm({ id, name: `Milestone ${id}`, features, status });
 }
 
 function makePlan(milestones: Milestone[]): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Build an authentication system",
-		planVersion: 1,
-		milestones,
-		validationCommands: [],
-		modelAssignment: {},
-		createdAt: nowISO(),
-	};
+	return _sp({ milestones });
 }
 
 function makeState(overrides: Partial<MissionState> = {}): MissionState {
-	const startedAt = new Date(Date.now() - 3600_000).toISOString();
-	return {
-		missionId: "mission-1",
-		status: "completed",
-		progressLog: [],
-		startedAt,
-		completedAt: nowISO(),
-		totalFeaturesCompleted: 3,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 1,
-		totalFixFeaturesCreated: 0,
-		...overrides,
-	};
+	return _ss({ status: "completed", startedAt: new Date(Date.now() - 60_000).toISOString(), ...overrides });
 }
 
 describe("renderReportView (VAL-UI-010)", () => {

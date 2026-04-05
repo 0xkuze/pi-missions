@@ -2,52 +2,24 @@ import { describe, expect, it } from "bun:test";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
 import { handleStatusOverlayKey, renderStatusOverlay } from "../../extensions/ui/status-overlay.js";
 import { nowISO } from "../../extensions/utils.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";
 
 function makeState(overrides: Partial<MissionState> = {}): MissionState {
-	return {
-		missionId: "test-mission",
-		status: "planning",
-		progressLog: [],
-		startedAt: new Date(Date.now() - 60_000).toISOString(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-		...overrides,
-	};
+	return _ss({ status: "planning", startedAt: new Date(Date.now() - 60_000).toISOString(), ...overrides });
 }
 
 function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test mission",
-		planVersion: 1,
+	return _sp({
 		milestones: [
-			{
+			_sm({
 				id: "m1",
 				name: "Milestone 1",
-				description: "First milestone",
+				features: [_sf({ id: "f1", name: "Feature 1", status: "active" })],
 				status: "active",
-				features: [
-					{
-						id: "f1",
-						name: "Feature 1",
-						description: "First feature",
-						acceptanceCriteria: [],
-						relevantFiles: [],
-						dependencies: [],
-						estimatedComplexity: "low",
-						status: "active",
-						attempts: [],
-					},
-				],
-			},
+			}),
 		],
-		validationCommands: [],
-		modelAssignment: {},
-		createdAt: nowISO(),
 		...overrides,
-	};
+	});
 }
 
 describe("renderStatusOverlay (VAL-NEWUI-004)", () => {

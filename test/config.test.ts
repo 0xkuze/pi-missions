@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { getDefaultConfig, loadMissionConfig, resolveModel, resolveValidationCommands } from "../extensions/config.js";
 import { saveConfig } from "../extensions/state/manager.js";
 import type { Milestone, MissionConfig, MissionPlan } from "../extensions/types.js";
+import { makeMilestone as _sm, makePlan as _sp } from "./helpers/index.js";
 
 const TMP_BASE = join(import.meta.dir, "__config_test_tmp__");
 
@@ -20,27 +21,11 @@ function makeProjectDir(): string {
 }
 
 function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test plan",
-		planVersion: 1,
-		milestones: [],
-		validationCommands: [],
-		modelAssignment: {},
-		createdAt: new Date().toISOString(),
-		...overrides,
-	};
+	return _sp({ milestones: [makeMilestone()], validationCommands: ["bun test"], ...overrides });
 }
 
 function makeMilestone(overrides: Partial<Milestone> = {}): Milestone {
-	return {
-		id: "ms-1",
-		name: "Test Milestone",
-		description: "desc",
-		features: [],
-		status: "pending",
-		...overrides,
-	};
+	return _sm({ validationCommands: overrides.validationCommands, ...overrides });
 }
 
 beforeEach(() => mkdirSync(TMP_BASE, { recursive: true }));

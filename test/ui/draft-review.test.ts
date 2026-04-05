@@ -2,36 +2,19 @@ import { describe, expect, it } from "bun:test";
 import type { Feature, Milestone, MissionPlan } from "../../extensions/types.js";
 import { handleDraftReviewKey, renderDraftReview } from "../../extensions/ui/draft-review.js";
 import { nowISO } from "../../extensions/utils.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";
 
 function makeFeature(id: string, name: string, description = "A feature"): Feature {
-	return {
-		id,
-		name,
-		description,
-		acceptanceCriteria: ["criterion 1"],
-		relevantFiles: [],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status: "pending",
-		attempts: [],
-	};
+	return _sf({ id, name, description });
 }
 
 function makeMilestone(id: string, name: string, features: Feature[]): Milestone {
-	return {
-		id,
-		name,
-		description: "A milestone",
-		features,
-		status: "pending",
-	};
+	return _sm({ id, name, features });
 }
 
 function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
+	return _sp({
 		description: "Build multi-tenant auth system",
-		planVersion: 1,
 		milestones: [
 			makeMilestone("m1", "Foundation", [
 				makeFeature("f1", "user-model", "Create User entity and migration"),
@@ -41,9 +24,8 @@ function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
 		],
 		validationCommands: ["npm run typecheck", "npm test", "npm run lint"],
 		modelAssignment: { worker: "claude-sonnet-4" },
-		createdAt: nowISO(),
 		...overrides,
-	};
+	});
 }
 
 describe("renderDraftReview (VAL-UI-007)", () => {

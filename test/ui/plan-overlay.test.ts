@@ -2,49 +2,23 @@ import { describe, expect, it } from "bun:test";
 import type { MissionPlan } from "../../extensions/types.js";
 import { handlePlanOverlayKey, renderPlanOverlay } from "../../extensions/ui/plan-overlay.js";
 import { nowISO } from "../../extensions/utils.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";
 
 function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test mission",
-		planVersion: 1,
+	return _sp({
 		milestones: [
-			{
+			_sm({
 				id: "m1",
 				name: "Milestone 1",
-				description: "First milestone",
-				status: "active",
 				features: [
-					{
-						id: "f1",
-						name: "Feature 1",
-						description: "First feature",
-						acceptanceCriteria: [],
-						relevantFiles: [],
-						dependencies: [],
-						estimatedComplexity: "low",
-						status: "pending",
-						attempts: [],
-					},
-					{
-						id: "f2",
-						name: "Feature 2",
-						description: "Second feature",
-						acceptanceCriteria: [],
-						relevantFiles: [],
-						dependencies: [],
-						estimatedComplexity: "medium",
-						status: "done",
-						attempts: [],
-					},
+					_sf({ id: "f1", name: "Feature 1" }),
+					_sf({ id: "f2", name: "Feature 2", estimatedComplexity: "medium", status: "done" }),
 				],
-			},
+				status: "active",
+			}),
 		],
-		validationCommands: [],
-		modelAssignment: {},
-		createdAt: nowISO(),
 		...overrides,
-	};
+	});
 }
 
 describe("renderPlanOverlay (VAL-NEWUI-005)", () => {

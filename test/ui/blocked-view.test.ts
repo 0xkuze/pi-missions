@@ -3,20 +3,10 @@ import type { Feature } from "../../extensions/types.js";
 import type { LastFailureDetails } from "../../extensions/ui/blocked-view.js";
 import { handleBlockedViewKey, renderBlockedView } from "../../extensions/ui/blocked-view.js";
 import { nowISO } from "../../extensions/utils.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";
 
 function makeFeature(id: string, name: string, overrides: Partial<Feature> = {}): Feature {
-	return {
-		id,
-		name,
-		description: "A feature",
-		acceptanceCriteria: ["criterion 1"],
-		relevantFiles: [],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status: "blocked",
-		attempts: [],
-		...overrides,
-	};
+	return _sf({ id, name, ...overrides });
 }
 
 function makeAttempt(n: number): Feature["attempts"][0] {

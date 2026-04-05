@@ -7,65 +7,33 @@ import setup, { reconcileStateOnStart } from "../extensions/index.js";
 import { loadPlan, loadState, savePlan, saveState } from "../extensions/state/manager.js";
 import type { Feature, Milestone, MissionPlan, MissionState } from "../extensions/types.js";
 import { nowISO } from "../extensions/utils.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "./helpers/index.js";
 
 // ---------------------------------------------------------------------------
 // Test factories
 // ---------------------------------------------------------------------------
 
 function makeState(status: MissionState["status"] = "planning", overrides: Partial<MissionState> = {}): MissionState {
-	return {
-		missionId: "test-mission",
-		status,
-		progressLog: [],
-		startedAt: new Date(Date.now() - 60_000).toISOString(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-		...overrides,
-	};
+	return _ss({ status, startedAt: new Date(Date.now() - 60_000).toISOString(), ...overrides });
 }
 
 function makeFeature(id: string, status: Feature["status"] = "pending", overrides: Partial<Feature> = {}): Feature {
-	return {
-		id,
-		name: `Feature ${id}`,
-		description: `Implements ${id}`,
-		acceptanceCriteria: ["Works correctly"],
-		relevantFiles: [],
-		dependencies: [],
-		estimatedComplexity: "low",
-		status,
-		attempts: [],
-		...overrides,
-	};
+	return _sf({ id, name: `Feature ${id}`, status, ...overrides });
 }
 
 function makeMilestone(id: string, features: Feature[], status: Milestone["status"] = "pending"): Milestone {
-	return {
-		id,
-		name: `Milestone ${id}`,
-		description: `Milestone ${id} description`,
-		features,
-		status,
-	};
+	return _sm({ id, name: `Milestone ${id}`, features, status });
 }
 
 function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
-	return {
-		id: "plan-1",
-		description: "Test mission plan",
-		planVersion: 1,
+	return _sp({
 		milestones: [
 			makeMilestone("m1", [makeFeature("f1"), makeFeature("f2")]),
 			makeMilestone("m2", [makeFeature("f3")]),
 		],
 		validationCommands: ["bun test"],
-		modelAssignment: {},
-		createdAt: nowISO(),
-		approvedAt: nowISO(),
 		...overrides,
-	};
+	});
 }
 
 function makeWorkerResult(status: "success" | "failure"): object {

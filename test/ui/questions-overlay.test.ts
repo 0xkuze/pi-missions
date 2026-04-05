@@ -7,6 +7,7 @@ import {
 	renderQuestionsOverlay,
 	renderTabBar,
 } from "../../extensions/ui/questions-overlay.js";
+import { makeState as _ss } from "../helpers/index.js";
 
 function makeQuestions(count = 3): Question[] {
 	const qs: Question[] = [];

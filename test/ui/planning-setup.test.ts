@@ -1,19 +1,10 @@
 import { describe, expect, it } from "bun:test";
 import type { MissionState, ProgressEvent } from "../../extensions/types.js";
 import { handlePlanningSetupKey, renderPlanningSetupView } from "../../extensions/ui/planning-setup.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";
 
 function makeState(overrides: Partial<MissionState> = {}): MissionState {
-	return {
-		missionId: "test-mission",
-		status: "planning",
-		progressLog: [],
-		startedAt: new Date(Date.now() - 60_000).toISOString(),
-		totalFeaturesCompleted: 0,
-		totalFeaturesFailed: 0,
-		totalFeaturesSkipped: 0,
-		totalFixFeaturesCreated: 0,
-		...overrides,
-	};
+	return _ss({ status: "planning", startedAt: new Date(Date.now() - 60_000).toISOString(), ...overrides });
 }
 
 function makePlanningEvent(context?: string[]): ProgressEvent {
