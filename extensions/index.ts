@@ -14,6 +14,7 @@ import { registerSpawnWorkerTool } from "./tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
 import type { Feature, MissionPlan, MissionState, WorkerResult } from "./types.js";
+import { MissionControlComponent } from "./ui/mission-control.js";
 import { updateWidget as renderWidget } from "./ui/widget.js";
 import { nowISO } from "./utils.js";
 
@@ -385,11 +386,14 @@ export default function (pi: ExtensionAPI): void {
 	// Register all slash commands.
 	registerCommands(pi, { basePath, updateWidget, clearWidget });
 
-	// Register Ctrl+Shift+M shortcut — Phase 3 placeholder for Mission Control overlay.
+	// Register Ctrl+Shift+M shortcut to open Mission Control overlay.
 	pi.registerShortcut("ctrl+shift+m", {
 		description: "Open Mission Control overlay",
-		handler: (_ctx) => {
-			// Phase 3: open Mission Control overlay via ctx.ui.custom({ overlay: true })
+		handler: async (ctx) => {
+			const deps = { basePath, loadState, loadPlan };
+			await ctx.ui.custom<void>((tui, _theme, _kb, done) => new MissionControlComponent(tui, done, deps), {
+				overlay: true,
+			});
 		},
 	});
 }
