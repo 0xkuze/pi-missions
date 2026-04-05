@@ -345,12 +345,9 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
 				ctx.ui.notify("No plan available yet.", "info");
 				return;
 			}
-			await ctx.ui.custom<void>(
-				(_tui, theme, _kb, done) => new PlanOverlayComponent(plan, done, themeFrameStyle(theme)),
-				{
-					overlay: true,
-				},
-			);
+			await ctx.ui.custom<void>((tui, theme, _kb, done) => new PlanOverlayComponent(tui, done, plan, theme), {
+				overlay: true,
+			});
 		},
 	});
 }
