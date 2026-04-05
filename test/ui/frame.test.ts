@@ -1,6 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import { visibleWidth } from "@mariozechner/pi-tui";
-import { frame, section, sectionWithCount, styledFeatureIcon, styledFeatureName, wrapText } from "../../extensions/ui/frame.js";
+import {
+	footerBar,
+	frame,
+	section,
+	sectionWithCount,
+	styledFeatureIcon,
+	styledFeatureName,
+	wrapText,
+} from "../../extensions/ui/frame.js";
 
 describe("frame", () => {
 	it("produces correct border characters", () => {
@@ -207,6 +215,29 @@ describe("styledFeatureName", () => {
 	it("applies textFn for pending status", () => {
 		const style = { textFn: (t: string) => `[T${t}T]` };
 		expect(styledFeatureName("feat", "pending", style)).toBe("[TfeatT]");
+	});
+});
+
+describe("footerBar", () => {
+	it("truncates without ellipsis when shortcuts exceed width", () => {
+		const shortcuts = "P: Pause  S: Skip  D: Done  R: Redirect  M: Models  L: Logs  H: History  Esc: Close";
+		const lines = footerBar(shortcuts, 40);
+		const text = lines.join("");
+		expect(text).not.toContain("\u2026");
+		expect(text).not.toContain("...");
+	});
+
+	it("pads content to fill width when shortcuts fit", () => {
+		const lines = footerBar("Esc: Close", 40);
+		expect(lines.length).toBe(3);
+		for (const line of lines) {
+			expect(visibleWidth(line)).toBe(40);
+		}
+	});
+
+	it("returns empty array for very small width", () => {
+		const lines = footerBar("test", 4);
+		expect(lines).toEqual([]);
 	});
 });
 

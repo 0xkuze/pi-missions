@@ -6,7 +6,12 @@ import { formatRelativeTime } from "./mission-control.js";
 
 export type PlanHistoryAction = { kind: "close" } | { kind: "noop" };
 
-export function renderPlanHistoryView(mutations: PlanMutation[], width = 80, style?: FrameStyle, height = 40): string[] {
+export function renderPlanHistoryView(
+	mutations: PlanMutation[],
+	width = 80,
+	style?: FrameStyle,
+	height = 40,
+): string[] {
 	const mf = style?.mutedFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);
 	const af = style?.accentFn ?? ((t: string) => t);

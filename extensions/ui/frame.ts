@@ -48,7 +48,7 @@ function padOrTruncate(line: string, contentWidth: number): string {
 	return line + " ".repeat(contentWidth - vw);
 }
 
-function applyBg(line: string, width: number, bgFn: (text: string) => string): string {
+export function applyBg(line: string, width: number, bgFn: (text: string) => string): string {
 	const vw = visibleWidth(line);
 	const padded = vw < width ? line + " ".repeat(width - vw) : line;
 	return bgFn(padded);
@@ -178,9 +178,7 @@ function renderPanelBody(
 		? Math.max(1, Math.round((contentHeight / totalLines) * contentHeight))
 		: contentHeight;
 	const scrollThumbPos =
-		showScrollbar && maxScroll > 0
-			? Math.round((clampedOffset / maxScroll) * (contentHeight - scrollThumbSize))
-			: 0;
+		showScrollbar && maxScroll > 0 ? Math.round((clampedOffset / maxScroll) * (contentHeight - scrollThumbSize)) : 0;
 
 	const rows: string[] = [];
 	for (let i = 0; i < contentHeight; i++) {
@@ -287,7 +285,10 @@ export function footerBar(shortcuts: string, width: number, style?: FrameStyle):
 	const contentWidth = width - 4;
 	if (contentWidth < 1) return [];
 	const styledShortcuts = styleFooter(shortcuts, style?.accentFn);
-	const padded = padOrTruncate(styledShortcuts, contentWidth);
+	const vw = visibleWidth(styledShortcuts);
+	const truncated = vw > contentWidth ? truncateToWidth(styledShortcuts, contentWidth, "") : styledShortcuts;
+	const truncVW = visibleWidth(truncated);
+	const padded = truncVW < contentWidth ? truncated + " ".repeat(contentWidth - truncVW) : truncated;
 
 	const topBorder = b(`${BOX_TL}${BOX_H.repeat(width - 2)}${BOX_TR}`);
 	const content = `${b(BOX_V)} ${padded} ${b(BOX_V)}`;

@@ -1277,6 +1277,194 @@ describe("MissionControlComponent scroll and height clamping", () => {
 	});
 });
 
+describe("MissionControlComponent title/status background", () => {
+	it("applies bgFn to title bar, status bar, and spacing line when style has bgFn", () => {
+		const tmpDir = join(tmpdir(), `mc-bg-title-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const feature = makeFeature("f1", "active", "jwt-tokens");
+			const milestone = makeMilestone("m1", [feature], "active");
+			const plan = makePlan([milestone]);
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f1",
+				progressLog: [makeEvent("feature_start", "started jwt-tokens", 60_000)],
+			});
+
+			const mockTheme = {
+				fg: (_color: string, text: string) => `\x1b[31m${text}\x1b[0m`,
+				bg: (_color: string, text: string) => `\x1b[41m${text}\x1b[0m`,
+				bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+			};
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI();
+			const component = new MissionControlComponent(tui, () => {}, deps, mockTheme);
+
+			const lines = component.render(120);
+			const titleLine = lines[0]!;
+			const statusLine = lines[1]!;
+			const spacingLine = lines[2]!;
+
+			expect(titleLine).toContain("\x1b[41m");
+			expect(statusLine).toContain("\x1b[41m");
+			expect(spacingLine).toContain("\x1b[41m");
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("MissionControlComponent mouse scroll uses row position", () => {
+	it("scrolls right-bottom panel when mouse is below right-top panel boundary", () => {
+		const tmpDir = join(tmpdir(), `mc-mouse-row-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const features: Feature[] = [];
+			for (let i = 0; i < 20; i++) {
+				features.push(makeFeature(`f${i}`, i === 0 ? "active" : "pending", `feature-${i}`));
+			}
+			const plan = makePlan([makeMilestone("m1", features, "active")]);
+			const events: ProgressEvent[] = [];
+			for (let i = 0; i < 30; i++) {
+				events.push(makeEvent("feature_start", `event-${i}`, i * 10_000));
+			}
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f0",
+				progressLog: events,
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(25);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+
+			const linesBefore = component.render(120);
+
+			const rightCol = 60;
+			const bottomRow = 18;
+			component.handleInput(`\x1b[<65;${rightCol};${bottomRow}M`);
+			const linesAfter = component.render(120);
+
+			expect(linesAfter).not.toEqual(linesBefore);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("scrolls right-top panel when mouse is in upper right area", () => {
+		const tmpDir = join(tmpdir(), `mc-mouse-row-top-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const features: Feature[] = [];
+			for (let i = 0; i < 20; i++) {
+				features.push(makeFeature(`f${i}`, i === 0 ? "active" : "pending", `feature-${i}`));
+			}
+			const plan = makePlan([makeMilestone("m1", features, "active")]);
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f0",
+				progressLog: [makeEvent("feature_start", "started", 60_000)],
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(40);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+
+			const linesBefore = component.render(120);
+
+			const rightCol = 60;
+			const topRow = 5;
+			component.handleInput(`\x1b[<65;${rightCol};${topRow}M`);
+			const linesAfter = component.render(120);
+
+			expect(linesAfter).not.toEqual(linesBefore);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("MissionControlComponent footer no ellipsis", () => {
+	it("footer does not contain ellipsis when shortcuts are truncated", () => {
+		const tmpDir = join(tmpdir(), `mc-footer-ellipsis-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const feature = makeFeature("f1", "active", "jwt-tokens");
+			const milestone = makeMilestone("m1", [feature], "active");
+			const plan = makePlan([milestone]);
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f1",
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(20);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+
+			const narrowWidth = 50;
+			const lines = component.render(narrowWidth);
+			const footerLines = lines.slice(-3);
+			const footerText = footerLines.join("");
+
+			expect(footerText).not.toContain("\u2026");
+			expect(footerText).not.toContain("...");
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("MissionControlComponent status bar centering", () => {
+	it("status bar content is centered within the width", () => {
+		const tmpDir = join(tmpdir(), `mc-status-center-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const feature = makeFeature("f1", "active", "jwt-tokens");
+			const milestone = makeMilestone("m1", [feature], "active");
+			const plan = makePlan([milestone]);
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f1",
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI();
+			const component = new MissionControlComponent(tui, () => {}, deps);
+
+			const width = 120;
+			const lines = component.render(width);
+			const statusLine = lines[1]!;
+
+			const stripped = statusLine.replace(/^\s+/, "");
+			const leadingSpaces = statusLine.length - stripped.length;
+			expect(leadingSpaces).toBeGreaterThan(0);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+});
+
 describe("MissionControlComponent parseMouseScroll", () => {
 	it("returns -3 for scroll up (button 64)", () => {
 		const tmpDir = join(tmpdir(), `mc-mouse-up-${Date.now()}`);

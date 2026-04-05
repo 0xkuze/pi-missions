@@ -9,6 +9,7 @@ import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from
 import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
 import type { FrameStyle } from "./frame.js";
 import {
+	applyBg,
 	footerBar,
 	frame,
 	panel,
@@ -599,17 +600,25 @@ export class MissionControlComponent {
 	}
 
 	private handleMouseScroll(data: string): boolean {
-		const match = data.match(/^\x1b\[<(\d+);(\d+);\d+[Mm]$/);
+		const match = data.match(/^\x1b\[<(\d+);(\d+);(\d+)[Mm]$/);
 		if (!match) return false;
 		const button = parseInt(match[1]!, 10);
 		if (button !== 64 && button !== 65) return false;
 		const col = parseInt(match[2]!, 10);
+		const row = parseInt(match[3]!, 10);
 		const delta = button === 64 ? -3 : 3;
 
 		const leftWidth = Math.floor(this.tui.terminal.columns * 0.4);
+		const headerRows = 3;
+		const termRows = this.tui.terminal.rows;
+		const footerRows = 3;
+		const availablePanelRows = Math.max(5, termRows - footerRows - headerRows - 2);
+		const rightTopHeight = Math.floor(availablePanelRows * 0.45);
+		const rightTopEnd = headerRows + rightTopHeight;
+
 		if (col <= leftWidth) {
 			this.leftScrollOffset = Math.max(0, this.leftScrollOffset + delta);
-		} else if (this.activePane === "right-bottom") {
+		} else if (row > rightTopEnd) {
 			this.rightBottomScrollOffset = Math.max(0, this.rightBottomScrollOffset + delta);
 		} else {
 			this.rightTopScrollOffset = Math.max(0, this.rightTopScrollOffset + delta);
@@ -653,8 +662,8 @@ export class MissionControlComponent {
 				if (result.action.kind === "close") {
 					this.currentSubView = null;
 					this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+					this.rightTopScrollOffset = 0;
+					this.rightBottomScrollOffset = 0;
 				} else if (result.action.kind === "select_model") {
 					const updated = applyModelChangeToConfig(this.config, result.action.roleIndex, result.action.model);
 					saveConfig(this.deps.basePath, updated);
@@ -673,8 +682,8 @@ export class MissionControlComponent {
 				if (action.kind === "close") {
 					this.currentSubView = null;
 					this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+					this.rightTopScrollOffset = 0;
+					this.rightBottomScrollOffset = 0;
 					this.tui.requestRender();
 				}
 				return;
@@ -684,8 +693,8 @@ export class MissionControlComponent {
 				if (action.kind === "close") {
 					this.currentSubView = null;
 					this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+					this.rightTopScrollOffset = 0;
+					this.rightBottomScrollOffset = 0;
 					this.tui.requestRender();
 				}
 				return;
@@ -695,8 +704,8 @@ export class MissionControlComponent {
 				if (action.kind === "close") {
 					this.currentSubView = null;
 					this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+					this.rightTopScrollOffset = 0;
+					this.rightBottomScrollOffset = 0;
 					this.tui.requestRender();
 				}
 				return;
@@ -741,14 +750,14 @@ export class MissionControlComponent {
 					}
 					this.currentSubView = null;
 					this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+					this.rightTopScrollOffset = 0;
+					this.rightBottomScrollOffset = 0;
 					this.done();
 				} else if (action.kind === "close") {
 					this.currentSubView = null;
 					this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+					this.rightTopScrollOffset = 0;
+					this.rightBottomScrollOffset = 0;
 					this.done();
 				}
 				this.tui.requestRender();
@@ -1056,7 +1065,11 @@ export class MissionControlComponent {
 		const entry = statusLabels[state.status] ?? { label: capitalize(state.status), fn: mf };
 		const statusDot = `${entry.fn("\u25cf")} ${entry.fn(entry.label)}`;
 
-		if (!plan) return statusDot;
+		if (!plan) {
+			const dotVW = visibleWidth(statusDot);
+			const dotPad = Math.max(0, Math.floor((contentWidth - dotVW) / 2));
+			return " ".repeat(dotPad) + statusDot;
+		}
 
 		const { done, total } = countFeatureStats(plan);
 		const hasActive = !!state.currentFeatureId;
@@ -1080,14 +1093,13 @@ export class MissionControlComponent {
 		if (feature) parts.push(`${mf("Feature:")} ${tf(feature.name)}`);
 		const suffix = parts.length > 0 ? ` \u00b7 ${parts.join(" \u00b7 ")}` : "";
 
-		return `${statusDot}  ${bar}  ${count}${suffix}`;
+		const result = `${statusDot}  ${bar}  ${count}${suffix}`;
+		const resultVW = visibleWidth(result);
+		const leftPad = Math.max(0, Math.floor((contentWidth - resultVW) / 2));
+		return " ".repeat(leftPad) + result;
 	}
 
-	private buildFeaturePanelLines(
-		state: MissionState,
-		plan: MissionPlan,
-		contentWidth: number,
-	): string[] {
+	private buildFeaturePanelLines(state: MissionState, plan: MissionPlan, contentWidth: number): string[] {
 		const feature = findCurrentFeature(state, plan);
 		const milestone = findCurrentMilestone(state, plan);
 		const mf = this.style?.mutedFn ?? ((t: string) => t);
@@ -1213,19 +1225,22 @@ export class MissionControlComponent {
 		const statusLine = this.renderStatusBar(state, plan, width);
 
 		const leftContentWidth = leftWidth - 4;
-		const leftContent = plan
-			? this.buildFeaturePanelLines(state, plan, leftContentWidth)
-			: ["No Active Feature"];
-		const leftPanel = panel("Current Feature", leftContent, leftWidth, availablePanelRows, this.leftScrollOffset, this.style);
+		const leftContent = plan ? this.buildFeaturePanelLines(state, plan, leftContentWidth) : ["No Active Feature"];
+		const leftPanel = panel(
+			"Current Feature",
+			leftContent,
+			leftWidth,
+			availablePanelRows,
+			this.leftScrollOffset,
+			this.style,
+		);
 
 		const rightTopHeight = Math.floor(availablePanelRows * 0.45);
 		const rightBottomHeight = availablePanelRows - rightTopHeight;
 
 		const rightContentWidth = rightWidth - 4;
 		const { done, total } = countFeatureStats(plan);
-		const featuresContent = plan
-			? this.buildOutlineLines(plan, rightContentWidth)
-			: ["(no plan loaded)"];
+		const featuresContent = plan ? this.buildOutlineLines(plan, rightContentWidth) : ["(no plan loaded)"];
 		const featuresPanel = panelWithCount(
 			"Features",
 			`${done}/${total}`,
@@ -1252,10 +1267,12 @@ export class MissionControlComponent {
 		const maxRows = Math.max(leftPanel.length, rightLines.length);
 
 		const output: string[] = [];
+		const bgFn = this.style?.bgFn;
 
-		output.push(titleBar("Mission Control", width, this.style));
-		output.push(statusLine);
-		output.push("");
+		const titleLine = titleBar("Mission Control", width, this.style);
+		output.push(bgFn ? applyBg(titleLine, width, bgFn) : titleLine);
+		output.push(bgFn ? applyBg(statusLine, width, bgFn) : statusLine);
+		output.push(bgFn ? applyBg("", width, bgFn) : "");
 
 		for (let i = 0; i < maxRows; i++) {
 			const left = leftPanel[i] ?? "";
@@ -1265,7 +1282,7 @@ export class MissionControlComponent {
 			output.push(`${leftPadded}${leftPad > 0 ? " ".repeat(leftPad) : ""}${truncateToWidth(right, rightWidth)}`);
 		}
 
-		const shortcuts = "P: Pause  S: Skip  D: Done  R: Redirect  M: Models  V: Validate  L: Logs  H: History  Esc: Close";
+		const shortcuts = "P: Pause  S: Skip  D: Done  R: Redirect  M: Models  L: Logs  H: History  Esc: Close";
 		for (const line of footerBar(shortcuts, width, this.style)) {
 			output.push(line);
 		}

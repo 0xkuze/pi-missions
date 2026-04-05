@@ -5,7 +5,13 @@ import { footerBar, panel, section, titleBar } from "./frame.js";
 
 export type PlanningSetupAction = { kind: "close" } | { kind: "noop" };
 
-export function renderPlanningSetupView(state: MissionState, goal?: string, width = 80, style?: FrameStyle, height = 40): string[] {
+export function renderPlanningSetupView(
+	state: MissionState,
+	goal?: string,
+	width = 80,
+	style?: FrameStyle,
+	height = 40,
+): string[] {
 	const contentWidth = width - 4;
 	const tf = style?.textFn ?? ((t: string) => t);
 	const bf = style?.boldFn ?? ((t: string) => t);
