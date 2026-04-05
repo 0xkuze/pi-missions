@@ -396,16 +396,12 @@ describe("buildOrchestratorProtocol", () => {
 		});
 
 		it("autonomy also applies to planning state", () => {
-			const low = buildOrchestratorProtocol(
-				makeState({ status: "planning" }),
-				undefined,
-				{ autonomy: "low" } satisfies MissionConfig,
-			) as string;
-			const high = buildOrchestratorProtocol(
-				makeState({ status: "planning" }),
-				undefined,
-				{ autonomy: "high" } satisfies MissionConfig,
-			) as string;
+			const low = buildOrchestratorProtocol(makeState({ status: "planning" }), undefined, {
+				autonomy: "low",
+			} satisfies MissionConfig) as string;
+			const high = buildOrchestratorProtocol(makeState({ status: "planning" }), undefined, {
+				autonomy: "high",
+			} satisfies MissionConfig) as string;
 			expect(low).not.toBe(high);
 			expect(low.toLowerCase()).toContain("low");
 			expect(high.toLowerCase()).toContain("high");

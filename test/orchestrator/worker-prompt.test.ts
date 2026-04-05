@@ -8,8 +8,7 @@ import {
 	writeWorkerFiles,
 } from "../../extensions/orchestrator/worker-prompt.js";
 import type { Feature } from "../../extensions/types.js";
-import { makeFeature } from "../helpers/index.js";
-import { createTempDir } from "../helpers/index.js";
+import { createTempDir, makeFeature } from "../helpers/index.js";
 
 const FORBIDDEN_TERMS = ["mission", "orchestrat", "milestone", "state.json", "plan.json", ".pi/missions"];
 
