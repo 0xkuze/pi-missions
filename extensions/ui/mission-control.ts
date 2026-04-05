@@ -492,6 +492,8 @@ export class MissionControlComponent {
 	private modelViewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 	private pollInterval: ReturnType<typeof setInterval> | null = null;
 	private style: FrameStyle | undefined;
+	private scrollOffset = 0;
+	private lastBodyHeight = 0;
 
 	constructor(
 		private tui: TUI,
@@ -524,6 +526,9 @@ export class MissionControlComponent {
 			JSON.stringify(nextConfig) !== JSON.stringify(this.config) ||
 			nextHistory.length !== this.planHistory.length
 		) {
+			if (nextState?.status !== this.state?.status || nextState?.currentFeatureId !== this.state?.currentFeatureId) {
+				this.scrollOffset = 0;
+			}
 			this.state = nextState;
 			this.plan = nextPlan;
 			this.config = nextConfig;
@@ -538,8 +543,37 @@ export class MissionControlComponent {
 			this.handleSubViewInput(data, activeView);
 			return;
 		}
+		if (this.handleScroll(data)) {
+			this.tui.requestRender();
+			return;
+		}
 		const action = handleKeyboardAction(data, this.state);
 		this.dispatchAction(action);
+	}
+
+	private handleScroll(data: string): boolean {
+		const availableHeight = Math.max(5, this.tui.terminal.rows - 6);
+		const maxScroll = Math.max(0, this.lastBodyHeight - availableHeight);
+		if (maxScroll === 0) return false;
+		if (matchesKey(data, "up")) {
+			this.scrollOffset = Math.max(0, this.scrollOffset - 1);
+			return true;
+		}
+		if (matchesKey(data, "down")) {
+			this.scrollOffset = Math.min(maxScroll, this.scrollOffset + 1);
+			return true;
+		}
+		if (matchesKey(data, "pageUp")) {
+			const pageSize = Math.max(1, availableHeight - 2);
+			this.scrollOffset = Math.max(0, this.scrollOffset - pageSize);
+			return true;
+		}
+		if (matchesKey(data, "pageDown")) {
+			const pageSize = Math.max(1, availableHeight - 2);
+			this.scrollOffset = Math.min(maxScroll, this.scrollOffset + pageSize);
+			return true;
+		}
+		return false;
 	}
 
 	private handleSubViewInput(data: string, subView: SubView): void {
@@ -549,6 +583,7 @@ export class MissionControlComponent {
 				this.modelViewState = result.nextViewState;
 				if (result.action.kind === "close") {
 					this.currentSubView = null;
+					this.scrollOffset = 0;
 				} else if (result.action.kind === "select_model") {
 					const updated = applyModelChangeToConfig(this.config, result.action.roleIndex, result.action.model);
 					saveConfig(this.deps.basePath, updated);
@@ -566,6 +601,7 @@ export class MissionControlComponent {
 				const action = handleValidationViewKey(data);
 				if (action.kind === "close") {
 					this.currentSubView = null;
+					this.scrollOffset = 0;
 					this.tui.requestRender();
 				}
 				return;
@@ -574,6 +610,7 @@ export class MissionControlComponent {
 				const action = handleProgressLogKey(data);
 				if (action.kind === "close") {
 					this.currentSubView = null;
+					this.scrollOffset = 0;
 					this.tui.requestRender();
 				}
 				return;
@@ -582,6 +619,7 @@ export class MissionControlComponent {
 				const action = handlePlanHistoryKey(data);
 				if (action.kind === "close") {
 					this.currentSubView = null;
+					this.scrollOffset = 0;
 					this.tui.requestRender();
 				}
 				return;
@@ -625,9 +663,11 @@ export class MissionControlComponent {
 						);
 					}
 					this.currentSubView = null;
+					this.scrollOffset = 0;
 					this.done();
 				} else if (action.kind === "close") {
 					this.currentSubView = null;
+					this.scrollOffset = 0;
 					this.done();
 				}
 				this.tui.requestRender();
@@ -688,19 +728,23 @@ export class MissionControlComponent {
 			case "open_model_view":
 				this.modelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 				this.currentSubView = { kind: "model" };
+				this.scrollOffset = 0;
 				this.tui.requestRender();
 				return;
 			case "open_validation_view":
 				this.currentSubView = { kind: "validation" };
+				this.scrollOffset = 0;
 				this.tui.requestRender();
 				return;
 			case "open_logs_view":
 				this.currentSubView = { kind: "logs" };
+				this.scrollOffset = 0;
 				this.tui.requestRender();
 				return;
 			case "open_history_view":
 				this.planHistory = readHistory(this.deps.basePath);
 				this.currentSubView = { kind: "history" };
+				this.scrollOffset = 0;
 				this.tui.requestRender();
 				return;
 		}
@@ -968,7 +1012,7 @@ export class MissionControlComponent {
 		const rightContent = [...rightOutline, "", ...rightLog];
 
 		const maxRows = Math.max(leftContent.length, rightContent.length);
-		const bodyLines: string[] = [statusLine, ""];
+		const allBodyLines: string[] = [statusLine, ""];
 
 		for (let i = 0; i < maxRows; i++) {
 			const rawLeft = leftContent[i] ?? "";
@@ -976,11 +1020,29 @@ export class MissionControlComponent {
 			const leftPad = colWidth - visibleWidth(leftTrunc);
 			const left = leftPad > 0 ? leftTrunc + " ".repeat(leftPad) : leftTrunc;
 			const right = truncateToWidth(rightContent[i] ?? "", rightColWidth);
-			bodyLines.push(`${left}${right}`);
+			allBodyLines.push(`${left}${right}`);
 		}
 
-		const footer = "P: Pause  S: Skip  D: Done  R: Redirect  M: Models  V: Validate  L: Logs  H: History  Esc: Close";
-		return frame("Mission Control", bodyLines, width, footer, this.style);
+		const availableHeight = Math.max(5, this.tui.terminal.rows - 6);
+		this.lastBodyHeight = allBodyLines.length;
+
+		const maxScroll = Math.max(0, allBodyLines.length - availableHeight);
+		this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, maxScroll));
+
+		const visibleLines = allBodyLines.slice(this.scrollOffset, this.scrollOffset + availableHeight);
+
+		const hasOverflow = allBodyLines.length > availableHeight;
+		if (hasOverflow) {
+			const mf = this.style?.mutedFn ?? ((t: string) => t);
+			const scrollInfo = mf(
+				`[${this.scrollOffset + 1}-${Math.min(this.scrollOffset + availableHeight, allBodyLines.length)} of ${allBodyLines.length}]`,
+			);
+			visibleLines.push(scrollInfo);
+		}
+
+		const scrollHint = hasOverflow ? "Up/Down: Scroll  " : "";
+		const footer = `${scrollHint}P: Pause  S: Skip  D: Done  R: Redirect  M: Models  V: Validate  L: Logs  H: History  Esc: Close`;
+		return frame("Mission Control", visibleLines, width, footer, this.style);
 	}
 
 	invalidate(): void {}

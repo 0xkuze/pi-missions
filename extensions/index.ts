@@ -511,6 +511,10 @@ export default function (pi: ExtensionAPI): void {
 			};
 			await ctx.ui.custom<void>((tui, theme, _kb, done) => new MissionControlComponent(tui, done, deps, theme), {
 				overlay: true,
+				overlayOptions: {
+					maxHeight: "90%",
+					anchor: "center",
+				},
 			});
 		},
 	});

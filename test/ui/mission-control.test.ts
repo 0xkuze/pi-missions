@@ -791,9 +791,10 @@ function makeDeps(tmpDir: string, overrides: Partial<MissionControlDeps> = {}): 
 	};
 }
 
-function makeTUI() {
+function makeTUI(rows = 50) {
 	return {
 		requestRender: () => {},
+		terminal: { rows, columns: 120 },
 	} as unknown as import("@mariozechner/pi-tui").TUI;
 }
 
@@ -1020,6 +1021,198 @@ describe("MissionControlComponent ANSI-aware two-column layout", () => {
 			}
 
 			expect(lines.length).toBeGreaterThan(0);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("MissionControlComponent scroll and height clamping", () => {
+	function makeLargePlan(): MissionPlan {
+		const features: Feature[] = [];
+		for (let i = 0; i < 20; i++) {
+			features.push(
+				makeFeature(`f${i}`, i === 0 ? "active" : "pending", `feature-${i}`, {
+					acceptanceCriteria: [`criterion-a-${i}`, `criterion-b-${i}`],
+				}),
+			);
+		}
+		return makePlan([makeMilestone("m1", features, "active")]);
+	}
+
+	it("clamps render output to terminal height", () => {
+		const tmpDir = join(tmpdir(), `mc-scroll-clamp-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const terminalRows = 20;
+			const plan = makeLargePlan();
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f0",
+				progressLog: [
+					makeEvent("feature_start", "started feature-0", 60_000),
+					makeEvent("worker_spawn", "spawned worker", 50_000),
+				],
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(terminalRows);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+			const lines = component.render(120);
+
+			expect(lines.length).toBeLessThanOrEqual(terminalRows);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("does not clamp when content fits terminal", () => {
+		const tmpDir = join(tmpdir(), `mc-scroll-nooverflow-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const plan = makePlan([makeMilestone("m1", [makeFeature("f1", "active", "small-feature")], "active")]);
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f1",
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(80);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+			const lines = component.render(120);
+			const text = lines.join(" ");
+
+			expect(text).not.toContain("Up/Down: Scroll");
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("shows scroll hint in footer when content overflows", () => {
+		const tmpDir = join(tmpdir(), `mc-scroll-hint-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const plan = makeLargePlan();
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f0",
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(20);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+			const lines = component.render(120);
+			const text = lines.join(" ");
+
+			expect(text).toContain("Up/Down");
+			expect(text).toContain("Scroll");
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("scrolls down with down arrow key", () => {
+		const tmpDir = join(tmpdir(), `mc-scroll-down-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const plan = makeLargePlan();
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f0",
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(20);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+
+			const linesBefore = component.render(120);
+			component.handleInput("\x1b[B");
+			const linesAfter = component.render(120);
+
+			expect(linesBefore.length).toBeLessThanOrEqual(20);
+			expect(linesAfter).not.toEqual(linesBefore);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("does not scroll past content bounds", () => {
+		const tmpDir = join(tmpdir(), `mc-scroll-bound-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const plan = makeLargePlan();
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f0",
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(20);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+
+			component.render(120);
+			for (let i = 0; i < 200; i++) {
+				component.handleInput("\x1b[B");
+			}
+			const linesAtMax = component.render(120);
+
+			component.handleInput("\x1b[B");
+			const linesAfterMax = component.render(120);
+
+			expect(linesAfterMax).toEqual(linesAtMax);
+			expect(linesAtMax.length).toBeLessThanOrEqual(20);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("scrolls up with up arrow key after scrolling down", () => {
+		const tmpDir = join(tmpdir(), `mc-scroll-up-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const plan = makeLargePlan();
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f0",
+			});
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI(20);
+			const component = new MissionControlComponent(tui, () => {}, deps);
+
+			const original = component.render(120);
+			component.handleInput("\x1b[B");
+			component.handleInput("\x1b[B");
+			component.render(120);
+			component.handleInput("\x1b[A");
+			component.handleInput("\x1b[A");
+			const restored = component.render(120);
+
+			expect(restored).toEqual(original);
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
