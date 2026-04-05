@@ -275,4 +275,6 @@ export class QuestionsOverlayComponent {
 	}
 
 	invalidate(): void {}
+
+	dispose(): void {}
 }
