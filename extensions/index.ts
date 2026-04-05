@@ -446,7 +446,13 @@ export default function (pi: ExtensionAPI): void {
 						},
 						theme,
 					),
-				{ overlay: true },
+				{
+					overlay: true,
+					overlayOptions: {
+						maxHeight: "95%",
+						anchor: "center",
+					},
+				},
 			);
 		}, 0);
 	}
@@ -492,7 +498,13 @@ export default function (pi: ExtensionAPI): void {
 			return ctx.ui
 				.custom<QuestionAnswer[] | null>(
 					(tui, theme, _kb, done) => new QuestionsOverlayComponent(tui, done, questions, theme),
-					{ overlay: true },
+					{
+						overlay: true,
+						overlayOptions: {
+							maxHeight: "95%",
+							anchor: "center",
+						},
+					},
 				)
 				.then(
 					(answers) =>

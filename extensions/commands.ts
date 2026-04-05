@@ -321,6 +321,10 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
 				(tui, theme, _kb, done) => new StatusOverlayComponent(tui, done, state, plan, theme),
 				{
 					overlay: true,
+					overlayOptions: {
+						maxHeight: "95%",
+						anchor: "center",
+					},
 				},
 			);
 		},
@@ -346,6 +350,10 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
 			}
 			await ctx.ui.custom<void>((tui, theme, _kb, done) => new PlanOverlayComponent(tui, done, plan, theme), {
 				overlay: true,
+				overlayOptions: {
+					maxHeight: "95%",
+					anchor: "center",
+				},
 			});
 		},
 	});
