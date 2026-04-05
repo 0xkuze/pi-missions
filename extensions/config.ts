@@ -1,4 +1,7 @@
-import type { MissionConfig } from "./types.js";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { loadConfig } from "./state/manager.js";
+import type { Milestone, MissionConfig, MissionPlan, ModelAssignment } from "./types.js";
 
 const DEFAULT_CONFIG: Required<MissionConfig> = {
 	models: {},
@@ -15,4 +18,144 @@ const DEFAULT_CONFIG: Required<MissionConfig> = {
 
 export function getDefaultConfig(): MissionConfig {
 	return structuredClone(DEFAULT_CONFIG);
+}
+
+export function loadMissionConfig(basePath: string): MissionConfig {
+	return loadConfig(basePath);
+}
+
+type ValidationRole = "typecheck" | "lint" | "test" | "build";
+
+const CANONICAL_ORDER: ValidationRole[] = ["typecheck", "lint", "test", "build"];
+
+function labelCommand(cmd: string): ValidationRole | null {
+	const lower = cmd.toLowerCase();
+	if (lower.includes("typecheck") || lower.includes("tsc") || lower.includes("type-check")) return "typecheck";
+	if (lower.includes("lint")) return "lint";
+	if (lower.includes("test") || lower.includes("pytest") || lower.includes("cargo test") || lower.includes("go test"))
+		return "test";
+	if (lower.includes("build")) return "build";
+	return null;
+}
+
+function sortCommandsByCanonicalOrder(commands: string[]): string[] {
+	const labeled = commands.map((cmd) => ({ cmd, role: labelCommand(cmd) }));
+	const ordered: string[] = [];
+	for (const role of CANONICAL_ORDER) {
+		const found = labeled.filter((item) => item.role === role);
+		for (const item of found) {
+			ordered.push(item.cmd);
+		}
+	}
+	for (const item of labeled) {
+		if (!CANONICAL_ORDER.includes(item.role as ValidationRole)) {
+			ordered.push(item.cmd);
+		}
+	}
+	return ordered;
+}
+
+export function resolveValidationCommands(
+	config: MissionConfig,
+	plan: MissionPlan | null,
+	milestone: Milestone | null,
+	projectDir: string,
+): string[] {
+	if (config.validation?.commands && config.validation.commands.length > 0) {
+		return sortCommandsByCanonicalOrder(config.validation.commands);
+	}
+	if (milestone?.validationCommands && milestone.validationCommands.length > 0) {
+		return sortCommandsByCanonicalOrder(milestone.validationCommands);
+	}
+	if (plan?.validationCommands && plan.validationCommands.length > 0) {
+		return sortCommandsByCanonicalOrder(plan.validationCommands);
+	}
+	return sortCommandsByCanonicalOrder(autoDetectCommands(projectDir));
+}
+
+function autoDetectCommands(projectDir: string): string[] {
+	const commands: string[] = [];
+
+	const pkgPath = join(projectDir, "package.json");
+	if (existsSync(pkgPath)) {
+		try {
+			const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as Record<string, unknown>;
+			const scripts = pkg.scripts as Record<string, string> | undefined;
+			if (scripts) {
+				if (scripts.typecheck) commands.push("npm run typecheck");
+				if (scripts.lint) commands.push("npm run lint");
+				if (scripts.test) commands.push("npm run test");
+				if (scripts.build) commands.push("npm run build");
+			}
+		} catch {
+			// malformed package.json: skip
+		}
+		return commands;
+	}
+
+	const bunBuildPath = join(projectDir, "bun.lock");
+	if (existsSync(bunBuildPath)) {
+		commands.push("bun test");
+		return commands;
+	}
+
+	const cargoPath = join(projectDir, "Cargo.toml");
+	if (existsSync(cargoPath)) {
+		commands.push("cargo test");
+		return commands;
+	}
+
+	const goModPath = join(projectDir, "go.mod");
+	if (existsSync(goModPath)) {
+		commands.push("go test ./...");
+		return commands;
+	}
+
+	const setupPyPath = join(projectDir, "setup.py");
+	const pyprojectPath = join(projectDir, "pyproject.toml");
+	if (existsSync(setupPyPath) || existsSync(pyprojectPath)) {
+		commands.push("pytest");
+		return commands;
+	}
+
+	const makefilePath = join(projectDir, "Makefile");
+	if (existsSync(makefilePath)) {
+		try {
+			const makefile = readFileSync(makefilePath, "utf8");
+			const targets = extractMakefileTargets(makefile);
+			if (targets.includes("test")) commands.push("make test");
+			if (targets.includes("lint")) commands.push("make lint");
+			if (targets.includes("typecheck")) commands.push("make typecheck");
+			if (targets.includes("build")) commands.push("make build");
+		} catch {
+			// unreadable Makefile: skip
+		}
+	}
+
+	return commands;
+}
+
+function extractMakefileTargets(content: string): string[] {
+	const targets: string[] = [];
+	for (const line of content.split("\n")) {
+		const match = /^([a-zA-Z][a-zA-Z0-9_-]*)\s*:/.exec(line);
+		if (match?.[1]) {
+			targets.push(match[1]);
+		}
+	}
+	return targets;
+}
+
+export function resolveModel(
+	role: keyof ModelAssignment,
+	config: MissionConfig,
+	plan: MissionPlan | null,
+): string | undefined {
+	if (config.models?.[role]) {
+		return config.models[role];
+	}
+	if (plan?.modelAssignment?.[role]) {
+		return plan.modelAssignment[role];
+	}
+	return undefined;
 }
