@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { saveState } from "../../extensions/state/manager.js";
+import { registerCommitChangesTool } from "../../extensions/tools/commit-changes.js";
 import type { Feature, MissionPlan, MissionState } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
-import { registerCommitChangesTool } from "../../extensions/tools/commit-changes.js";
 
 type ToolResult = { content: Array<{ type: string; text: string }>; details: unknown };
 type ExecutableTool = { execute: (...args: unknown[]) => Promise<ToolResult> };

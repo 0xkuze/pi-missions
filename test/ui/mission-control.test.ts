@@ -3,20 +3,27 @@ import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { visibleWidth } from "@mariozechner/pi-tui";
-import type { Feature, Milestone, MissionConfig, MissionPlan, MissionState, ProgressEvent } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
+import type {
+	Feature,
+	Milestone,
+	MissionConfig,
+	MissionPlan,
+	MissionState,
+	ProgressEvent,
+} from "../../extensions/types.js";
+import type { MissionControlDeps } from "../../extensions/ui/mission-control.js";
 import {
-	MissionControlComponent,
 	applyModelChangeToConfig,
 	formatRelativeTime,
 	handleKeyboardAction,
+	MissionControlComponent,
 	renderCurrentFeaturePanel,
 	renderKeyboardShortcuts,
 	renderMissionOutline,
 	renderProgressLog,
 	resolveStateView,
 } from "../../extensions/ui/mission-control.js";
-import type { MissionControlDeps } from "../../extensions/ui/mission-control.js";
+import { nowISO } from "../../extensions/utils.js";
 
 function makeState(status: MissionState["status"], overrides: Partial<MissionState> = {}): MissionState {
 	return {
@@ -806,8 +813,8 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const tui = makeTUI();
 			const done = () => {};
 			const component = new MissionControlComponent(tui, done, deps);
-			component["currentSubView"] = { kind: "model" };
-			component["modelViewState"] = { selectedRoleIndex: 0 };
+			component.currentSubView = { kind: "model" };
+			component.modelViewState = { selectedRoleIndex: 0 };
 			component.handleInput("1");
 			await new Promise((r) => setTimeout(r, 10));
 			expect(setModelCalls).toEqual(["claude-opus"]);
@@ -829,8 +836,8 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const tui = makeTUI();
 			const done = () => {};
 			const component = new MissionControlComponent(tui, done, deps);
-			component["currentSubView"] = { kind: "model" };
-			component["modelViewState"] = { selectedRoleIndex: 1 };
+			component.currentSubView = { kind: "model" };
+			component.modelViewState = { selectedRoleIndex: 1 };
 			component.handleInput("1");
 			await new Promise((r) => setTimeout(r, 10));
 			expect(setModelCalls).toEqual([]);
@@ -847,8 +854,8 @@ describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () =
 			const tui = makeTUI();
 			const done = () => {};
 			const component = new MissionControlComponent(tui, done, deps);
-			component["currentSubView"] = { kind: "model" };
-			component["modelViewState"] = { selectedRoleIndex: 0 };
+			component.currentSubView = { kind: "model" };
+			component.modelViewState = { selectedRoleIndex: 0 };
 			component.handleInput("1");
 			await new Promise((r) => setTimeout(r, 10));
 			const configPath = join(tmpDir, "config.json");
@@ -881,9 +888,15 @@ describe("MissionControlComponent draft_review approve", () => {
 			});
 
 			const tui = makeTUI();
-			const component = new MissionControlComponent(tui, () => { doneCalled = true; }, deps);
+			const component = new MissionControlComponent(
+				tui,
+				() => {
+					doneCalled = true;
+				},
+				deps,
+			);
 
-			component["currentSubView"] = { kind: "draft_review" };
+			component.currentSubView = { kind: "draft_review" };
 			component.handleInput("A");
 
 			expect(doneCalled).toBe(true);
@@ -912,8 +925,8 @@ describe("MissionControlComponent draft_review approve", () => {
 			expect(mutation.planVersion).toBe(2);
 			expect(mutation.actor).toBe("user");
 
-			expect(component["state"]?.status).toBe("approved");
-			expect(component["plan"]?.approvedAt).toBeDefined();
+			expect(component.state?.status).toBe("approved");
+			expect(component.plan?.approvedAt).toBeDefined();
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}

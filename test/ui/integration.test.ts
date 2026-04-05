@@ -1,6 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import type { Feature, Milestone, MissionConfig, MissionPlan, MissionState, WorkerAttempt } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
+import type {
+	Feature,
+	Milestone,
+	MissionConfig,
+	MissionPlan,
+	MissionState,
+	WorkerAttempt,
+} from "../../extensions/types.js";
 import { handleBlockedViewKey, renderBlockedView } from "../../extensions/ui/blocked-view.js";
 import { handleDraftReviewKey, renderDraftReview } from "../../extensions/ui/draft-review.js";
 import {
@@ -17,7 +23,12 @@ import {
 	renderModelView,
 	renderReportView,
 } from "../../extensions/ui/report-view.js";
-import { type CommandDisplayEntry, handleValidationViewKey, renderValidationView } from "../../extensions/ui/validation-view.js";
+import {
+	type CommandDisplayEntry,
+	handleValidationViewKey,
+	renderValidationView,
+} from "../../extensions/ui/validation-view.js";
+import { nowISO } from "../../extensions/utils.js";
 
 // ---------------------------------------------------------------------------
 // Test factories

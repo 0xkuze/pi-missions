@@ -2,8 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+	generateWorkerContext,
+	generateWorkerPrompt,
+	generateWorkerSkill,
+	writeWorkerFiles,
+} from "../../extensions/orchestrator/worker-prompt.js";
 import type { Feature } from "../../extensions/types.js";
-import { generateWorkerContext, generateWorkerPrompt, generateWorkerSkill, writeWorkerFiles } from "../../extensions/orchestrator/worker-prompt.js";
 
 const FORBIDDEN_TERMS = ["mission", "orchestrat", "milestone", "state.json", "plan.json", ".pi/missions"];
 

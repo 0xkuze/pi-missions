@@ -222,8 +222,7 @@ describe("extension entry point (index.ts)", () => {
 			const cacheEntry = makeCacheEntry(differentState);
 			const ctx = buildMockCtx([cacheEntry]);
 			const setWidgetCalls: Array<[string, unknown]> = [];
-			ctx.ui.setWidget = (_key: string, content: unknown) =>
-				setWidgetCalls.push([_key as string, content]);
+			ctx.ui.setWidget = (_key: string, content: unknown) => setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
@@ -240,8 +239,7 @@ describe("extension entry point (index.ts)", () => {
 			const cacheEntry = makeCacheEntry(cachedState);
 			const ctx = buildMockCtx([cacheEntry]);
 			const setWidgetCalls: Array<[string, unknown]> = [];
-			ctx.ui.setWidget = (_key: string, content: unknown) =>
-				setWidgetCalls.push([_key as string, content]);
+			ctx.ui.setWidget = (_key: string, content: unknown) => setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
@@ -257,8 +255,7 @@ describe("extension entry point (index.ts)", () => {
 			const nullEntry = makeCacheEntry(null);
 			const ctx = buildMockCtx([nullEntry]);
 			const setWidgetCalls: Array<[string, unknown]> = [];
-			ctx.ui.setWidget = (_key: string, content: unknown) =>
-				setWidgetCalls.push([_key as string, content]);
+			ctx.ui.setWidget = (_key: string, content: unknown) => setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
@@ -272,8 +269,7 @@ describe("extension entry point (index.ts)", () => {
 		it("does nothing when no filesystem state and no session entries", () => {
 			const ctx = buildMockCtx([]);
 			const setWidgetCalls: Array<[string, unknown]> = [];
-			ctx.ui.setWidget = (_key: string, content: unknown) =>
-				setWidgetCalls.push([_key as string, content]);
+			ctx.ui.setWidget = (_key: string, content: unknown) => setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
@@ -289,8 +285,7 @@ describe("extension entry point (index.ts)", () => {
 			const newerEntry = makeCacheEntry(makeExecutingState());
 			const ctx = buildMockCtx([oldEntry, newerEntry]);
 			const setWidgetCalls: Array<[string, unknown]> = [];
-			ctx.ui.setWidget = (_key: string, content: unknown) =>
-				setWidgetCalls.push([_key as string, content]);
+			ctx.ui.setWidget = (_key: string, content: unknown) => setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
@@ -307,8 +302,7 @@ describe("extension entry point (index.ts)", () => {
 			const nullEntry = makeCacheEntry(null);
 			const ctx = buildMockCtx([stateEntry, nullEntry]);
 			const setWidgetCalls: Array<[string, unknown]> = [];
-			ctx.ui.setWidget = (_key: string, content: unknown) =>
-				setWidgetCalls.push([_key as string, content]);
+			ctx.ui.setWidget = (_key: string, content: unknown) => setWidgetCalls.push([_key as string, content]);
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;

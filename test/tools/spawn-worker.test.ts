@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { savePlan, saveState } from "../../extensions/state/manager.js";
-import type { Feature, Milestone, MissionPlan, MissionState } from "../../extensions/types.js";
 import { registerSpawnWorkerTool } from "../../extensions/tools/spawn-worker.js";
+import type { Feature, Milestone, MissionPlan, MissionState } from "../../extensions/types.js";
 
 function makeFeature(overrides: Partial<Feature> = {}): Feature {
 	return {

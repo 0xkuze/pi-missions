@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Feature, Milestone, MissionPlan } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
 import { handleDraftReviewKey, renderDraftReview } from "../../extensions/ui/draft-review.js";
+import { nowISO } from "../../extensions/utils.js";
 
 function makeFeature(id: string, name: string, description = "A feature"): Feature {
 	return {

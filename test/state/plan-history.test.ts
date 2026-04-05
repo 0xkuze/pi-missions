@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { MissionPlan, PlanMutation } from "../../extensions/types.js";
 import { savePlan } from "../../extensions/state/manager.js";
 import { appendMutation, readHistory } from "../../extensions/state/plan-history.js";
+import type { MissionPlan, PlanMutation } from "../../extensions/types.js";
 
 const TMP_DIR = join(import.meta.dir, "../../.test-tmp-plan-history");
 

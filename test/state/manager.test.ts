@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { MissionConfig, MissionPlan, MissionState } from "../../extensions/types.js";
 import { loadConfig, loadPlan, loadState, saveConfig, savePlan, saveState } from "../../extensions/state/manager.js";
+import type { MissionConfig, MissionPlan, MissionState } from "../../extensions/types.js";
 
 const TMP_DIR = join(import.meta.dir, "../../.test-tmp-manager");
 

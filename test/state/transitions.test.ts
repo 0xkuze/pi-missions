@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { MissionState, MissionStatus } from "../../extensions/types.js";
 import { transitionState } from "../../extensions/state/transitions.js";
+import type { MissionState, MissionStatus } from "../../extensions/types.js";
 
 const BASE_STATE: MissionState = {
 	missionId: "mission-001",

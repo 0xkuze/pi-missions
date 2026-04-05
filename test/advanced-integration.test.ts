@@ -13,10 +13,21 @@ import { registerCreateFixTool } from "../extensions/tools/create-fix.js";
 import { registerSpawnWorkerTool } from "../extensions/tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "../extensions/tools/submit-plan.js";
 import { registerUpdateStateTool } from "../extensions/tools/update-state.js";
-import type { Feature, Milestone, MissionConfig, MissionPlan, MissionState, WorkerAttempt } from "../extensions/types.js";
+import type {
+	Feature,
+	Milestone,
+	MissionConfig,
+	MissionPlan,
+	MissionState,
+	WorkerAttempt,
+} from "../extensions/types.js";
 import { renderBlockedView } from "../extensions/ui/blocked-view.js";
 import { handleDraftReviewKey, renderDraftReview } from "../extensions/ui/draft-review.js";
-import { handleKeyboardAction, renderCurrentFeaturePanel, renderMissionOutline } from "../extensions/ui/mission-control.js";
+import {
+	handleKeyboardAction,
+	renderCurrentFeaturePanel,
+	renderMissionOutline,
+} from "../extensions/ui/mission-control.js";
 import { renderReportView } from "../extensions/ui/report-view.js";
 import type { CommandDisplayEntry } from "../extensions/ui/validation-view.js";
 import { renderValidationView } from "../extensions/ui/validation-view.js";

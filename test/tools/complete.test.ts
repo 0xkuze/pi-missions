@@ -5,9 +5,9 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadState, savePlan, saveState } from "../../extensions/state/manager.js";
 import { transitionState } from "../../extensions/state/transitions.js";
+import { registerCompleteMissionTool } from "../../extensions/tools/complete.js";
 import type { Feature, Milestone, MissionPlan, MissionState } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
-import { registerCompleteMissionTool } from "../../extensions/tools/complete.js";
 
 function makeExecutingState(overrides: Partial<MissionState> = {}): MissionState {
 	return {

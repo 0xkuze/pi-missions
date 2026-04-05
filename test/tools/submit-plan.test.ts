@@ -5,9 +5,9 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadPlan, loadState, saveState } from "../../extensions/state/manager.js";
 import { readHistory } from "../../extensions/state/plan-history.js";
+import { registerSubmitPlanTool } from "../../extensions/tools/submit-plan.js";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
-import { registerSubmitPlanTool } from "../../extensions/tools/submit-plan.js";
 
 function makePlanningState(): MissionState {
 	return {

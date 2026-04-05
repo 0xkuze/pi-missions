@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type { ActiveSession } from "../../extensions/types.js";
 import { acquireLock, isLocked, releaseLock, updateHeartbeat } from "../../extensions/state/lock.js";
+import type { ActiveSession } from "../../extensions/types.js";
 
 const TEST_DIR = join(import.meta.dir, "../../.test-lock-tmp");
 

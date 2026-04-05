@@ -1,6 +1,5 @@
 import { describe, expect, it } from "bun:test";
 import type { Feature, Milestone, MissionConfig, MissionPlan, MissionState } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
 import {
 	handleModelViewKey,
 	handleReportViewKey,
@@ -9,6 +8,7 @@ import {
 	renderModelView,
 	renderReportView,
 } from "../../extensions/ui/report-view.js";
+import { nowISO } from "../../extensions/utils.js";
 
 function makeFeature(id: string, status: Feature["status"], name?: string, overrides: Partial<Feature> = {}): Feature {
 	return {

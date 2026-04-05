@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { savePlan, saveState } from "../../extensions/state/manager.js";
+import { type ExecFn, registerRunValidationTool } from "../../extensions/tools/run-validation.js";
 import type { Feature, Milestone, MissionPlan, MissionState, ValidationResult } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
-import { type ExecFn, registerRunValidationTool } from "../../extensions/tools/run-validation.js";
 
 type ToolResult = { content: Array<{ type: string; text: string }>; details: unknown };
 type ExecutableTool = { execute: (...args: unknown[]) => Promise<ToolResult> };

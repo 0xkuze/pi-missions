@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { Feature, Milestone, MissionPlan, MissionState } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
 import { buildWidgetLines } from "../../extensions/ui/widget.js";
+import { nowISO } from "../../extensions/utils.js";
 
 function makeState(status: MissionState["status"], overrides: Partial<MissionState> = {}): MissionState {
 	return {
@@ -451,9 +451,7 @@ describe("buildWidgetLines", () => {
 		});
 
 		it("draft_review state uses accent and text colors", () => {
-			const plan = makePlan([
-				makeMilestone("m1", [makeFeature("f1", "pending"), makeFeature("f2", "pending")]),
-			]);
+			const plan = makePlan([makeMilestone("m1", [makeFeature("f1", "pending"), makeFeature("f2", "pending")])]);
 			const state = makeState("draft_review");
 			const lines = buildWidgetLines(state, plan, undefined, mockTheme);
 			const line = lines.join(" ");

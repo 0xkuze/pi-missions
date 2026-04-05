@@ -123,11 +123,7 @@ describe("renderProgressLog (VAL-NEWUI-002)", () => {
 			});
 		}
 
-		const failedTypes: ProgressEvent["type"][] = [
-			"feature_failed",
-			"validation_fail",
-			"mission_failed",
-		];
+		const failedTypes: ProgressEvent["type"][] = ["feature_failed", "validation_fail", "mission_failed"];
 		for (const type of failedTypes) {
 			it(`uses ✗ icon for ${type}`, () => {
 				const lines = renderProgressLog([makeEvent(type, "detail")]);

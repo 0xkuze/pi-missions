@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
-import type { MissionConfig, MissionPlan, MissionState } from "../../extensions/types.js";
 import { buildOrchestratorProtocol } from "../../extensions/orchestrator/protocol.js";
+import type { MissionConfig, MissionPlan, MissionState } from "../../extensions/types.js";
 
 function makeState(status: MissionState["status"], overrides: Partial<MissionState> = {}): MissionState {
 	return {

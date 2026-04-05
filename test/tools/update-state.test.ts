@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { readHistory } from "../../extensions/state/plan-history.js";
 import { loadPlan, loadState, savePlan, saveState } from "../../extensions/state/manager.js";
+import { readHistory } from "../../extensions/state/plan-history.js";
+import { registerUpdateStateTool } from "../../extensions/tools/update-state.js";
 import type { Feature, Milestone, MissionPlan, MissionState } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
-import { registerUpdateStateTool } from "../../extensions/tools/update-state.js";
 
 function makeExecutingState(): MissionState {
 	return {

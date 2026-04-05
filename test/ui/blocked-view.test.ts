@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
 import type { Feature } from "../../extensions/types.js";
-import { nowISO } from "../../extensions/utils.js";
 import type { LastFailureDetails } from "../../extensions/ui/blocked-view.js";
 import { handleBlockedViewKey, renderBlockedView } from "../../extensions/ui/blocked-view.js";
+import { nowISO } from "../../extensions/utils.js";
 
 function makeFeature(id: string, name: string, overrides: Partial<Feature> = {}): Feature {
 	return {
