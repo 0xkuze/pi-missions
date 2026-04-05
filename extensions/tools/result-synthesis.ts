@@ -65,10 +65,15 @@ function extractSummary(events: ParsedEvent[]): string {
 	return lastAssistantText;
 }
 
+const NON_FATAL_TOOLS = new Set(["commit_changes", "git_commit", "git"]);
+
 function hasFatalToolError(events: ParsedEvent[]): boolean {
 	for (const event of events) {
 		if (event.type !== "tool_execution_end") continue;
-		if (event.isError === true) return true;
+		if (event.isError !== true) continue;
+		const toolName = event.toolName as string | undefined;
+		if (toolName && NON_FATAL_TOOLS.has(toolName)) continue;
+		return true;
 	}
 	return false;
 }

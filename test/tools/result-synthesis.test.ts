@@ -72,6 +72,29 @@ describe("synthesizeWorkerResult", () => {
 			expect(result.error?.kind).toBe("tool");
 		});
 
+		it("treats commit_changes tool errors as non-fatal", () => {
+			const stdout = makeStdout([
+				makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
+				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
+				makeToolExecutionEnd("commit_changes", { message: "feat: add feature" }, {}, true),
+				makeMessageEnd("assistant", "Feature implemented, commit failed."),
+			]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
+			expect(result.error).toBeUndefined();
+		});
+
+		it("treats git_commit tool errors as non-fatal", () => {
+			const stdout = makeStdout([
+				makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
+				makeToolExecutionEnd("git_commit", { message: "feat: add feature" }, {}, true),
+				makeMessageEnd("assistant", "Feature implemented, git commit failed."),
+			]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
+			expect(result.error).toBeUndefined();
+		});
+
 		it("fatal tool error (isError=true) does not affect status when exit code is non-zero (non-zero exit takes precedence in result)", () => {
 			const stdout = makeStdout([
 				makeToolExecutionEnd("bash", { command: "failing" }, {}, true),
