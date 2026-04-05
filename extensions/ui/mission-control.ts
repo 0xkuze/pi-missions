@@ -1,6 +1,6 @@
 import type { TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
-import { savePlan, saveState } from "../state/manager.js";
+import { saveConfig, savePlan, saveState } from "../state/manager.js";
 import { readHistory } from "../state/plan-history.js";
 import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionConfig, MissionPlan, MissionState, PlanMutation, ProgressEvent } from "../types.js";
@@ -268,6 +268,20 @@ export function handleKeyboardAction(key: string, state: MissionState | null): O
 	return { kind: "noop" };
 }
 
+const ROLE_NAMES_ORDERED = ["orchestrator", "worker", "validator"] as const;
+
+export function applyModelChangeToConfig(config: MissionConfig, roleIndex: number, model: string): MissionConfig {
+	const role = ROLE_NAMES_ORDERED[roleIndex];
+	if (!role) return config;
+	return {
+		...config,
+		models: {
+			...config.models,
+			[role]: model,
+		},
+	};
+}
+
 const POLL_INTERVAL_MS = 2_000;
 
 export type SubView =
@@ -312,6 +326,7 @@ export interface MissionControlDeps {
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
 	availableModels: string[];
 	openFile: (path: string) => void;
+	setModel: (modelId: string) => Promise<void>;
 }
 
 export class MissionControlComponent {
@@ -376,6 +391,15 @@ export class MissionControlComponent {
 				this.modelViewState = result.nextViewState;
 				if (result.action.kind === "close") {
 					this.currentSubView = null;
+				} else if (result.action.kind === "select_model") {
+					const updated = applyModelChangeToConfig(this.config, result.action.roleIndex, result.action.model);
+					saveConfig(this.deps.basePath, updated);
+					this.config = updated;
+					if (result.action.roleIndex === 0) {
+						this.deps.setModel(result.action.model).catch(() => {
+							this.deps.notify("Failed to apply model change", "error");
+						});
+					}
 				}
 				this.tui.requestRender();
 				return;

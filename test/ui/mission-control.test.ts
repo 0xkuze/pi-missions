@@ -1,7 +1,12 @@
 import { describe, expect, it } from "bun:test";
-import type { Feature, Milestone, MissionPlan, MissionState, ProgressEvent } from "../../extensions/types.js";
+import { mkdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type { Feature, Milestone, MissionConfig, MissionPlan, MissionState, ProgressEvent } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
 import {
+	MissionControlComponent,
+	applyModelChangeToConfig,
 	formatRelativeTime,
 	handleKeyboardAction,
 	renderCurrentFeaturePanel,
@@ -10,6 +15,7 @@ import {
 	renderProgressLog,
 	resolveStateView,
 } from "../../extensions/ui/mission-control.js";
+import type { MissionControlDeps } from "../../extensions/ui/mission-control.js";
 
 function makeState(status: MissionState["status"], overrides: Partial<MissionState> = {}): MissionState {
 	return {
@@ -717,5 +723,140 @@ describe("resolveStateView (VAL-WIRE-001..006)", () => {
 			const action = handleKeyboardAction("l", makeState("executing"));
 			expect(action.kind).toBe("open_logs_view");
 		});
+	});
+});
+
+describe("applyModelChangeToConfig (VAL-API-001)", () => {
+	it("sets orchestrator model when roleIndex is 0", () => {
+		const config: MissionConfig = {};
+		const updated = applyModelChangeToConfig(config, 0, "claude-opus");
+		expect(updated.models?.orchestrator).toBe("claude-opus");
+	});
+
+	it("sets worker model when roleIndex is 1", () => {
+		const config: MissionConfig = {};
+		const updated = applyModelChangeToConfig(config, 1, "gpt-4o");
+		expect(updated.models?.worker).toBe("gpt-4o");
+	});
+
+	it("sets validator model when roleIndex is 2", () => {
+		const config: MissionConfig = {};
+		const updated = applyModelChangeToConfig(config, 2, "claude-haiku");
+		expect(updated.models?.validator).toBe("claude-haiku");
+	});
+
+	it("preserves existing model assignments", () => {
+		const config: MissionConfig = { models: { worker: "existing-worker" } };
+		const updated = applyModelChangeToConfig(config, 0, "new-orchestrator");
+		expect(updated.models?.orchestrator).toBe("new-orchestrator");
+		expect(updated.models?.worker).toBe("existing-worker");
+	});
+
+	it("returns unchanged config for out-of-range roleIndex", () => {
+		const config: MissionConfig = {};
+		const updated = applyModelChangeToConfig(config, 99, "some-model");
+		expect(updated).toEqual(config);
+	});
+
+	it("does not mutate original config", () => {
+		const config: MissionConfig = { models: { orchestrator: "old-model" } };
+		const updated = applyModelChangeToConfig(config, 0, "new-model");
+		expect(config.models?.orchestrator).toBe("old-model");
+		expect(updated.models?.orchestrator).toBe("new-model");
+	});
+});
+
+function makeDeps(tmpDir: string, overrides: Partial<MissionControlDeps> = {}): MissionControlDeps {
+	const defaultConfig: MissionConfig = {};
+	return {
+		basePath: tmpDir,
+		loadState: () => makeState("executing"),
+		loadPlan: () => null,
+		loadConfig: () => defaultConfig,
+		sendUserMessage: () => {},
+		getInput: async () => undefined,
+		notify: () => {},
+		updateWidget: () => {},
+		availableModels: ["claude-opus", "claude-sonnet"],
+		openFile: () => {},
+		setModel: async () => {},
+		...overrides,
+	};
+}
+
+function makeTUI() {
+	return {
+		requestRender: () => {},
+	} as unknown as import("@mariozechner/pi-tui").TUI;
+}
+
+describe("MissionControlComponent model view (VAL-API-001, VAL-XFLOW-003)", () => {
+	let tmpDir: string;
+
+	it("calls setModel when orchestrator model is selected", async () => {
+		tmpDir = join(tmpdir(), `mc-test-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const setModelCalls: string[] = [];
+			const deps = makeDeps(tmpDir, {
+				setModel: async (modelId) => {
+					setModelCalls.push(modelId);
+				},
+			});
+			const tui = makeTUI();
+			const done = () => {};
+			const component = new MissionControlComponent(tui, done, deps);
+			component["currentSubView"] = { kind: "model" };
+			component["modelViewState"] = { selectedRoleIndex: 0 };
+			component.handleInput("1");
+			await new Promise((r) => setTimeout(r, 10));
+			expect(setModelCalls).toEqual(["claude-opus"]);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("does not call setModel when worker model is selected", async () => {
+		tmpDir = join(tmpdir(), `mc-test-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const setModelCalls: string[] = [];
+			const deps = makeDeps(tmpDir, {
+				setModel: async (modelId) => {
+					setModelCalls.push(modelId);
+				},
+			});
+			const tui = makeTUI();
+			const done = () => {};
+			const component = new MissionControlComponent(tui, done, deps);
+			component["currentSubView"] = { kind: "model" };
+			component["modelViewState"] = { selectedRoleIndex: 1 };
+			component.handleInput("1");
+			await new Promise((r) => setTimeout(r, 10));
+			expect(setModelCalls).toEqual([]);
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("saves config when model is selected", async () => {
+		tmpDir = join(tmpdir(), `mc-test-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const deps = makeDeps(tmpDir);
+			const tui = makeTUI();
+			const done = () => {};
+			const component = new MissionControlComponent(tui, done, deps);
+			component["currentSubView"] = { kind: "model" };
+			component["modelViewState"] = { selectedRoleIndex: 0 };
+			component.handleInput("1");
+			await new Promise((r) => setTimeout(r, 10));
+			const configPath = join(tmpDir, "config.json");
+			const { readFileSync } = await import("node:fs");
+			const saved = JSON.parse(readFileSync(configPath, "utf8"));
+			expect(saved.models?.orchestrator).toBe("claude-opus");
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
 	});
 });

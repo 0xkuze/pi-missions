@@ -401,6 +401,10 @@ export default function (pi: ExtensionAPI): void {
 				updateWidget,
 				availableModels: [] as string[],
 				openFile: (_path: string) => {},
+				setModel: async (modelId: string) => {
+					const model = ctx.modelRegistry.getAll().find((m) => m.id === modelId);
+					if (model) await pi.setModel(model);
+				},
 			};
 			await ctx.ui.custom<void>((tui, _theme, _kb, done) => new MissionControlComponent(tui, done, deps), {
 				overlay: true,
