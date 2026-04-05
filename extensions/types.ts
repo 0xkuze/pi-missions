@@ -1,3 +1,7 @@
+import { type Static, type TSchema, Type } from "@sinclair/typebox";
+
+export type { Static, TSchema };
+
 export type MissionStatus =
 	| "planning"
 	| "draft_review"
@@ -152,6 +156,7 @@ export interface ActiveSession {
 
 export type PlanMutationKind =
 	| "plan-created"
+	| "plan-revised"
 	| "plan-approved"
 	| "add-milestone"
 	| "remove-milestone"
@@ -266,3 +271,215 @@ export interface CompleteMissionParams {
 	summary: string;
 	remainingNotes?: string[];
 }
+
+const WorkerAttemptSchema = Type.Object({
+	attemptNumber: Type.Number(),
+	startedAt: Type.String(),
+	completedAt: Type.Optional(Type.String()),
+	exitCode: Type.Optional(Type.Number()),
+	resultPath: Type.String(),
+	stdoutPath: Type.String(),
+	stderrPath: Type.String(),
+	durationMs: Type.Optional(Type.Number()),
+	model: Type.Optional(Type.String()),
+	status: Type.Union([
+		Type.Literal("running"),
+		Type.Literal("success"),
+		Type.Literal("failure"),
+		Type.Literal("interrupted"),
+	]),
+});
+
+const FixFeatureOriginSchema = Type.Object({
+	sourceKind: Type.Union([Type.Literal("worker-failure"), Type.Literal("validation-failure")]),
+	sourceFeatureId: Type.Optional(Type.String()),
+	sourceMilestoneId: Type.Optional(Type.String()),
+	validationOutput: Type.Optional(Type.String()),
+});
+
+const FeatureSchema = Type.Object({
+	id: Type.String(),
+	name: Type.String(),
+	description: Type.String(),
+	acceptanceCriteria: Type.Array(Type.String()),
+	relevantFiles: Type.Array(Type.String()),
+	dependencies: Type.Array(Type.String()),
+	estimatedComplexity: Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]),
+	status: Type.Union([
+		Type.Literal("pending"),
+		Type.Literal("active"),
+		Type.Literal("done"),
+		Type.Literal("failed"),
+		Type.Literal("skipped"),
+		Type.Literal("blocked"),
+	]),
+	fixOrigin: Type.Optional(FixFeatureOriginSchema),
+	attempts: Type.Array(WorkerAttemptSchema),
+	startedAt: Type.Optional(Type.String()),
+	completedAt: Type.Optional(Type.String()),
+});
+
+const MilestoneSchema = Type.Object({
+	id: Type.String(),
+	name: Type.String(),
+	description: Type.String(),
+	features: Type.Array(FeatureSchema),
+	validationCommands: Type.Optional(Type.Array(Type.String())),
+	status: Type.Union([Type.Literal("pending"), Type.Literal("active"), Type.Literal("done"), Type.Literal("failed")]),
+	startedAt: Type.Optional(Type.String()),
+	completedAt: Type.Optional(Type.String()),
+});
+
+const ModelAssignmentSchema = Type.Object({
+	orchestrator: Type.Optional(Type.String()),
+	worker: Type.Optional(Type.String()),
+	validator: Type.Optional(Type.String()),
+});
+
+export const MissionPlanSchema = Type.Object({
+	id: Type.String(),
+	description: Type.String(),
+	planVersion: Type.Number(),
+	milestones: Type.Array(MilestoneSchema),
+	validationCommands: Type.Array(Type.String()),
+	modelAssignment: ModelAssignmentSchema,
+	createdAt: Type.String(),
+	approvedAt: Type.Optional(Type.String()),
+});
+
+const GitSnapshotSchema = Type.Object({
+	headCommit: Type.String(),
+	dirtyFiles: Type.Array(Type.String()),
+	autoCommitEnabled: Type.Boolean(),
+});
+
+const ProgressEventSchema = Type.Object({
+	timestamp: Type.String(),
+	type: Type.Union([
+		Type.Literal("mission_started"),
+		Type.Literal("planning_started"),
+		Type.Literal("plan_submitted"),
+		Type.Literal("plan_approved"),
+		Type.Literal("feature_start"),
+		Type.Literal("feature_complete"),
+		Type.Literal("feature_failed"),
+		Type.Literal("feature_skipped"),
+		Type.Literal("feature_blocked"),
+		Type.Literal("fix_feature_created"),
+		Type.Literal("milestone_start"),
+		Type.Literal("milestone_complete"),
+		Type.Literal("validation_start"),
+		Type.Literal("validation_pass"),
+		Type.Literal("validation_fail"),
+		Type.Literal("commit_created"),
+		Type.Literal("pause"),
+		Type.Literal("resume"),
+		Type.Literal("redirect"),
+		Type.Literal("plan_mutated"),
+		Type.Literal("mission_complete"),
+		Type.Literal("mission_failed"),
+		Type.Literal("mission_aborted"),
+		Type.Literal("worker_spawn"),
+		Type.Literal("worker_complete"),
+	]),
+	detail: Type.String(),
+	metadata: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+});
+
+export const MissionStateSchema = Type.Object({
+	missionId: Type.String(),
+	status: Type.Union([
+		Type.Literal("planning"),
+		Type.Literal("draft_review"),
+		Type.Literal("approved"),
+		Type.Literal("executing"),
+		Type.Literal("validating"),
+		Type.Literal("paused"),
+		Type.Literal("completed"),
+		Type.Literal("failed"),
+		Type.Literal("aborted"),
+	]),
+	resumeTargetState: Type.Optional(
+		Type.Union([
+			Type.Literal("planning"),
+			Type.Literal("draft_review"),
+			Type.Literal("executing"),
+			Type.Literal("validating"),
+		]),
+	),
+	currentMilestoneId: Type.Optional(Type.String()),
+	currentFeatureId: Type.Optional(Type.String()),
+	progressLog: Type.Array(ProgressEventSchema),
+	startedAt: Type.String(),
+	completedAt: Type.Optional(Type.String()),
+	totalFeaturesCompleted: Type.Number(),
+	totalFeaturesFailed: Type.Number(),
+	totalFeaturesSkipped: Type.Number(),
+	totalFixFeaturesCreated: Type.Number(),
+	gitSnapshot: Type.Optional(GitSnapshotSchema),
+});
+
+export const MissionConfigSchema = Type.Object({
+	models: Type.Optional(ModelAssignmentSchema),
+	validation: Type.Optional(
+		Type.Object({
+			commands: Type.Optional(Type.Array(Type.String())),
+			timeoutMs: Type.Optional(Type.Number()),
+		}),
+	),
+	autonomy: Type.Optional(Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")])),
+	git: Type.Optional(
+		Type.Object({
+			autoCommit: Type.Optional(Type.Boolean()),
+		}),
+	),
+	maxRetries: Type.Optional(Type.Number()),
+});
+
+export const WorkerResultSchema = Type.Object({
+	status: Type.Union([Type.Literal("success"), Type.Literal("failure"), Type.Literal("blocked")]),
+	summary: Type.String(),
+	filesChanged: Type.Array(Type.String()),
+	commandsRun: Type.Array(
+		Type.Object({
+			command: Type.String(),
+			exitCode: Type.Union([Type.Number(), Type.Null()]),
+		}),
+	),
+	notes: Type.Optional(Type.Array(Type.String())),
+	error: Type.Optional(
+		Type.Object({
+			kind: Type.Union([
+				Type.Literal("tool"),
+				Type.Literal("validation"),
+				Type.Literal("environment"),
+				Type.Literal("unknown"),
+			]),
+			message: Type.String(),
+			details: Type.Optional(Type.String()),
+		}),
+	),
+	metrics: Type.Object({
+		durationMs: Type.Number(),
+		tokensUsed: Type.Optional(Type.Number()),
+		estimatedCost: Type.Optional(Type.Number()),
+	}),
+});
+
+export const ValidationResultSchema = Type.Object({
+	status: Type.Union([Type.Literal("pass"), Type.Literal("fail")]),
+	milestoneId: Type.String(),
+	commands: Type.Array(
+		Type.Object({
+			label: Type.String(),
+			command: Type.String(),
+			exitCode: Type.Union([Type.Number(), Type.Null()]),
+			durationMs: Type.Number(),
+			timedOut: Type.Boolean(),
+			stdoutPath: Type.String(),
+			stderrPath: Type.String(),
+		}),
+	),
+	summary: Type.String(),
+	failingChecks: Type.Array(Type.String()),
+});
