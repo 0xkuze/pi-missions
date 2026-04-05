@@ -73,6 +73,25 @@ function hasFatalToolError(events: ParsedEvent[]): boolean {
 	return false;
 }
 
+function extractUsageTokens(usage: Record<string, unknown>): number | null {
+	const input = typeof usage.input === "number" ? usage.input : null;
+	const output = typeof usage.output === "number" ? usage.output : null;
+	if (input !== null && output !== null) return input + output;
+	if (typeof usage.totalTokens === "number") return usage.totalTokens;
+	return null;
+}
+
+function extractUsageCost(usage: Record<string, unknown>): number | null {
+	const cost = usage.cost as Record<string, unknown> | undefined;
+	if (!cost) return null;
+	if (typeof cost.total === "number") return cost.total;
+	const inputCost = typeof cost.input === "number" ? cost.input : 0;
+	const outputCost = typeof cost.output === "number" ? cost.output : 0;
+	const cacheReadCost = typeof cost.cacheRead === "number" ? cost.cacheRead : 0;
+	const cacheWriteCost = typeof cost.cacheWrite === "number" ? cost.cacheWrite : 0;
+	return inputCost + outputCost + cacheReadCost + cacheWriteCost;
+}
+
 function extractMetrics(events: ParsedEvent[]): { tokensUsed?: number; estimatedCost?: number } {
 	let totalTokens = 0;
 	let totalCost = 0;
@@ -83,17 +102,14 @@ function extractMetrics(events: ParsedEvent[]): { tokensUsed?: number; estimated
 		if (message?.role !== "assistant") continue;
 		const usage = message.usage as Record<string, unknown> | undefined;
 		if (!usage) continue;
-		if (typeof usage.totalTokens === "number") {
-			totalTokens += usage.totalTokens;
+		const tokens = extractUsageTokens(usage);
+		if (tokens !== null) {
+			totalTokens += tokens;
 			found = true;
 		}
-		const cost = usage.cost as Record<string, unknown> | undefined;
-		if (cost) {
-			const inputCost = typeof cost.input === "number" ? cost.input : 0;
-			const outputCost = typeof cost.output === "number" ? cost.output : 0;
-			const cacheReadCost = typeof cost.cacheRead === "number" ? cost.cacheRead : 0;
-			const cacheWriteCost = typeof cost.cacheWrite === "number" ? cost.cacheWrite : 0;
-			totalCost += inputCost + outputCost + cacheReadCost + cacheWriteCost;
+		const cost = extractUsageCost(usage);
+		if (cost !== null) {
+			totalCost += cost;
 		}
 	}
 	if (!found) return {};

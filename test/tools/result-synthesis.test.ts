@@ -382,6 +382,96 @@ describe("synthesizeWorkerResult", () => {
 			expect(result.metrics.estimatedCost).toBeCloseTo(0.003);
 		});
 
+		describe("VAL-METRICS-001/002: token and cost extraction from pi event format", () => {
+			it("extracts tokensUsed as inputTokens + outputTokens from pi usage fields", () => {
+				const usage = {
+					input: 500,
+					output: 300,
+					cacheRead: 100,
+					cacheWrite: 50,
+					totalTokens: 950,
+					cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0, total: 0.003 },
+				};
+				const stdout = makeStdout([makeMessageEnd("assistant", "Done.", usage)]);
+				const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+				expect(result.metrics.tokensUsed).toBe(800);
+			});
+
+			it("uses cost.total for estimatedCost when present in pi usage format", () => {
+				const usage = {
+					input: 500,
+					output: 300,
+					cacheRead: 100,
+					cacheWrite: 50,
+					totalTokens: 950,
+					cost: { input: 0.001, output: 0.002, cacheRead: 0.0005, cacheWrite: 0.0001, total: 0.0036 },
+				};
+				const stdout = makeStdout([makeMessageEnd("assistant", "Done.", usage)]);
+				const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+				expect(result.metrics.estimatedCost).toBeCloseTo(0.0036);
+			});
+
+			it("accumulates inputTokens + outputTokens across multiple pi-format events", () => {
+				const usage1 = {
+					input: 200,
+					output: 100,
+					cacheRead: 0,
+					cacheWrite: 0,
+					totalTokens: 300,
+					cost: { input: 0.001, output: 0.001, cacheRead: 0, cacheWrite: 0, total: 0.002 },
+				};
+				const usage2 = {
+					input: 400,
+					output: 150,
+					cacheRead: 50,
+					cacheWrite: 10,
+					totalTokens: 610,
+					cost: { input: 0.002, output: 0.003, cacheRead: 0, cacheWrite: 0, total: 0.005 },
+				};
+				const stdout = makeStdout([
+					makeMessageEnd("assistant", "First turn.", usage1),
+					makeMessageEnd("assistant", "Second turn.", usage2),
+				]);
+				const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+				expect(result.metrics.tokensUsed).toBe(850);
+				expect(result.metrics.estimatedCost).toBeCloseTo(0.007);
+			});
+
+			it("falls back to totalTokens when input/output fields absent", () => {
+				const usage = {
+					totalTokens: 750,
+					cost: { input: 0.001, output: 0.002, cacheRead: 0, cacheWrite: 0 },
+				};
+				const stdout = makeStdout([makeMessageEnd("assistant", "Done.", usage)]);
+				const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+				expect(result.metrics.tokensUsed).toBe(750);
+			});
+
+			it("tokensUsed undefined when message_end has no usage field", () => {
+				const stdout = makeStdout([makeMessageEnd("assistant", "Done.")]);
+				const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+				expect(result.metrics.tokensUsed).toBeUndefined();
+			});
+
+			it("estimatedCost is zero (not undefined) when usage present but cost absent", () => {
+				const usage = { input: 100, output: 50, cacheRead: 0, cacheWrite: 0, totalTokens: 150 };
+				const stdout = makeStdout([makeMessageEnd("assistant", "Done.", usage)]);
+				const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+				expect(result.metrics.tokensUsed).toBe(150);
+				expect(result.metrics.estimatedCost).toBe(0);
+			});
+
+			it("ignores usage from non-assistant message_end events", () => {
+				const usage = { input: 100, output: 50, totalTokens: 150, cost: { total: 0.005 } };
+				const userEvent = makeMessageEnd("user", "Hello.", usage);
+				const assistantEvent = makeMessageEnd("assistant", "Done.");
+				const stdout = makeStdout([userEvent, assistantEvent]);
+				const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+				expect(result.metrics.tokensUsed).toBeUndefined();
+				expect(result.metrics.estimatedCost).toBeUndefined();
+			});
+		});
+
 		it("durationMs populated on all failure cases", () => {
 			// signal kill
 			const r1 = synthesizeWorkerResult("", "", null, "SIGKILL", Date.now() - 200);
