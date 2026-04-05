@@ -764,8 +764,11 @@ export class MissionControlComponent {
 		const output: string[] = [];
 
 		for (let i = 0; i < maxRows; i++) {
-			const left = (leftLines[i] ?? "").slice(0, leftWidth).padEnd(leftWidth);
-			const right = (rightLines[i] ?? "").slice(0, rightWidth);
+			const rawLeft = leftLines[i] ?? "";
+			const leftTrunc = truncateToWidth(rawLeft, leftWidth);
+			const leftPad = leftWidth - visibleWidth(leftTrunc);
+			const left = leftPad > 0 ? leftTrunc + " ".repeat(leftPad) : leftTrunc;
+			const right = truncateToWidth(rightLines[i] ?? "", rightWidth);
 			output.push(`${left} ${right}`);
 		}
 

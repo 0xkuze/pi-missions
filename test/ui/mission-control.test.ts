@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { visibleWidth } from "@mariozechner/pi-tui";
 import type { Feature, Milestone, MissionConfig, MissionPlan, MissionState, ProgressEvent } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
 import {
@@ -913,6 +914,57 @@ describe("MissionControlComponent draft_review approve", () => {
 
 			expect(component["state"]?.status).toBe("approved");
 			expect(component["plan"]?.approvedAt).toBeDefined();
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+});
+
+describe("MissionControlComponent ANSI-aware two-column layout", () => {
+	it("handles ANSI codes in two-column layout without clipping", () => {
+		const tmpDir = join(tmpdir(), `mc-ansi-test-${Date.now()}`);
+		mkdirSync(tmpDir, { recursive: true });
+		try {
+			const feature = makeFeature("f1", "active", "jwt-tokens", {
+				acceptanceCriteria: ["JWT signing with RS256"],
+			});
+			const milestone = makeMilestone("m1", [feature], "active");
+			const plan = makePlan([milestone]);
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f1",
+				progressLog: [makeEvent("feature_start", "started jwt-tokens", 60_000)],
+			});
+
+			const mockTheme = {
+				fg: (_color: string, text: string) => `\x1b[31m${text}\x1b[0m`,
+				bg: (_color: string, text: string) => `\x1b[41m${text}\x1b[0m`,
+				bold: (text: string) => `\x1b[1m${text}\x1b[0m`,
+			};
+
+			const deps = makeDeps(tmpDir, {
+				loadState: () => state,
+				loadPlan: () => plan,
+			});
+
+			const tui = makeTUI();
+			const component = new MissionControlComponent(tui, () => {}, deps, mockTheme);
+
+			const width = 80;
+			const lines = component.render(width);
+
+			const leftWidth = Math.floor(width / 2) - 1;
+
+			for (const line of lines) {
+				expect(visibleWidth(line)).toBeLessThanOrEqual(width);
+			}
+
+			const ansiEscapeRe = /\x1b\[[^m]*$/;
+			for (const line of lines) {
+				expect(line).not.toMatch(ansiEscapeRe);
+			}
+
+			expect(lines.length).toBeGreaterThan(0);
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
