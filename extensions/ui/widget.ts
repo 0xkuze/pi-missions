@@ -1,5 +1,6 @@
 import type { ThemeColor } from "@mariozechner/pi-coding-agent";
 import type { MissionPlan, MissionState } from "../types.js";
+import { countProgress } from "./count-progress.js";
 
 const DEFAULT_BAR_WIDTH = 10;
 const MAX_LINE_WIDTH = 120;
@@ -16,14 +17,6 @@ export type ThemeStyler = {
 function truncate(text: string, maxLen: number): string {
 	if (text.length <= maxLen) return text;
 	return `${text.slice(0, maxLen - 1)}\u2026`;
-}
-
-function countTotalFeatures(plan: MissionPlan): number {
-	return plan.milestones.reduce((sum, m) => sum + m.features.length, 0);
-}
-
-function countDoneFeatures(state: MissionState): number {
-	return state.totalFeaturesCompleted + state.totalFeaturesSkipped;
 }
 
 function buildProgressBar(doneCount: number, totalCount: number, hasActive: boolean, barWidth: number): string {
@@ -156,7 +149,7 @@ export function buildWidgetLines(
 
 		case "draft_review": {
 			const milestoneCount = plan?.milestones.length ?? 0;
-			const featureCount = plan ? countTotalFeatures(plan) : 0;
+			const featureCount = plan ? countProgress(state, plan).total : 0;
 			if (!theme) {
 				return [
 					truncate(
@@ -183,9 +176,7 @@ export function buildWidgetLines(
 				if (!theme) return ["\u25cf Running"];
 				return [`${theme.bold(theme.fg("success", "\u25cf Running"))}${hint(theme)}`];
 			}
-			const total = countTotalFeatures(plan);
-			const done = countDoneFeatures(state);
-			const hasActive = !!state.currentFeatureId;
+			const { done, total, hasActive } = countProgress(state, plan);
 			const milestoneName = findCurrentMilestoneName(state, plan);
 			const featureName = findCurrentFeatureName(state, plan);
 			if (!theme) {
@@ -207,8 +198,7 @@ export function buildWidgetLines(
 				const body = theme.fg("warning", "waiting for input");
 				return [`${icon}${sep(theme)}${body}${hint(theme)}`];
 			}
-			const total = countTotalFeatures(plan);
-			const done = countDoneFeatures(state);
+			const { done, total } = countProgress(state, plan);
 			if (!theme) {
 				const bar = buildProgressBar(done, total, false, barWidth);
 				return [formatProgressLine("\u23f8 Paused", bar, done, total, "waiting for input")];
@@ -226,8 +216,7 @@ export function buildWidgetLines(
 				const body = theme.fg("text", "validating milestone");
 				return [`${icon}${sep(theme)}${body}${hint(theme)}`];
 			}
-			const total = countTotalFeatures(plan);
-			const done = countDoneFeatures(state);
+			const { done, total } = countProgress(state, plan);
 			const milestoneName = findCurrentMilestoneName(state, plan);
 			if (!theme) {
 				const bar = buildProgressBar(done, total, false, barWidth);
@@ -243,7 +232,7 @@ export function buildWidgetLines(
 		}
 
 		case "completed": {
-			const total = plan ? countTotalFeatures(plan) : state.totalFeaturesCompleted + state.totalFeaturesSkipped;
+			const { total } = countProgress(state, plan);
 			if (!theme) {
 				const bar = DONE_CHAR.repeat(barWidth);
 				return [formatProgressLine("\u2713 Done", bar, total, total, "report ready")];
@@ -259,8 +248,7 @@ export function buildWidgetLines(
 				if (!theme) return ["\u2717 Failed"];
 				return [`${theme.bold(theme.fg("error", "\u2717 Failed"))}${hint(theme)}`];
 			}
-			const total = countTotalFeatures(plan);
-			const done = countDoneFeatures(state);
+			const { done, total } = countProgress(state, plan);
 			const blockedName = findBlockedFeatureName(state, plan);
 			if (!theme) {
 				const bar = buildProgressBar(done, total, false, barWidth);

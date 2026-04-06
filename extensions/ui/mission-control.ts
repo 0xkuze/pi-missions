@@ -7,6 +7,7 @@ import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionConfig, MissionPlan, MissionState, PlanMutation, ProgressEvent } from "../types.js";
 import { nowISO } from "../utils.js";
 import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
+import { countProgress } from "./count-progress.js";
 import { handleDraftReviewKey, renderDraftReview } from "./draft-review.js";
 import type { FrameStyle } from "./frame.js";
 import {
@@ -220,22 +221,14 @@ function renderFeaturePanelContent(
 	return lines;
 }
 
-function countFeatureStats(plan: MissionPlan | null): { done: number; total: number } {
-	if (!plan) return { done: 0, total: 0 };
-	let done = 0;
-	let total = 0;
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			total++;
-			if (feature.status === "done" || feature.status === "skipped") done++;
-		}
-	}
-	return { done, total };
-}
-
-function renderOutlinePanelContent(plan: MissionPlan, contentWidth: number, style?: FrameStyle): string[] {
+function renderOutlinePanelContent(
+	state: MissionState,
+	plan: MissionPlan,
+	contentWidth: number,
+	style?: FrameStyle,
+): string[] {
 	const lines: string[] = [];
-	const { done, total } = countFeatureStats(plan);
+	const { done, total } = countProgress(state, plan);
 	const tf = style?.textFn ?? ((t: string) => t);
 
 	lines.push(sectionWithCount("Features", `${done}/${total}`, contentWidth, style));
@@ -1202,8 +1195,7 @@ export class MissionControlComponent implements Component, Focusable {
 			return " ".repeat(dotPad) + statusDot;
 		}
 
-		const { done, total } = countFeatureStats(plan);
-		const hasActive = !!state.currentFeatureId;
+		const { done, total, hasActive } = countProgress(state, plan ?? undefined);
 		const barWidth = Math.min(20, Math.max(5, contentWidth - 30));
 		const doneWidth = total === 0 ? barWidth : Math.round((done / total) * barWidth);
 		const activeWidth = hasActive ? 1 : 0;
@@ -1376,7 +1368,7 @@ export class MissionControlComponent implements Component, Focusable {
 		const rightBottomHeight = availablePanelRows - rightTopHeight;
 
 		const rightContentWidth = rightWidth - 4;
-		const { done, total } = countFeatureStats(plan);
+		const { done, total } = countProgress(state, plan ?? undefined);
 		const featuresContent = plan ? this.buildOutlineLines(plan, rightContentWidth) : ["(no plan loaded)"];
 		const rightTopStyle = this.activePane === "right-top" ? this.activePanelStyle() : this.style;
 		const featuresPanel = panelWithCount(
