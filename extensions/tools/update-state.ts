@@ -2,8 +2,17 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
 import { appendMutation } from "../state/plan-history.js";
-import type { Feature, MissionPlan, MissionState } from "../types.js";
+import type { Feature, MissionPlan, MissionState, MissionStatus } from "../types.js";
 import { nowISO } from "../utils.js";
+
+const VALID_STATES_FOR_ACTION: Record<string, ReadonlySet<MissionStatus>> = {
+	start_milestone: new Set(["approved", "executing"]),
+	complete_milestone: new Set(["executing", "validating"]),
+	skip_feature: new Set(["executing"]),
+	block_feature: new Set(["executing"]),
+	add_feature: new Set(["planning", "draft_review", "executing"]),
+	remove_feature: new Set(["planning", "draft_review", "executing"]),
+};
 
 interface Deps {
 	basePath: string;
@@ -295,6 +304,19 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 			}
 
 			const { action, targetId, reason } = params;
+
+			const validStates = VALID_STATES_FOR_ACTION[action];
+			if (validStates && !validStates.has(state.status)) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Error: '${action}' is not allowed in '${state.status}' state. Allowed states: ${[...validStates].join(", ")}.`,
+						},
+					],
+					details: {},
+				};
+			}
 
 			if (action === "note") {
 				const updatedState = appendNote(state, reason ?? targetId);

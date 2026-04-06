@@ -7,6 +7,7 @@ import { registerCommands } from "./commands.js";
 import { captureGitSnapshot, isGitAvailable } from "./git.js";
 import { handleMissionInput } from "./input-handler.js";
 import { buildCompactMissionSummary, buildOrchestratorProtocol, clearProtocolCache } from "./orchestrator/protocol.js";
+import { isOnboardingCompleted, saveGlobalConfig } from "./state/global-config.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
 import { invalidateCaches, loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
 import { appendMutation, clearHistory } from "./state/plan-history.js";
@@ -20,9 +21,10 @@ import { registerRunValidationTool } from "./tools/run-validation.js";
 import { killActiveWorker, registerSpawnWorkerTool } from "./tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
-import type { Feature, MissionPlan, MissionState, WorkerResult } from "./types.js";
+import type { Feature, GlobalConfig, MissionPlan, MissionState, WorkerResult } from "./types.js";
 import { DraftReviewComponent } from "./ui/draft-review.js";
 import { MissionControlComponent } from "./ui/mission-control.js";
+import { OnboardingOverlayComponent } from "./ui/onboarding-overlay.js";
 import { QuestionsOverlayComponent } from "./ui/questions-overlay.js";
 import type { ThemeStyler } from "./ui/widget.js";
 import { buildWidgetLines } from "./ui/widget.js";
@@ -303,6 +305,37 @@ export default function (pi: ExtensionAPI): void {
 	// Auto-activates if filesystem state exists on session start.
 	let missionModeActive = false;
 
+	const MISSION_TOOL_NAMES = [
+		"submit_plan",
+		"spawn_worker",
+		"update_mission_state",
+		"complete_mission",
+		"run_validation",
+		"commit_changes",
+		"create_fix_feature",
+		"ask_questions",
+	] as const;
+
+	const missionToolSet = new Set<string>(MISSION_TOOL_NAMES);
+
+	function enableMissionTools(): void {
+		const current = new Set(pi.getActiveTools());
+		let changed = false;
+		for (const name of MISSION_TOOL_NAMES) {
+			if (!current.has(name)) {
+				current.add(name);
+				changed = true;
+			}
+		}
+		if (changed) pi.setActiveTools([...current]);
+	}
+
+	function disableMissionTools(): void {
+		const current = pi.getActiveTools();
+		const filtered = current.filter((name) => !missionToolSet.has(name));
+		if (filtered.length !== current.length) pi.setActiveTools(filtered);
+	}
+
 	let lastContextPercent: number | null = null;
 
 	let lastWidgetKey = "";
@@ -349,10 +382,20 @@ export default function (pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		latestCtx = ctx;
 
+		// Disable mission tools by default; they are enabled only when mission mode activates.
+		disableMissionTools();
+
 		const fsState = loadState(basePath);
 
 		if (fsState !== null) {
+			// Terminal states: render widget but do NOT activate mission mode or tools.
+			if (TERMINAL_STATUSES.has(fsState.status)) {
+				renderMissionWidget(ctx, fsState, loadPlan(basePath) ?? undefined);
+				return;
+			}
+
 			missionModeActive = true;
+			enableMissionTools();
 			// Capture git snapshot if not yet present and git is available.
 			const stateWithSnapshot = captureSnapshotIfNeeded(fsState, projectDir);
 			cleanupOrphanedWorker(stateWithSnapshot, basePath);
@@ -362,16 +405,29 @@ export default function (pi: ExtensionAPI): void {
 				plan: recoveredPlan,
 				recoveryContext,
 			} = reconcileStateOnStart(stateWithSnapshot, basePath);
-			if (recoveryContext) {
-				saveState(basePath, recoveredState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
-				if (recoveredPlan) savePlan(basePath, recoveredPlan, (p) => pi.appendEntry(SESSION_CACHE_KEY, p));
-				pendingRecoveryContext = recoveryContext;
-			} else if (stateWithSnapshot !== fsState) {
-				// Snapshot was captured — persist the updated state.
-				saveState(basePath, recoveredState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
+
+			// Auto-resume from pause so the mission continues from the exact step it was at.
+			let activeState = recoveredState;
+			if (activeState.status === "paused" && activeState.resumeTargetState) {
+				const resumeTarget = activeState.resumeTargetState;
+				try {
+					activeState = transitionState(activeState, resumeTarget);
+					if (resumeTarget === "draft_review") {
+						pendingRecoveryContext =
+							"Mission resumed to draft_review. The plan is still awaiting user approval. The user must approve through Mission Control (Ctrl+Shift+M \u2192 A). Do NOT start execution.";
+					}
+				} catch {
+					// why: best-effort resume — if transition fails, show paused state
+				}
 			}
-			renderMissionWidget(ctx, recoveredState, recoveredPlan ?? undefined);
-			if (!TERMINAL_STATUSES.has(recoveredState.status)) {
+
+			if (recoveryContext || activeState !== recoveredState || stateWithSnapshot !== fsState) {
+				saveState(basePath, activeState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
+				if (recoveredPlan) savePlan(basePath, recoveredPlan, (p) => pi.appendEntry(SESSION_CACHE_KEY, p));
+				if (recoveryContext) pendingRecoveryContext = recoveryContext;
+			}
+			renderMissionWidget(ctx, activeState, recoveredPlan ?? undefined);
+			if (!TERMINAL_STATUSES.has(activeState.status)) {
 				await handleLockConflict(basePath, ctx);
 			}
 			return;
@@ -388,14 +444,36 @@ export default function (pi: ExtensionAPI): void {
 			return;
 		}
 
+		// Terminal cached states: render widget but do NOT activate mission mode or tools.
+		if (TERMINAL_STATUSES.has(cached.status)) {
+			renderMissionWidget(ctx, cached);
+			return;
+		}
+
 		// Restore from cache: write back to filesystem so it becomes authoritative.
 		// Also capture snapshot for the restored state.
 		missionModeActive = true;
-		const cachedWithSnapshot = captureSnapshotIfNeeded(cached, projectDir);
-		saveState(basePath, cachedWithSnapshot, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
+		enableMissionTools();
+		let cachedState = captureSnapshotIfNeeded(cached, projectDir);
+
+		// Auto-resume from pause so the mission continues from the exact step.
+		if (cachedState.status === "paused" && cachedState.resumeTargetState) {
+			const resumeTarget = cachedState.resumeTargetState;
+			try {
+				cachedState = transitionState(cachedState, resumeTarget);
+				if (resumeTarget === "draft_review") {
+					pendingRecoveryContext =
+						"Mission resumed to draft_review. The plan is still awaiting user approval. The user must approve through Mission Control (Ctrl+Shift+M \u2192 A). Do NOT start execution.";
+				}
+			} catch {
+				// why: best-effort resume
+			}
+		}
+
+		saveState(basePath, cachedState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
 		const plan = loadPlan(basePath);
-		renderMissionWidget(ctx, cachedWithSnapshot, plan ?? undefined);
-		if (!TERMINAL_STATUSES.has(cachedWithSnapshot.status)) {
+		renderMissionWidget(ctx, cachedState, plan ?? undefined);
+		if (!TERMINAL_STATUSES.has(cachedState.status)) {
 			await handleLockConflict(basePath, ctx);
 		}
 	});
@@ -581,6 +659,9 @@ export default function (pi: ExtensionAPI): void {
 		},
 	});
 
+	// why: disableMissionTools() cannot run here — runtime APIs (getActiveTools/setActiveTools)
+	// are not available during extension loading. Tools are disabled in session_start instead.
+
 	function resetMission(): void {
 		killActiveWorker();
 		const currentState = loadState(basePath);
@@ -602,8 +683,33 @@ export default function (pi: ExtensionAPI): void {
 		}
 	}
 
-	function activateMissionMode(): void {
+	async function showOnboarding(ctx: ExtensionContext): Promise<GlobalConfig | null> {
+		const availableModels = ctx.modelRegistry.getAll().map((m) => m.id);
+		return ctx.ui.custom<GlobalConfig | null>(
+			(tui, theme, _kb, done) => new OnboardingOverlayComponent(tui, done, availableModels, theme),
+			{
+				overlay: true,
+				overlayOptions: {
+					maxHeight: "95%",
+					anchor: "center",
+				},
+			},
+		);
+	}
+
+	async function activateMissionMode(ctx: ExtensionContext): Promise<void> {
+		if (!isOnboardingCompleted()) {
+			const result = await showOnboarding(ctx);
+			if (result) {
+				saveGlobalConfig(result);
+			} else {
+				missionModeActive = false;
+				disableMissionTools();
+				return;
+			}
+		}
 		missionModeActive = true;
+		enableMissionTools();
 		let state = loadState(basePath);
 		if (state) {
 			if (state.status === "paused" && state.resumeTargetState) {
@@ -636,6 +742,7 @@ export default function (pi: ExtensionAPI): void {
 		}
 		clearWidget();
 		missionModeActive = false;
+		disableMissionTools();
 	}
 
 	// Register all slash commands.
@@ -682,6 +789,7 @@ export default function (pi: ExtensionAPI): void {
 		};
 		saveState(basePath, newState);
 		missionModeActive = true;
+		enableMissionTools();
 		updateWidget(newState);
 		pi.setSessionName(description);
 		pi.sendUserMessage(`New mission: ${description}`);

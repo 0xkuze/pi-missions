@@ -75,6 +75,85 @@ describe("registerUpdateStateTool", () => {
 		rmSync(tmpDir, { recursive: true, force: true });
 	});
 
+	describe("state guards — reject actions from invalid mission statuses", () => {
+		const INVALID_STATUSES_FOR = {
+			start_milestone: ["planning", "draft_review", "validating", "paused", "completed", "failed", "aborted"],
+			complete_milestone: ["planning", "draft_review", "approved", "paused", "completed", "failed", "aborted"],
+			skip_feature: ["planning", "draft_review", "approved", "validating", "paused", "completed", "failed", "aborted"],
+			block_feature: ["planning", "draft_review", "approved", "validating", "paused", "completed", "failed", "aborted"],
+			add_feature: ["approved", "validating", "paused", "completed", "failed", "aborted"],
+			remove_feature: ["approved", "validating", "paused", "completed", "failed", "aborted"],
+		} as const;
+
+		for (const [action, invalidStatuses] of Object.entries(INVALID_STATUSES_FOR)) {
+			for (const status of invalidStatuses) {
+				it(`rejects ${action} from '${status}' state`, async () => {
+					const state = makeState({ status: status as any });
+					const plan = localMakePlan();
+					const params: any = { action, targetId: "milestone-1" };
+					if (action === "add_feature") {
+						params.name = "F";
+						params.description = "d";
+						params.acceptanceCriteria = ["x"];
+					}
+					if (action === "skip_feature" || action === "block_feature" || action === "remove_feature") {
+						params.targetId = "feature-1";
+					}
+					const result = await callTool(tmpDir, params, state, plan);
+					expect(result.content[0].text).toContain("Error");
+					expect(result.content[0].text).toContain(status);
+				});
+			}
+		}
+
+		it("allows start_milestone from 'approved' state", async () => {
+			const state = makeState({ status: "approved" });
+			const plan = localMakePlan();
+			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("allows start_milestone from 'executing' state", async () => {
+			const state = makeState({ status: "executing" });
+			const plan = localMakePlan();
+			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("allows add_feature from 'planning' state", async () => {
+			const state = makeState({ status: "planning" });
+			const plan = localMakePlan();
+			const result = await callTool(
+				tmpDir,
+				{ action: "add_feature", targetId: "milestone-1", name: "F", description: "d", acceptanceCriteria: ["x"] },
+				state,
+				plan,
+			);
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("allows add_feature from 'draft_review' state", async () => {
+			const state = makeState({ status: "draft_review" });
+			const plan = localMakePlan();
+			const result = await callTool(
+				tmpDir,
+				{ action: "add_feature", targetId: "milestone-1", name: "F", description: "d", acceptanceCriteria: ["x"] },
+				state,
+				plan,
+			);
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("note action is allowed from any non-terminal state", async () => {
+			for (const status of ["planning", "draft_review", "approved", "executing", "validating", "paused"] as const) {
+				const state = makeState({ status });
+				const plan = localMakePlan();
+				const result = await callTool(tmpDir, { action: "note", targetId: "test", reason: "note" }, state, plan);
+				expect(result.content[0].text).toContain("Note recorded");
+			}
+		});
+	});
+
 	describe("no state", () => {
 		it("returns error when no state exists", async () => {
 			const { pi, getRegisteredTool: getTool } = createMockPi();

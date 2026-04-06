@@ -1,4 +1,6 @@
+import { resolvePromptingMode } from "../config.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
+import { getCavemanOutputRule } from "./caveman-rules.js";
 
 const TERMINAL_STATUSES: ReadonlySet<string> = new Set(["completed", "failed", "aborted", "idle"]);
 
@@ -6,7 +8,8 @@ let protocolCache: { key: string; value: string | null } | null = null;
 
 function protocolCacheKey(state: MissionState, plan?: MissionPlan, config?: MissionConfig, compact?: boolean): string {
 	const autonomy = config?.autonomy ?? "medium";
-	return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${plan?.planVersion ?? 0}|${autonomy}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}|${compact ? "c" : ""}`;
+	const mode = resolvePromptingMode(config ?? {});
+	return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${plan?.planVersion ?? 0}|${autonomy}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}|${compact ? "c" : ""}|${mode}`;
 }
 
 export function clearProtocolCache(): void {
@@ -44,8 +47,12 @@ ${autonomyInstructions(autonomy)}`;
 function draftReviewProtocol(): string {
 	return `## MISSION ORCHESTRATOR \u2014 DRAFT REVIEW
 
-Plan submitted, awaiting user approval. Do NOT start executing features.
-Wait for approval via \`/mission-approve\` or request changes via \`submit_plan\`.`;
+Plan submitted. The plan is awaiting user approval through the Mission Control UI (Ctrl+Shift+M \u2192 A).
+A session resume does NOT mean approval.
+Do NOT call start_milestone or spawn_worker.
+Do NOT self-approve.
+Wait for the user to approve through the UI.
+You may refine the plan via \`submit_plan\` if the user requests changes.`;
 }
 
 function approvedProtocol(plan: MissionPlan | undefined): string {
@@ -130,6 +137,45 @@ function pausedProtocol(): string {
 The mission has been paused by the user. Stop all work and wait for the user to resume.`;
 }
 
+function cavemanPlanning(): string {
+	return `## CAVEMAN ORCHESTRATOR \u2014 PLANNING
+
+You plan maker. Follow order:
+1. ask_questions \u2014 ask user what want
+2. Look package.json, README, dirs. NO read code files
+3. submit_plan \u2014 milestones, features, criteria
+
+NO submit_plan before ask_questions. NO read .ts/.js/.py files. Keep plan simple.`;
+}
+
+function cavemanExecuting(state: MissionState, plan: MissionPlan | undefined): string {
+	const progress = progressSummary(state, plan);
+	const warnings = gitWarnings(state);
+	return `## CAVEMAN ORCHESTRATOR \u2014 EXECUTING
+
+${progress}${warnings}
+
+You boss. No touch code. spawn_worker do work. Worker fail? create_fix_feature then spawn_worker again.
+All features done? run_validation. All milestones done? complete_mission. Go.`;
+}
+
+function cavemanDraftReview(): string {
+	return `## CAVEMAN \u2014 DRAFT REVIEW\n\nPlan ready. Wait user approve via Mission Control (Ctrl+Shift+M \u2192 A). Resume does NOT mean approval. No call start_milestone. No call spawn_worker. Wait.`;
+}
+
+function cavemanApproved(plan: MissionPlan | undefined): string {
+	const total = plan?.milestones.flatMap((m) => m.features).length ?? 0;
+	return `## CAVEMAN \u2014 APPROVED\n\n${total} features ready. Start: update_mission_state(start_milestone), then spawn_worker. Go.`;
+}
+
+function cavemanValidating(): string {
+	return `## CAVEMAN \u2014 VALIDATING\n\nValidation running. Wait. No spawn workers.`;
+}
+
+function cavemanPaused(): string {
+	return `## CAVEMAN \u2014 PAUSED\n\nUser pause. Stop. Wait.`;
+}
+
 export function buildCompactMissionSummary(state: MissionState, plan?: MissionPlan): string {
 	const allFeatures = plan?.milestones.flatMap((m) => m.features) ?? [];
 	const total = allFeatures.length;
@@ -155,10 +201,35 @@ export function buildOrchestratorProtocol(
 	}
 
 	const autonomy = config?.autonomy ?? "medium";
+	const mode = resolvePromptingMode(config ?? {});
 	let result: string | null;
 
 	if (compact && state.status === "executing") {
 		result = buildCompactMissionSummary(state, plan);
+	} else if (mode === "caveman" || mode === "caveman-full") {
+		switch (state.status) {
+			case "planning":
+				result = cavemanPlanning();
+				break;
+			case "draft_review":
+				result = cavemanDraftReview();
+				break;
+			case "approved":
+				result = cavemanApproved(plan);
+				break;
+			case "executing":
+				result = cavemanExecuting(state, plan);
+				break;
+			case "validating":
+				result = cavemanValidating();
+				break;
+			case "paused":
+				result = cavemanPaused();
+				break;
+			default:
+				result = null;
+				break;
+		}
 	} else {
 		switch (state.status) {
 			case "planning":
@@ -182,6 +253,13 @@ export function buildOrchestratorProtocol(
 			default:
 				result = null;
 				break;
+		}
+	}
+
+	if (result !== null) {
+		const outputRule = getCavemanOutputRule(mode);
+		if (outputRule) {
+			result = `${result}\n\n${outputRule}`;
 		}
 	}
 

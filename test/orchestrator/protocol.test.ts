@@ -3,6 +3,17 @@ import { buildOrchestratorProtocol, clearProtocolCache } from "../../extensions/
 import type { MissionConfig, MissionState } from "../../extensions/types.js";
 import { makeFeature, makeMilestone, makePlan, makeState } from "../helpers/index.js";
 
+const VERBOSE: MissionConfig = { promptingMode: "default" };
+
+function verboseProtocol(
+	state: MissionState | null,
+	plan?: Parameters<typeof buildOrchestratorProtocol>[1],
+	config?: MissionConfig,
+	compact?: boolean,
+): string | null {
+	return buildOrchestratorProtocol(state, plan, { ...VERBOSE, ...config }, compact);
+}
+
 function makeProtocolPlan(overrides: Parameters<typeof makePlan>[0] = {}) {
 	return makePlan({
 		description: "Build a CRM",
@@ -65,82 +76,82 @@ describe("buildOrchestratorProtocol", () => {
 
 	describe("null and terminal states return null", () => {
 		it("returns null when state is null", () => {
-			expect(buildOrchestratorProtocol(null)).toBeNull();
+			expect(verboseProtocol(null)).toBeNull();
 		});
 
 		it("returns null for completed state", () => {
-			expect(buildOrchestratorProtocol(makeState({ status: "completed" }))).toBeNull();
+			expect(verboseProtocol(makeState({ status: "completed" }))).toBeNull();
 		});
 
 		it("returns null for failed state", () => {
-			expect(buildOrchestratorProtocol(makeState({ status: "failed" }))).toBeNull();
+			expect(verboseProtocol(makeState({ status: "failed" }))).toBeNull();
 		});
 
 		it("returns null for aborted state", () => {
-			expect(buildOrchestratorProtocol(makeState({ status: "aborted" }))).toBeNull();
+			expect(verboseProtocol(makeState({ status: "aborted" }))).toBeNull();
 		});
 
 		it("returns null for idle status", () => {
 			const idleState = { ...makeState({ status: "planning" }), status: "idle" } as unknown as MissionState;
-			expect(buildOrchestratorProtocol(idleState)).toBeNull();
+			expect(verboseProtocol(idleState)).toBeNull();
 		});
 
 		it("returns a falsy value for null (VAL-PROTO-005)", () => {
-			expect(buildOrchestratorProtocol(null)).toBeFalsy();
+			expect(verboseProtocol(null)).toBeFalsy();
 		});
 
 		it("returns a falsy value for completed (VAL-PROTO-005)", () => {
-			expect(buildOrchestratorProtocol(makeState({ status: "completed" }))).toBeFalsy();
+			expect(verboseProtocol(makeState({ status: "completed" }))).toBeFalsy();
 		});
 
 		it("returns a falsy value for failed (VAL-PROTO-005)", () => {
-			expect(buildOrchestratorProtocol(makeState({ status: "failed" }))).toBeFalsy();
+			expect(verboseProtocol(makeState({ status: "failed" }))).toBeFalsy();
 		});
 
 		it("returns a falsy value for aborted (VAL-PROTO-005)", () => {
-			expect(buildOrchestratorProtocol(makeState({ status: "aborted" }))).toBeFalsy();
+			expect(verboseProtocol(makeState({ status: "aborted" }))).toBeFalsy();
 		});
 	});
 
 	describe("planning state (VAL-PROTO-001)", () => {
 		it("returns a non-null string for planning state", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" }));
+			const result = verboseProtocol(makeState({ status: "planning" }));
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
 
 		it("contains reference to submit_plan", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result).toContain("submit_plan");
 		});
 
 		it("does NOT contain execution-phase instructions (spawn_worker)", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result).not.toContain("spawn_worker");
 		});
 
 		it("does NOT contain execution-phase instructions (run_validation)", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result).not.toContain("run_validation");
 		});
 
 		it("does NOT contain execution-phase instructions (commit_changes)", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result).not.toContain("commit_changes");
 		});
 
 		it("is approximately ~500 tokens (under 2500 chars)", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result.length).toBeLessThan(2500);
 		});
 
 		it("mentions planning phase", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result.toLowerCase()).toContain("planning");
 		});
 
 		it("mentions ask_questions before codebase scan", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			const askIdx = result.indexOf("ask_questions");
 			const scanIdx = result.toLowerCase().indexOf("codebase");
 			expect(askIdx).toBeGreaterThan(-1);
@@ -149,90 +160,111 @@ describe("buildOrchestratorProtocol", () => {
 		});
 
 		it("instructs targeted scan (package.json, README, directory structure)", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result).toContain("package.json");
 			expect(result).toContain("README");
 			expect(result.toLowerCase()).toContain("directory");
 		});
 
 		it("instructs NOT to read implementation files", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result.toLowerCase()).toMatch(/do not.*read.*implementation|never.*read.*implementation/i);
 		});
 	});
 
 	describe("draft_review state (VAL-PROTO-002)", () => {
 		it("returns a non-null string for draft_review state", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "draft_review" }));
+			const result = verboseProtocol(makeState({ status: "draft_review" }));
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
 
 		it("instructs waiting for approval", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "draft_review" })) as string;
+			const result = verboseProtocol(makeState({ status: "draft_review" })) as string;
 			expect(result.toLowerCase()).toContain("approval");
 		});
 
-		it("prohibits starting execution (no spawn_worker)", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "draft_review" })) as string;
-			expect(result).not.toContain("spawn_worker");
+		it("explicitly forbids calling spawn_worker", () => {
+			const result = verboseProtocol(makeState({ status: "draft_review" })) as string;
+			expect(result).toContain("Do NOT call");
+			expect(result).toContain("spawn_worker");
 		});
 
 		it("prohibits starting execution (no run_validation)", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "draft_review" })) as string;
+			const result = verboseProtocol(makeState({ status: "draft_review" })) as string;
 			expect(result).not.toContain("run_validation");
 		});
 
 		it("explicitly prohibits executing features", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "draft_review" })) as string;
+			const result = verboseProtocol(makeState({ status: "draft_review" })) as string;
 			expect(result.toLowerCase()).toMatch(/do not|don't|must not|prohibited|prohibit/);
+		});
+
+		it("states that a session resume does NOT mean approval", () => {
+			const result = verboseProtocol(makeState({ status: "draft_review" })) as string;
+			expect(result).toContain("does NOT mean approval");
+		});
+
+		it("prohibits calling start_milestone", () => {
+			const result = verboseProtocol(makeState({ status: "draft_review" })) as string;
+			expect(result).toContain("start_milestone");
+		});
+
+		it("prohibits calling spawn_worker", () => {
+			const result = verboseProtocol(makeState({ status: "draft_review" })) as string;
+			expect(result).toContain("Do NOT call");
+		});
+
+		it("mentions Mission Control UI for approval", () => {
+			const result = verboseProtocol(makeState({ status: "draft_review" })) as string;
+			expect(result).toContain("Ctrl+Shift+M");
 		});
 	});
 
 	describe("approved state (VAL-PROTO-003)", () => {
 		it("returns a non-null string for approved state", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "approved" }));
+			const result = verboseProtocol(makeState({ status: "approved" }));
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
 
 		it("indicates the plan is approved", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "approved" })) as string;
+			const result = verboseProtocol(makeState({ status: "approved" })) as string;
 			expect(result.toLowerCase()).toContain("approved");
 		});
 
 		it("directs to begin with spawn_worker", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "approved" })) as string;
+			const result = verboseProtocol(makeState({ status: "approved" })) as string;
 			expect(result).toContain("spawn_worker");
 		});
 
 		it("includes mission description when plan is provided", () => {
 			const plan = makeProtocolPlan({ description: "Build an e-commerce platform" });
-			const result = buildOrchestratorProtocol(makeState({ status: "approved" }), plan) as string;
+			const result = verboseProtocol(makeState({ status: "approved" }), plan) as string;
 			expect(result).toContain("Build an e-commerce platform");
 		});
 
 		it("includes milestone and feature counts when plan is provided", () => {
 			const plan = makeProtocolPlan();
-			const result = buildOrchestratorProtocol(makeState({ status: "approved" }), plan) as string;
+			const result = verboseProtocol(makeState({ status: "approved" }), plan) as string;
 			expect(result).toContain("2 milestones");
 			expect(result).toContain("4 features");
 		});
 
 		it("handles absent plan gracefully", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "approved" }), undefined);
+			const result = verboseProtocol(makeState({ status: "approved" }), undefined);
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
 
 		it("mentions worker failure policy", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "approved" }), makeProtocolPlan()) as string;
+			const result = verboseProtocol(makeState({ status: "approved" }), makeProtocolPlan()) as string;
 			expect(result).toContain("create_fix_feature");
 		});
 
 		it("is concise (under 300 tokens / 1500 chars)", () => {
 			const plan = makeProtocolPlan();
-			const result = buildOrchestratorProtocol(makeState({ status: "approved" }), plan) as string;
+			const result = verboseProtocol(makeState({ status: "approved" }), plan) as string;
 			expect(result.length).toBeLessThan(1500);
 		});
 	});
@@ -246,60 +278,60 @@ describe("buildOrchestratorProtocol", () => {
 		});
 
 		it("returns a non-null string for executing state", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan());
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan());
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
 
 		it("includes current milestone name", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toContain("Foundation");
 		});
 
 		it("includes current feature name", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toContain("auth-endpoint");
 		});
 
 		it("includes next feature name", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toContain("refresh-tokens");
 		});
 
 		it("includes milestone progress (milestone N/M)", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toContain("1/2");
 		});
 
 		it("includes feature progress (feature N/M)", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toMatch(/\d+\/4/);
 		});
 
 		it("does not contain explicit tool list", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).not.toMatch(/^TOOLS:/m);
 		});
 
 		it("contains progress summary", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toContain("Foundation");
 			expect(result).toContain("auth-endpoint");
 		});
 
 		it("is under 400 tokens (char count < 2000)", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result.length).toBeLessThan(2000);
 			expect(result.length).toBeGreaterThan(200);
 		});
 
 		it("contains delegation boundary (project manager)", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result.toLowerCase()).toContain("project manager");
 		});
 
 		it("contains 'Never read implementation files'", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result.toLowerCase()).toContain("never read implementation files");
 		});
 
@@ -310,7 +342,7 @@ describe("buildOrchestratorProtocol", () => {
 				currentFeatureId: "f2",
 				gitSnapshot: { headCommit: "abc", dirtyFiles: ["file.ts"], autoCommitEnabled: false },
 			});
-			const result = buildOrchestratorProtocol(dirtyState, makeProtocolPlan()) as string;
+			const result = verboseProtocol(dirtyState, makeProtocolPlan()) as string;
 			expect(result.toLowerCase()).toContain("dirty");
 		});
 
@@ -321,48 +353,48 @@ describe("buildOrchestratorProtocol", () => {
 				currentFeatureId: "f2",
 				gitSnapshot: { headCommit: "abc", dirtyFiles: [], autoCommitEnabled: true },
 			});
-			const result = buildOrchestratorProtocol(cleanState, makeProtocolPlan()) as string;
+			const result = verboseProtocol(cleanState, makeProtocolPlan()) as string;
 			expect(result.toLowerCase()).not.toContain("dirty");
 		});
 
 		it("handles absent plan gracefully without crashing", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, undefined);
+			const result = verboseProtocol(stateWithFeature, undefined);
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
 
 		it("includes concise worker failure handling", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toContain("create_fix_feature");
 		});
 
 		it("instructs to call complete_mission when all features are done", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toContain("complete_mission");
 		});
 	});
 
 	describe("validating state (VAL-PROTO-007)", () => {
 		it("returns a non-null string for validating state", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "validating" }));
+			const result = verboseProtocol(makeState({ status: "validating" }));
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
 
 		it("instructs waiting for validation results", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "validating" })) as string;
+			const result = verboseProtocol(makeState({ status: "validating" })) as string;
 			expect(result.toLowerCase()).toContain("wait");
 		});
 
 		it("prohibits spawning workers", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "validating" })) as string;
+			const result = verboseProtocol(makeState({ status: "validating" })) as string;
 			expect(result.toLowerCase()).toMatch(/do not|don't|must not|prohibited|prohibit/);
 			expect(result).not.toContain("spawn_worker");
 		});
 
 		it("is distinct from executing protocol", () => {
-			const validating = buildOrchestratorProtocol(makeState({ status: "validating" })) as string;
-			const executing = buildOrchestratorProtocol(
+			const validating = verboseProtocol(makeState({ status: "validating" })) as string;
+			const executing = verboseProtocol(
 				makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2" }),
 				makeProtocolPlan(),
 			) as string;
@@ -373,30 +405,30 @@ describe("buildOrchestratorProtocol", () => {
 
 	describe("paused state (VAL-PROTO-004)", () => {
 		it("returns a non-null string for paused state", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "paused" }));
+			const result = verboseProtocol(makeState({ status: "paused" }));
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
 
 		it("is concise (approximately ~50-100 tokens, under 500 chars)", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "paused" })) as string;
+			const result = verboseProtocol(makeState({ status: "paused" })) as string;
 			expect(result.length).toBeLessThan(500);
 		});
 
 		it("instructs the orchestrator to stop all work", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "paused" })) as string;
+			const result = verboseProtocol(makeState({ status: "paused" })) as string;
 			expect(result.toLowerCase()).toContain("paused");
 		});
 
 		it("instructs waiting for user to resume", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "paused" })) as string;
+			const result = verboseProtocol(makeState({ status: "paused" })) as string;
 			expect(result.toLowerCase()).toContain("wait");
 		});
 	});
 
 	describe("autonomy levels (VAL-CROSS-008)", () => {
 		it("low autonomy includes pause-after-every-feature instruction", () => {
-			const result = buildOrchestratorProtocol(
+			const result = verboseProtocol(
 				makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2" }),
 				makeProtocolPlan(),
 				{ autonomy: "low" } satisfies MissionConfig,
@@ -406,7 +438,7 @@ describe("buildOrchestratorProtocol", () => {
 		});
 
 		it("medium autonomy includes pause-at-milestone-boundaries instruction", () => {
-			const result = buildOrchestratorProtocol(
+			const result = verboseProtocol(
 				makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2" }),
 				makeProtocolPlan(),
 				{ autonomy: "medium" } satisfies MissionConfig,
@@ -416,7 +448,7 @@ describe("buildOrchestratorProtocol", () => {
 		});
 
 		it("high autonomy includes run-to-completion instruction", () => {
-			const result = buildOrchestratorProtocol(
+			const result = verboseProtocol(
 				makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2" }),
 				makeProtocolPlan(),
 				{ autonomy: "high" } satisfies MissionConfig,
@@ -432,16 +464,16 @@ describe("buildOrchestratorProtocol", () => {
 				currentFeatureId: "f2",
 			});
 			const plan = makeProtocolPlan();
-			const low = buildOrchestratorProtocol(executingState, plan, { autonomy: "low" }) as string;
-			const medium = buildOrchestratorProtocol(executingState, plan, { autonomy: "medium" }) as string;
-			const high = buildOrchestratorProtocol(executingState, plan, { autonomy: "high" }) as string;
+			const low = verboseProtocol(executingState, plan, { autonomy: "low" }) as string;
+			const medium = verboseProtocol(executingState, plan, { autonomy: "medium" }) as string;
+			const high = verboseProtocol(executingState, plan, { autonomy: "high" }) as string;
 			expect(low).not.toBe(medium);
 			expect(medium).not.toBe(high);
 			expect(low).not.toBe(high);
 		});
 
 		it("missing autonomy config defaults to medium without error", () => {
-			const result = buildOrchestratorProtocol(
+			const result = verboseProtocol(
 				makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2" }),
 				makeProtocolPlan(),
 				undefined,
@@ -451,10 +483,10 @@ describe("buildOrchestratorProtocol", () => {
 		});
 
 		it("autonomy also applies to planning state", () => {
-			const low = buildOrchestratorProtocol(makeState({ status: "planning" }), undefined, {
+			const low = verboseProtocol(makeState({ status: "planning" }), undefined, {
 				autonomy: "low",
 			} satisfies MissionConfig) as string;
-			const high = buildOrchestratorProtocol(makeState({ status: "planning" }), undefined, {
+			const high = verboseProtocol(makeState({ status: "planning" }), undefined, {
 				autonomy: "high",
 			} satisfies MissionConfig) as string;
 			expect(low).not.toBe(high);
@@ -474,7 +506,7 @@ describe("buildOrchestratorProtocol", () => {
 				"paused",
 			];
 			for (const status of activeStatuses) {
-				const result = buildOrchestratorProtocol(makeState({ status }));
+				const result = verboseProtocol(makeState({ status }));
 				expect(result).not.toBeNull();
 			}
 		});
@@ -482,7 +514,7 @@ describe("buildOrchestratorProtocol", () => {
 		it("returns null for all terminal/idle states", () => {
 			const terminalStatuses = ["completed", "failed", "aborted"] as const;
 			for (const status of terminalStatuses) {
-				const result = buildOrchestratorProtocol(makeState({ status }));
+				const result = verboseProtocol(makeState({ status }));
 				expect(result).toBeNull();
 			}
 		});
@@ -496,7 +528,7 @@ describe("buildOrchestratorProtocol", () => {
 				currentFeatureId: "f4",
 				totalFeaturesCompleted: 3,
 			});
-			const result = buildOrchestratorProtocol(state, makeProtocolPlan()) as string;
+			const result = verboseProtocol(state, makeProtocolPlan()) as string;
 			expect(result).toContain("2/2");
 		});
 
@@ -508,7 +540,7 @@ describe("buildOrchestratorProtocol", () => {
 				totalFeaturesCompleted: 1,
 				totalFeaturesSkipped: 1,
 			});
-			const result = buildOrchestratorProtocol(state, makeProtocolPlan()) as string;
+			const result = verboseProtocol(state, makeProtocolPlan()) as string;
 			expect(result).toContain("2/4");
 		});
 
@@ -521,7 +553,7 @@ describe("buildOrchestratorProtocol", () => {
 				currentMilestoneId: "m1",
 				currentFeatureId: "f2",
 			});
-			const result = buildOrchestratorProtocol(state, planAllDone) as string;
+			const result = verboseProtocol(state, planAllDone) as string;
 			expect(result).toContain("no more features");
 		});
 	});
@@ -537,7 +569,7 @@ describe("buildOrchestratorProtocol", () => {
 				"paused",
 			];
 			for (const status of activeStatuses) {
-				const result = buildOrchestratorProtocol(makeState({ status }));
+				const result = verboseProtocol(makeState({ status }));
 				expect(result).toBeTruthy();
 				expect((result as string).length).toBeGreaterThan(10);
 			}
@@ -545,14 +577,14 @@ describe("buildOrchestratorProtocol", () => {
 
 		it("state with no currentMilestoneId in executing does not crash", () => {
 			const state = makeState({ status: "executing" });
-			const result = buildOrchestratorProtocol(state, makeProtocolPlan());
+			const result = verboseProtocol(state, makeProtocolPlan());
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
 
 		it("executing state without a plan produces valid output", () => {
 			const state = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f1" });
-			const result = buildOrchestratorProtocol(state);
+			const result = verboseProtocol(state);
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
 		});
@@ -560,19 +592,24 @@ describe("buildOrchestratorProtocol", () => {
 
 	describe("protocol cache", () => {
 		it("returns same string reference for same cache key inputs", () => {
-			const state = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesCompleted: 1 });
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+			});
 			const plan = makeProtocolPlan();
 			const config: MissionConfig = { autonomy: "medium" };
-			const first = buildOrchestratorProtocol(state, plan, config);
-			const second = buildOrchestratorProtocol(state, plan, config);
+			const first = verboseProtocol(state, plan, config);
+			const second = verboseProtocol(state, plan, config);
 			expect(first).toBe(second);
 		});
 
 		it("returns different string when status changes", () => {
 			const state1 = makeState({ status: "planning" });
 			const state2 = makeState({ status: "paused" });
-			const first = buildOrchestratorProtocol(state1);
-			const second = buildOrchestratorProtocol(state2);
+			const first = verboseProtocol(state1);
+			const second = verboseProtocol(state2);
 			expect(first).not.toBe(second);
 		});
 
@@ -580,46 +617,71 @@ describe("buildOrchestratorProtocol", () => {
 			const plan = makeProtocolPlan();
 			const state1 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f1" });
 			const state2 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2" });
-			const first = buildOrchestratorProtocol(state1, plan);
-			const second = buildOrchestratorProtocol(state2, plan);
+			const first = verboseProtocol(state1, plan);
+			const second = verboseProtocol(state2, plan);
 			expect(first).not.toBe(second);
 		});
 
 		it("clearProtocolCache forces rebuild (returns equal content)", () => {
-			const state = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesCompleted: 1 });
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+			});
 			const plan = makeProtocolPlan();
-			const first = buildOrchestratorProtocol(state, plan);
+			const first = verboseProtocol(state, plan);
 			clearProtocolCache();
-			const second = buildOrchestratorProtocol(state, plan);
+			const second = verboseProtocol(state, plan);
 			expect(first).toEqual(second);
 		});
 
 		it("returns different string when totalFeaturesCompleted changes", () => {
 			const plan = makeProtocolPlan();
-			const state1 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesCompleted: 0 });
-			const state2 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesCompleted: 1 });
-			const first = buildOrchestratorProtocol(state1, plan);
+			const state1 = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 0,
+			});
+			const state2 = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+			});
+			const first = verboseProtocol(state1, plan);
 			clearProtocolCache();
-			const second = buildOrchestratorProtocol(state2, plan);
+			const second = verboseProtocol(state2, plan);
 			expect(first).not.toBe(second);
 		});
 
 		it("returns different string when totalFeaturesSkipped changes", () => {
 			const plan = makeProtocolPlan();
-			const state1 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesSkipped: 0 });
-			const state2 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesSkipped: 1 });
-			const first = buildOrchestratorProtocol(state1, plan);
+			const state1 = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesSkipped: 0,
+			});
+			const state2 = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesSkipped: 1,
+			});
+			const first = verboseProtocol(state1, plan);
 			clearProtocolCache();
-			const second = buildOrchestratorProtocol(state2, plan);
+			const second = verboseProtocol(state2, plan);
 			expect(first).not.toBe(second);
 		});
 
 		it("returns different string when autonomy config changes", () => {
 			const state = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2" });
 			const plan = makeProtocolPlan();
-			const first = buildOrchestratorProtocol(state, plan, { autonomy: "low" });
+			const first = verboseProtocol(state, plan, { autonomy: "low" });
 			clearProtocolCache();
-			const second = buildOrchestratorProtocol(state, plan, { autonomy: "high" });
+			const second = verboseProtocol(state, plan, { autonomy: "high" });
 			expect(first).not.toBe(second);
 		});
 
@@ -627,8 +689,8 @@ describe("buildOrchestratorProtocol", () => {
 			const state = makeState({ status: "approved" });
 			const plan1 = makeProtocolPlan({ planVersion: 1, description: "Plan v1" });
 			const plan2 = makeProtocolPlan({ planVersion: 2, description: "Plan v2" });
-			const first = buildOrchestratorProtocol(state, plan1);
-			const second = buildOrchestratorProtocol(state, plan2);
+			const first = verboseProtocol(state, plan1);
+			const second = verboseProtocol(state, plan2);
 			expect(first).not.toEqual(second);
 		});
 	});

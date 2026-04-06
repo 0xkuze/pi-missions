@@ -36,6 +36,8 @@ interface MockPiSetup {
 	tools: Map<string, unknown>;
 	commands: Map<string, unknown>;
 	shortcuts: Map<string, unknown>;
+	activeTools: string[];
+	setActiveToolsCalls: string[][];
 }
 
 function buildMockPi(): MockPiSetup {
@@ -44,13 +46,18 @@ function buildMockPi(): MockPiSetup {
 	const tools = new Map<string, unknown>();
 	const commands = new Map<string, unknown>();
 	const shortcuts = new Map<string, unknown>();
+	const activeTools: string[] = [];
+	const setActiveToolsCalls: string[][] = [];
 
 	const pi = {
 		on: (event: string, handler: (event: unknown, ctx: ExtensionContext) => unknown) => {
 			handlers.set(event, handler);
 		},
 		appendEntry: (type: string, data: unknown) => appendedEntries.push({ type, data }),
-		registerTool: (tool: { name: string }) => tools.set(tool.name, tool),
+		registerTool: (tool: { name: string }) => {
+			tools.set(tool.name, tool);
+			activeTools.push(tool.name);
+		},
 		registerCommand: (name: string, opts: unknown) => commands.set(name, opts),
 		registerShortcut: (shortcut: string, opts: unknown) => shortcuts.set(shortcut, opts),
 		registerFlag: () => {},
@@ -62,9 +69,13 @@ function buildMockPi(): MockPiSetup {
 		getSessionName: () => undefined,
 		setLabel: () => {},
 		exec: async () => ({ stdout: "", stderr: "", exitCode: 0, signal: null }),
-		getActiveTools: () => [],
+		getActiveTools: () => activeTools,
 		getAllTools: () => [],
-		setActiveTools: () => {},
+		setActiveTools: (names: string[]) => {
+			activeTools.length = 0;
+			activeTools.push(...names);
+			setActiveToolsCalls.push([...names]);
+		},
 		getCommands: () => [],
 		setModel: async () => true,
 		getThinkingLevel: () => "none",
@@ -72,7 +83,7 @@ function buildMockPi(): MockPiSetup {
 		events: { on: () => {}, off: () => {}, emit: () => {} },
 	} as unknown as ExtensionAPI;
 
-	return { pi, appendedEntries, handlers, tools, commands, shortcuts };
+	return { pi, appendedEntries, handlers, tools, commands, shortcuts, activeTools, setActiveToolsCalls };
 }
 
 function buildMockCtx(cacheEntries: SessionCacheEntry[] = [], sessionId = "test-session-id"): ExtensionContext {
@@ -204,6 +215,147 @@ describe("extension entry point (index.ts)", () => {
 		it("registers session_before_compact event handler (Point 25)", () => {
 			const { handlers } = registerExtension(tmpDir);
 			expect(handlers.has("session_before_compact")).toBe(true);
+		});
+	});
+
+	describe("mission tool gating", () => {
+		const MISSION_TOOL_NAMES = [
+			"submit_plan",
+			"spawn_worker",
+			"update_mission_state",
+			"complete_mission",
+			"run_validation",
+			"commit_changes",
+			"create_fix_feature",
+			"ask_questions",
+		];
+
+		it("disables mission tools on session_start when no active mission", async () => {
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).not.toContain(name);
+			}
+		});
+
+		it("enables mission tools when session_start finds filesystem state", async () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).toContain(name);
+			}
+		});
+
+		it("enables mission tools when session_start restores from cache", async () => {
+			const cachedState = makePlanningState();
+			const cacheEntry = makeCacheEntry(cachedState);
+			const ctx = buildMockCtx([cacheEntry]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).toContain(name);
+			}
+		});
+
+		it("does not enable mission tools when no state and no cache", async () => {
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).not.toContain(name);
+			}
+		});
+
+		it("does not enable mission tools when cache contains null sentinel", async () => {
+			const nullEntry = makeCacheEntry(null);
+			const ctx = buildMockCtx([nullEntry]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).not.toContain(name);
+			}
+		});
+
+		it("does not enable mission tools when filesystem state is terminal (completed)", async () => {
+			const state = _ss({ status: "completed", completedAt: nowISO() });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).not.toContain(name);
+			}
+		});
+
+		it("does not enable mission tools when filesystem state is terminal (failed)", async () => {
+			const state = _ss({ status: "failed", completedAt: nowISO() });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).not.toContain(name);
+			}
+		});
+
+		it("does not enable mission tools when filesystem state is terminal (aborted)", async () => {
+			const state = _ss({ status: "aborted", completedAt: nowISO() });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).not.toContain(name);
+			}
+		});
+
+		it("does not enable mission tools when cached state is terminal", async () => {
+			const cachedState = _ss({ status: "completed", completedAt: nowISO() });
+			const cacheEntry = makeCacheEntry(cachedState);
+			const ctx = buildMockCtx([cacheEntry]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).not.toContain(name);
+			}
+		});
+
+		it("still renders a minimal widget for terminal filesystem state", async () => {
+			const state = _ss({ status: "completed", completedAt: nowISO() });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			ctx.ui.setWidget = (_key: string, content: unknown) => setWidgetCalls.push([_key as string, content]);
+			const { handlers } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
+			expect(contentCalls.length).toBeGreaterThan(0);
+		});
+
+		it("does not inject protocol for terminal state via before_agent_start", async () => {
+			const state = _ss({ status: "completed", completedAt: nowISO() });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			const event = { type: "before_agent_start", prompt: "", systemPrompt: "base" };
+			const result = handlers.get("before_agent_start")!(event, ctx);
+			expect(result).toBeUndefined();
+		});
+
+		it("enables mission tools for non-terminal filesystem state (executing)", async () => {
+			const state = _ss({ status: "executing" });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			for (const name of MISSION_TOOL_NAMES) {
+				expect(activeTools).toContain(name);
+			}
 		});
 	});
 
@@ -435,6 +587,124 @@ describe("extension entry point (index.ts)", () => {
 		});
 	});
 
+	describe("auto-resume from pause on session_start", () => {
+		it("resumes paused planning state to planning on session_start", async () => {
+			const state: MissionState = {
+				...makePlanningState(),
+				status: "paused",
+				resumeTargetState: "planning",
+			};
+			saveState(basePath, state);
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+
+			const saved = JSON.parse(readFileSync(join(basePath, "state.json"), "utf8"));
+			expect(saved.status).toBe("planning");
+			expect(saved.resumeTargetState).toBeUndefined();
+		});
+
+		it("resumes paused draft_review state to draft_review on session_start", async () => {
+			const state: MissionState = {
+				...makePlanningState(),
+				status: "paused",
+				resumeTargetState: "draft_review",
+			};
+			saveState(basePath, state);
+			savePlan(basePath, _sp());
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+
+			const saved = JSON.parse(readFileSync(join(basePath, "state.json"), "utf8"));
+			expect(saved.status).toBe("draft_review");
+		});
+
+		it("injects recovery context when resuming paused draft_review", async () => {
+			const state: MissionState = {
+				...makePlanningState(),
+				status: "paused",
+				resumeTargetState: "draft_review",
+			};
+			saveState(basePath, state);
+			savePlan(basePath, _sp());
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+
+			const event = { type: "before_agent_start", prompt: "", systemPrompt: "base" };
+			const result = handlers.get("before_agent_start")!(event, ctx) as { systemPrompt: string } | undefined;
+
+			expect(result).toBeDefined();
+			expect(result!.systemPrompt).toContain("Recovery Context");
+			expect(result!.systemPrompt).toContain("draft_review");
+			expect(result!.systemPrompt).toContain("Do NOT start execution");
+		});
+
+		it("resumes paused executing state to executing on session_start", async () => {
+			const state: MissionState = {
+				...makeExecutingState(),
+				status: "paused",
+				resumeTargetState: "executing",
+			};
+			saveState(basePath, state);
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+
+			const saved = JSON.parse(readFileSync(join(basePath, "state.json"), "utf8"));
+			expect(saved.status).toBe("executing");
+		});
+
+		it("resumes paused state from cache restore too", async () => {
+			const state: MissionState = {
+				...makePlanningState(),
+				status: "paused",
+				resumeTargetState: "planning",
+			};
+			const cacheEntry = makeCacheEntry(state);
+			const ctx = buildMockCtx([cacheEntry]);
+
+			const { handlers } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+
+			const saved = JSON.parse(readFileSync(join(basePath, "state.json"), "utf8"));
+			expect(saved.status).toBe("planning");
+			expect(saved.resumeTargetState).toBeUndefined();
+		});
+
+		it("full round-trip: shutdown pauses, restart resumes to exact state", async () => {
+			// Start with a planning state
+			const planningState = makePlanningState();
+			saveState(basePath, planningState);
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+
+			// session_start activates mission mode
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+
+			// session_shutdown pauses it
+			handlers.get("session_shutdown")!({ type: "session_shutdown" }, ctx);
+			const afterShutdown = JSON.parse(readFileSync(join(basePath, "state.json"), "utf8"));
+			expect(afterShutdown.status).toBe("paused");
+			expect(afterShutdown.resumeTargetState).toBe("planning");
+
+			// New session — re-register extension, session_start should auto-resume
+			const { handlers: handlers2 } = registerExtension(tmpDir);
+			const ctx2 = buildMockCtx([]);
+			await handlers2.get("session_start")!({ type: "session_start", reason: "startup" }, ctx2);
+
+			const afterRestart = JSON.parse(readFileSync(join(basePath, "state.json"), "utf8"));
+			expect(afterRestart.status).toBe("planning");
+			expect(afterRestart.resumeTargetState).toBeUndefined();
+		});
+	});
+
 	describe("session_shutdown handler", () => {
 		it("registers session_shutdown event handler", () => {
 			const { handlers } = registerExtension(tmpDir);
@@ -444,7 +714,32 @@ describe("extension entry point (index.ts)", () => {
 		it("pauses an executing mission with pending work on shutdown", () => {
 			const state = makeExecutingState();
 			saveState(basePath, state);
-			savePlan(basePath, _sp({ milestones: [{ id: "m1", name: "M1", description: "d", features: [{ id: "f1", name: "F1", description: "d", acceptanceCriteria: [], relevantFiles: [], dependencies: [], estimatedComplexity: "low" as const, status: "pending" as const, attempts: [] }], status: "active" as const }] }));
+			savePlan(
+				basePath,
+				_sp({
+					milestones: [
+						{
+							id: "m1",
+							name: "M1",
+							description: "d",
+							features: [
+								{
+									id: "f1",
+									name: "F1",
+									description: "d",
+									acceptanceCriteria: [],
+									relevantFiles: [],
+									dependencies: [],
+									estimatedComplexity: "low" as const,
+									status: "pending" as const,
+									attempts: [],
+								},
+							],
+							status: "active" as const,
+						},
+					],
+				}),
+			);
 
 			const ctx = buildMockCtx([]);
 			const { handlers } = registerExtension(tmpDir);
@@ -459,7 +754,32 @@ describe("extension entry point (index.ts)", () => {
 		it("does not pause executing mission when all features are done on shutdown", () => {
 			const state = makeExecutingState();
 			saveState(basePath, state);
-			savePlan(basePath, _sp({ milestones: [{ id: "m1", name: "M1", description: "d", features: [{ id: "f1", name: "F1", description: "d", acceptanceCriteria: [], relevantFiles: [], dependencies: [], estimatedComplexity: "low" as const, status: "done" as const, attempts: [] }], status: "done" as const }] }));
+			savePlan(
+				basePath,
+				_sp({
+					milestones: [
+						{
+							id: "m1",
+							name: "M1",
+							description: "d",
+							features: [
+								{
+									id: "f1",
+									name: "F1",
+									description: "d",
+									acceptanceCriteria: [],
+									relevantFiles: [],
+									dependencies: [],
+									estimatedComplexity: "low" as const,
+									status: "done" as const,
+									attempts: [],
+								},
+							],
+							status: "done" as const,
+						},
+					],
+				}),
+			);
 
 			const ctx = buildMockCtx([]);
 			const { handlers } = registerExtension(tmpDir);
