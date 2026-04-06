@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { resolveModel, resolveValidationCommands } from "../extensions/config.js";
+import { DEFAULT_WORKER_MODEL, resolveModel, resolveValidationCommands } from "../extensions/config.js";
 import { buildOrchestratorProtocol } from "../extensions/orchestrator/protocol.js";
 import { generateReport } from "../extensions/report.js";
 import { loadConfig, loadPlan, loadState, saveConfig, savePlan, saveState } from "../extensions/state/manager.js";
@@ -466,11 +466,11 @@ describe("advanced integration: model switching and config resolution (VAL-CROSS
 		expect(model).toBe("claude-sonnet-4");
 	});
 
-	it("undefined returned when no config or plan assignment exists", () => {
+	it("returns default worker model when no config or plan assignment exists", () => {
 		const config: MissionConfig = {};
 		const plan = makePlan({ modelAssignment: {} });
 		const model = resolveModel("worker", config, plan);
-		expect(model).toBeUndefined();
+		expect(model).toBe(DEFAULT_WORKER_MODEL);
 	});
 
 	it("config.models.orchestrator applies for orchestrator role", () => {

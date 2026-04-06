@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getDefaultConfig, loadMissionConfig, resolveModel, resolveValidationCommands } from "../extensions/config.js";
+import {
+	DEFAULT_WORKER_MODEL,
+	getDefaultConfig,
+	loadMissionConfig,
+	resolveModel,
+	resolveValidationCommands,
+} from "../extensions/config.js";
 import { saveConfig } from "../extensions/state/manager.js";
 import type { Milestone, MissionConfig, MissionPlan } from "../extensions/types.js";
 import { makeMilestone as _sm, makePlan as _sp } from "./helpers/index.js";
@@ -249,15 +255,21 @@ describe("resolveModel", () => {
 		expect(resolveModel("worker", config, plan)).toBe("claude-haiku");
 	});
 
-	it("returns undefined when neither config nor plan has a model", () => {
+	it("returns default worker model when neither config nor plan has a worker model", () => {
 		const config: MissionConfig = {};
 		const plan = makePlan({ modelAssignment: {} });
-		expect(resolveModel("worker", config, plan)).toBeUndefined();
+		expect(resolveModel("worker", config, plan)).toBe(DEFAULT_WORKER_MODEL);
 	});
 
-	it("returns undefined when plan is null", () => {
+	it("returns default worker model when plan is null", () => {
 		const config: MissionConfig = {};
-		expect(resolveModel("worker", config, null)).toBeUndefined();
+		expect(resolveModel("worker", config, null)).toBe(DEFAULT_WORKER_MODEL);
+	});
+
+	it("returns undefined for non-worker roles when neither config nor plan has a model", () => {
+		const config: MissionConfig = {};
+		expect(resolveModel("orchestrator", config, null)).toBeUndefined();
+		expect(resolveModel("validator", config, null)).toBeUndefined();
 	});
 
 	it("resolves orchestrator role correctly", () => {

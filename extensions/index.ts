@@ -16,7 +16,7 @@ import { registerCommitChangesTool } from "./tools/commit-changes.js";
 import { registerCompleteMissionTool } from "./tools/complete.js";
 import { registerCreateFixTool } from "./tools/create-fix.js";
 import { registerRunValidationTool } from "./tools/run-validation.js";
-import { registerSpawnWorkerTool } from "./tools/spawn-worker.js";
+import { killActiveWorker, registerSpawnWorkerTool } from "./tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
 import type { Feature, MissionPlan, MissionState, WorkerResult } from "./types.js";
@@ -395,6 +395,7 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_shutdown", (_event, _ctx) => {
+		killActiveWorker();
 		if (!missionModeActive) return;
 		const state = loadState(basePath);
 		if (!state) return;
@@ -526,6 +527,7 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	function resetMission(): void {
+		killActiveWorker();
 		const currentState = loadState(basePath);
 		if (currentState) {
 			removeFromRegistry(currentState.missionId);

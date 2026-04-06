@@ -23,6 +23,8 @@ interface StreamLike {
 interface ProcLike {
 	stdout: StreamLike | null;
 	stderr: StreamLike | null;
+	kill?: (signal: string) => void;
+	killed?: boolean;
 	on(event: string, handler: (...args: unknown[]) => void): unknown;
 }
 
@@ -39,6 +41,17 @@ interface Deps {
 }
 
 const TERMINAL_FEATURE_STATUSES = new Set(["blocked", "skipped", "done"]);
+const DEFAULT_WORKER_TIMEOUT_MS = 600_000;
+const SIGKILL_GRACE_MS = 5000;
+
+let activeWorkerProcess: { proc: ProcLike; kill: () => void } | null = null;
+
+export function killActiveWorker(): void {
+	if (activeWorkerProcess) {
+		activeWorkerProcess.kill();
+		activeWorkerProcess = null;
+	}
+}
 
 function findFeature(plan: MissionPlan, featureId: string): Feature | null {
 	for (const milestone of plan.milestones) {
@@ -101,11 +114,37 @@ function spawnWorkerProcess(
 	command: string,
 	args: string[],
 	cwd: string,
-): Promise<{ stdout: string; stderr: string; exitCode: number | null; signal: string | null }> {
+	options?: { signal?: AbortSignal; timeoutMs?: number },
+): Promise<{
+	stdout: string;
+	stderr: string;
+	exitCode: number | null;
+	signal: string | null;
+	timedOut: boolean;
+	aborted: boolean;
+}> {
 	return new Promise((resolve) => {
 		const proc = spawnFn(command, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
 		let stdoutBuf = "";
 		let stderrBuf = "";
+		let killed = false;
+		let timedOut = false;
+		let aborted = false;
+
+		const killProc = () => {
+			if (killed) return;
+			killed = true;
+			if (proc.kill) {
+				proc.kill("SIGTERM");
+				setTimeout(() => {
+					if (!proc.killed) {
+						proc.kill?.("SIGKILL");
+					}
+				}, SIGKILL_GRACE_MS);
+			}
+		};
+
+		activeWorkerProcess = { proc, kill: killProc };
 
 		proc.stdout?.on("data", (chunk: Buffer) => {
 			stdoutBuf += chunk.toString();
@@ -115,16 +154,59 @@ function spawnWorkerProcess(
 			stderrBuf += chunk.toString();
 		});
 
-		proc.on("close", (...args: unknown[]) => {
-			const code = args[0] as number | null;
-			const sig = args[1] as string | null;
-			resolve({ stdout: stdoutBuf, stderr: stderrBuf, exitCode: code, signal: sig });
+		let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+		proc.on("close", (...closeArgs: unknown[]) => {
+			if (timeoutId) clearTimeout(timeoutId);
+			activeWorkerProcess = null;
+			const code = closeArgs[0] as number | null;
+			const sig = closeArgs[1] as string | null;
+			resolve({
+				stdout: stdoutBuf,
+				stderr: stderrBuf,
+				exitCode: killed ? null : code,
+				signal: killed ? "SIGTERM" : sig,
+				timedOut,
+				aborted,
+			});
 		});
 
 		proc.on("error", (...errArgs: unknown[]) => {
+			if (timeoutId) clearTimeout(timeoutId);
+			activeWorkerProcess = null;
 			const err = errArgs[0] as NodeJS.ErrnoException;
-			resolve({ stdout: stdoutBuf, stderr: stderrBuf, exitCode: null, signal: err.code ?? "EUNKNOWN" });
+			resolve({
+				stdout: stdoutBuf,
+				stderr: stderrBuf,
+				exitCode: null,
+				signal: err.code ?? "EUNKNOWN",
+				timedOut,
+				aborted,
+			});
 		});
+
+		if (options?.signal) {
+			if (options.signal.aborted) {
+				aborted = true;
+				killProc();
+			} else {
+				options.signal.addEventListener(
+					"abort",
+					() => {
+						aborted = true;
+						killProc();
+					},
+					{ once: true },
+				);
+			}
+		}
+
+		if (options?.timeoutMs && options.timeoutMs > 0) {
+			timeoutId = setTimeout(() => {
+				timedOut = true;
+				killProc();
+			}, options.timeoutMs);
+		}
 	});
 }
 
@@ -224,7 +306,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			featureId: Type.String({ description: "ID of the feature to implement" }),
 			additionalContext: Type.Optional(Type.String({ description: "Extra context or guidance for retry attempts" })),
 		}),
-		async execute(_toolCallId, params) {
+		async execute(_toolCallId, params, signal) {
 			const state = loadState(deps.basePath);
 			if (!state) {
 				return { content: [{ type: "text", text: "Error: no active mission state." }], details: {} };
@@ -323,11 +405,81 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const savedThinkingLevel = deps.getThinkingLevel ? deps.getThinkingLevel() : undefined;
 
+			const timeoutMs = config.workerTimeoutMs ?? DEFAULT_WORKER_TIMEOUT_MS;
 			const startTime = Date.now();
-			const procResult = await spawnWorkerProcess(spawnFn, command, commandArgs, deps.projectDir);
+			const procResult = await spawnWorkerProcess(spawnFn, command, commandArgs, deps.projectDir, {
+				signal: signal ?? undefined,
+				timeoutMs,
+			});
 
 			if (savedThinkingLevel !== undefined && deps.setThinkingLevel) {
 				deps.setThinkingLevel(savedThinkingLevel);
+			}
+
+			if (procResult.timedOut) {
+				activeState = {
+					...activeState,
+					currentFeatureId: undefined,
+					totalFeaturesFailed: activeState.totalFeaturesFailed + 1,
+					progressLog: [
+						...activeState.progressLog,
+						{
+							timestamp: nowISO(),
+							type: "worker_complete" as const,
+							detail: `Worker timed out for '${feature.name}' after ${timeoutMs}ms`,
+						},
+					],
+				};
+				const attempt: WorkerAttempt = {
+					attemptNumber,
+					startedAt: new Date(startTime).toISOString(),
+					completedAt: nowISO(),
+					resultPath: join(runtimeDir, "result.json"),
+					stdoutPath: join(runtimeDir, "stdout.log"),
+					stderrPath: join(runtimeDir, "stderr.log"),
+					durationMs: Date.now() - startTime,
+					model: workerModel,
+					status: "failure",
+				};
+				updatedPlan = updateFeatureFailure(updatedPlan, feature.id, attempt, maxRetries);
+				saveState(deps.basePath, activeState);
+				savePlan(deps.basePath, updatedPlan);
+				deps.updateWidget(activeState, updatedPlan);
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Worker timed out for feature '${feature.name}' after ${timeoutMs}ms.`,
+						},
+					],
+					details: {},
+				};
+			}
+
+			if (procResult.aborted) {
+				activeState = {
+					...activeState,
+					currentFeatureId: undefined,
+					progressLog: [
+						...activeState.progressLog,
+						{
+							timestamp: nowISO(),
+							type: "worker_complete" as const,
+							detail: `Worker aborted for '${feature.name}'`,
+						},
+					],
+				};
+				saveState(deps.basePath, activeState);
+				deps.updateWidget(activeState, updatedPlan);
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Worker aborted for feature '${feature.name}'.`,
+						},
+					],
+					details: {},
+				};
 			}
 
 			if (procResult.signal === "ENOENT") {

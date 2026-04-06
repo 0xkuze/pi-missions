@@ -145,6 +145,7 @@ export interface MissionConfig {
 		autoCommit?: boolean;
 	};
 	maxRetries?: number;
+	workerTimeoutMs?: number;
 }
 
 export interface ActiveSession {
@@ -434,6 +435,7 @@ export const MissionConfigSchema = Type.Object({
 		}),
 	),
 	maxRetries: Type.Optional(Type.Number()),
+	workerTimeoutMs: Type.Optional(Type.Number()),
 });
 
 export const WorkerResultSchema = Type.Object({

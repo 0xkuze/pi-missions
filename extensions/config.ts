@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { loadConfig } from "./state/manager.js";
 import type { Milestone, MissionConfig, MissionPlan, ModelAssignment } from "./types.js";
 
+export const DEFAULT_WORKER_MODEL = "claude-sonnet-4-20250514";
+
 const DEFAULT_CONFIG: Required<MissionConfig> = {
 	models: {},
 	validation: {
@@ -14,6 +16,7 @@ const DEFAULT_CONFIG: Required<MissionConfig> = {
 		autoCommit: true,
 	},
 	maxRetries: 3,
+	workerTimeoutMs: 600_000,
 };
 
 export function getDefaultConfig(): MissionConfig {
@@ -157,5 +160,6 @@ export function resolveModel(
 	if (plan?.modelAssignment?.[role]) {
 		return plan.modelAssignment[role];
 	}
+	if (role === "worker") return DEFAULT_WORKER_MODEL;
 	return undefined;
 }

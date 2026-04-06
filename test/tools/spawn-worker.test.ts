@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { savePlan, saveState } from "../../extensions/state/manager.js";
-import { registerSpawnWorkerTool } from "../../extensions/tools/spawn-worker.js";
+import { saveConfig, savePlan, saveState } from "../../extensions/state/manager.js";
+import { killActiveWorker, registerSpawnWorkerTool } from "../../extensions/tools/spawn-worker.js";
 import { createMockPi, makeFeature, makeMilestone, makePlan, makeState } from "../helpers/index.js";
 
 function makeMessageEndLine(role: string, text: string): string {
@@ -46,13 +46,16 @@ function makeMockSpawn(opts: MockSpawnOptions = {}) {
 			stdout: mockStdout,
 			stderr: mockStderr,
 			killed: false,
+			kill: (sig: string) => {
+				proc.killed = true;
+				for (const h of closeHandlers) h(null, sig);
+			},
 			on: (event: string, handler: (...args: unknown[]) => void) => {
 				if (event === "close") closeHandlers.push(handler as (code: number | null, signal: string | null) => void);
 				if (event === "error") errorHandlers.push(handler as (err: Error) => void);
 			},
 		};
 
-		// Use setImmediate to fire events asynchronously so the process can register handlers first
 		setImmediate(() => {
 			if (error) {
 				for (const h of errorHandlers) h(error);
@@ -72,6 +75,61 @@ function makeMockSpawn(opts: MockSpawnOptions = {}) {
 	};
 }
 
+function makeMockSpawnDelayed(delayMs: number, opts: MockSpawnOptions = {}) {
+	const { stdoutLines = [], stderr = "", exitCode = 0, signal = null, error } = opts;
+
+	return (_command: string, _args: string[], _options: object) => {
+		const stdoutHandlers: Array<(data: Buffer) => void> = [];
+		const stderrHandlers: Array<(data: Buffer) => void> = [];
+		const closeHandlers: Array<(code: number | null, signal: string | null) => void> = [];
+		const errorHandlers: Array<(err: Error) => void> = [];
+
+		const mockStdout = {
+			on: (event: string, handler: (data: Buffer) => void) => {
+				if (event === "data") stdoutHandlers.push(handler);
+			},
+		};
+
+		const mockStderr = {
+			on: (event: string, handler: (data: Buffer) => void) => {
+				if (event === "data") stderrHandlers.push(handler);
+			},
+		};
+
+		const proc = {
+			stdout: mockStdout,
+			stderr: mockStderr,
+			killed: false,
+			kill: (sig: string) => {
+				proc.killed = true;
+				for (const h of closeHandlers) h(null, sig);
+			},
+			on: (event: string, handler: (...args: unknown[]) => void) => {
+				if (event === "close") closeHandlers.push(handler as (code: number | null, signal: string | null) => void);
+				if (event === "error") errorHandlers.push(handler as (err: Error) => void);
+			},
+		};
+
+		setTimeout(() => {
+			if (proc.killed) return;
+			if (error) {
+				for (const h of errorHandlers) h(error);
+				return;
+			}
+			if (stderr) {
+				for (const h of stderrHandlers) h(Buffer.from(stderr));
+			}
+			const joinedStdout = stdoutLines.join("\n");
+			if (joinedStdout) {
+				for (const h of stdoutHandlers) h(Buffer.from(joinedStdout));
+			}
+			for (const h of closeHandlers) h(exitCode, signal);
+		}, delayMs);
+
+		return proc;
+	};
+}
+
 type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 let testDir: string;
@@ -81,8 +139,13 @@ let capturedCwd: string | null;
 let capturedSpawnOpts: Record<string, unknown> | null;
 let mockSpawnFn: ReturnType<typeof makeMockSpawn>;
 
-let executeFn: ((_id: string, params: unknown) => Promise<{ content: Array<{ type: string; text: string }> }>) | null =
-	null;
+let executeFn:
+	| ((
+			_id: string,
+			params: unknown,
+			signal?: AbortSignal,
+	  ) => Promise<{ content: Array<{ type: string; text: string }> }>)
+	| null = null;
 
 function localMakeState(overrides: Partial<Parameters<typeof makeState>[0]> = {}) {
 	return makeState({ status: "approved", ...overrides });
@@ -115,8 +178,12 @@ function localMakePlan(
 
 function makePiMock(_updateWidgetFn?: () => void) {
 	const mock = createMockPi({
-		registerTool: (opts: { name: string; execute: (...args: unknown[]) => unknown }) => {
-			executeFn = opts.execute as typeof executeFn;
+		registerTool: (opts: {
+			name: string;
+			execute: (id: string, params: unknown, signal?: AbortSignal, ...rest: unknown[]) => unknown;
+		}) => {
+			executeFn = ((id: string, params: unknown, signal?: AbortSignal) =>
+				opts.execute(id, params, signal)) as typeof executeFn;
 		},
 	});
 	return mock.pi;
@@ -367,7 +434,7 @@ describe("registerSpawnWorkerTool", () => {
 			expect(capturedArgs![modelIdx + 1]).toBe("claude-sonnet-4");
 		});
 
-		it("does not pass --model when no worker model configured", async () => {
+		it("passes default worker model when no explicit worker model configured", async () => {
 			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
 			const feature = localMakeFeature();
@@ -375,7 +442,9 @@ describe("registerSpawnWorkerTool", () => {
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
-			expect(capturedArgs).not.toContain("--model");
+			expect(capturedArgs).toContain("--model");
+			const modelIdx = capturedArgs!.indexOf("--model");
+			expect(capturedArgs![modelIdx + 1]).toBe("claude-sonnet-4-20250514");
 		});
 	});
 
@@ -843,6 +912,168 @@ describe("registerSpawnWorkerTool", () => {
 			await executeFn!("id", { featureId: "feat-1" });
 			expect(setLevelCalls[0]).toBe("xhigh");
 			expect(currentLevel).toBe("xhigh");
+		});
+	});
+
+	describe("worker timeout", () => {
+		it("worker is killed when timeout expires", async () => {
+			const delayedMock = makeMockSpawnDelayed(5000, {
+				stdoutLines: [makeMessageEndLine("assistant", "Done")],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { workerTimeoutMs: 50 });
+			registerTool(delayedMock);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("timed out");
+		});
+
+		it("timeout is configurable via config.workerTimeoutMs", async () => {
+			const delayedMock = makeMockSpawnDelayed(5000, {
+				stdoutLines: [makeMessageEndLine("assistant", "Done")],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { workerTimeoutMs: 30 });
+			registerTool(delayedMock);
+			const startTime = Date.now();
+			await executeFn!("id", { featureId: "feat-1" });
+			const elapsed = Date.now() - startTime;
+			expect(elapsed).toBeLessThan(3000);
+		});
+
+		it("default timeout is 600000ms (10 minutes)", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			await executeFn!("id", { featureId: "feat-1" });
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).not.toContain("timed out");
+		});
+	});
+
+	describe("abort signal", () => {
+		it("worker is killed when abort signal fires", async () => {
+			const delayedMock = makeMockSpawnDelayed(5000, {
+				stdoutLines: [makeMessageEndLine("assistant", "Done")],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { workerTimeoutMs: 60_000 });
+
+			const ac = new AbortController();
+			const pi = makePiMock();
+			registerSpawnWorkerTool(pi, {
+				basePath: testDir,
+				projectDir: testDir,
+				updateWidget: () => {},
+				_spawnOverride: (command, args, opts) => {
+					capturedCommand = command;
+					return delayedMock(command, args, opts);
+				},
+			});
+
+			setTimeout(() => ac.abort(), 50);
+			const result = await executeFn!("id", { featureId: "feat-1" }, ac.signal);
+			expect(result.content[0].text).toContain("aborted");
+		});
+
+		it("worker handles pre-aborted signal", async () => {
+			const delayedMock = makeMockSpawnDelayed(5000, {
+				stdoutLines: [makeMessageEndLine("assistant", "Done")],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+
+			const ac = new AbortController();
+			ac.abort();
+
+			const pi = makePiMock();
+			registerSpawnWorkerTool(pi, {
+				basePath: testDir,
+				projectDir: testDir,
+				updateWidget: () => {},
+				_spawnOverride: (command, args, opts) => {
+					capturedCommand = command;
+					return delayedMock(command, args, opts);
+				},
+			});
+
+			const result = await executeFn!("id", { featureId: "feat-1" }, ac.signal);
+			expect(result.content[0].text).toContain("aborted");
+		});
+	});
+
+	describe("default worker model", () => {
+		it("worker uses default model 'claude-sonnet-4-20250514' when no model configured", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(capturedArgs).toContain("--model");
+			const modelIdx = capturedArgs!.indexOf("--model");
+			expect(capturedArgs![modelIdx + 1]).toBe("claude-sonnet-4-20250514");
+		});
+
+		it("explicit model config overrides the default", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])], {
+				modelAssignment: { worker: "custom-model" },
+			});
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			await executeFn!("id", { featureId: "feat-1" });
+			const modelIdx = capturedArgs!.indexOf("--model");
+			expect(capturedArgs![modelIdx + 1]).toBe("custom-model");
+		});
+	});
+
+	describe("killActiveWorker", () => {
+		it("kills the active process", async () => {
+			const delayedMock = makeMockSpawnDelayed(5000, {
+				stdoutLines: [makeMessageEndLine("assistant", "Done")],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			registerTool(delayedMock);
+
+			const promise = executeFn!("id", { featureId: "feat-1" });
+			await new Promise((r) => setTimeout(r, 50));
+			killActiveWorker();
+			const result = await promise;
+			expect(result).toBeDefined();
+		});
+
+		it("does nothing when no process is active", () => {
+			expect(() => killActiveWorker()).not.toThrow();
 		});
 	});
 });
