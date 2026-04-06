@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it, mock } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -783,9 +783,11 @@ function makeDeps(tmpDir: string, overrides: Partial<MissionControlDeps> = {}): 
 	};
 }
 
-function makeTUI(rows = 50) {
+function makeTUI(overridesOrRows?: number | { rows?: number; requestRender?: () => void }) {
+	const rows = typeof overridesOrRows === "number" ? overridesOrRows : overridesOrRows?.rows ?? 50;
+	const requestRender = typeof overridesOrRows === "object" ? overridesOrRows?.requestRender ?? (() => {}) : () => {};
 	return {
-		requestRender: () => {},
+		requestRender,
 		terminal: { rows, columns: 120, write: () => {} },
 	} as unknown as import("@mariozechner/pi-tui").TUI;
 }
@@ -1382,54 +1384,81 @@ describe("MissionControlComponent status bar centering", () => {
 	});
 });
 
-describe("MissionControlComponent parseMouseScroll", () => {
-	it("returns -3 for scroll up (button 64)", () => {
-		const tmpDir = join(tmpdir(), `mc-mouse-up-${Date.now()}`);
+describe("MissionControlComponent mouse scroll", () => {
+	function makeScrollableComponent() {
+		const tmpDir = join(tmpdir(), `mc-mouse-scroll-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(tmpDir, { recursive: true });
+		const features = Array.from({ length: 20 }, (_, i) => makeFeature(`f${i}`, i === 0 ? "active" : "pending", `feature-${i}`));
+		const milestone = makeMilestone("m1", features, "active");
+		const plan = makePlan([milestone]);
+		const events = Array.from({ length: 20 }, (_, i) =>
+			makeEvent("feature_start", `started feature-${i}`, (i + 1) * 60_000),
+		);
+		const state = makeState("executing", {
+			currentMilestoneId: "m1",
+			currentFeatureId: "f0",
+			progressLog: events,
+		});
+		const deps = makeDeps(tmpDir, { state, plan });
+		const renderFn = mock(() => {});
+		const tui = makeTUI({ requestRender: renderFn });
+		const component = new MissionControlComponent(tui, () => {}, deps);
+		component.render(120);
+		return { component, renderFn, tmpDir };
+	}
+
+	it("mouse scroll up on right-bottom pane triggers render", () => {
+		const { component, renderFn, tmpDir } = makeScrollableComponent();
 		try {
-			const deps = makeDeps(tmpDir);
-			const tui = makeTUI();
-			const component = new MissionControlComponent(tui, () => {}, deps);
-			expect(component.parseMouseScroll("\x1b[<64;1;1M")).toBe(-3);
+			component.handleInput("\x1b[<65;80;20M");
+			expect(renderFn).toHaveBeenCalled();
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
 	});
 
-	it("returns 3 for scroll down (button 65)", () => {
-		const tmpDir = join(tmpdir(), `mc-mouse-down-${Date.now()}`);
-		mkdirSync(tmpDir, { recursive: true });
+	it("mouse scroll down on right-bottom pane triggers render", () => {
+		const { component, renderFn, tmpDir } = makeScrollableComponent();
 		try {
-			const deps = makeDeps(tmpDir);
-			const tui = makeTUI();
-			const component = new MissionControlComponent(tui, () => {}, deps);
-			expect(component.parseMouseScroll("\x1b[<65;1;1M")).toBe(3);
+			component.handleInput("\x1b[<64;80;20M");
+			expect(renderFn).toHaveBeenCalled();
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
 	});
 
-	it("returns 0 for mouse click (button 0)", () => {
-		const tmpDir = join(tmpdir(), `mc-mouse-click-${Date.now()}`);
-		mkdirSync(tmpDir, { recursive: true });
+	it("mouse click does not trigger scroll render", () => {
+		const { component, renderFn, tmpDir } = makeScrollableComponent();
 		try {
-			const deps = makeDeps(tmpDir);
-			const tui = makeTUI();
-			const component = new MissionControlComponent(tui, () => {}, deps);
-			expect(component.parseMouseScroll("\x1b[<0;1;1M")).toBe(0);
+			renderFn.mockClear();
+			component.handleInput("\x1b[<0;80;20M");
+			expect(renderFn).not.toHaveBeenCalled();
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}
 	});
 
-	it("returns 0 for non-mouse input", () => {
-		const tmpDir = join(tmpdir(), `mc-mouse-nomouse-${Date.now()}`);
-		mkdirSync(tmpDir, { recursive: true });
+	it("non-mouse input does not trigger mouse scroll", () => {
+		const { component, renderFn, tmpDir } = makeScrollableComponent();
 		try {
-			const deps = makeDeps(tmpDir);
-			const tui = makeTUI();
-			const component = new MissionControlComponent(tui, () => {}, deps);
-			expect(component.parseMouseScroll("A")).toBe(0);
+			renderFn.mockClear();
+			component.handleInput("A");
+			expect(renderFn).not.toHaveBeenCalled();
+		} finally {
+			rmSync(tmpDir, { recursive: true, force: true });
+		}
+	});
+
+	it("mouse scroll routes to correct pane based on position", () => {
+		const { component, renderFn, tmpDir } = makeScrollableComponent();
+		try {
+			renderFn.mockClear();
+			component.handleInput("\x1b[<65;80;6M");
+			expect(renderFn).toHaveBeenCalled();
+
+			renderFn.mockClear();
+			component.handleInput("\x1b[<64;80;25M");
+			expect(renderFn).toHaveBeenCalled();
 		} finally {
 			rmSync(tmpDir, { recursive: true, force: true });
 		}

@@ -535,6 +535,9 @@ export class MissionControlComponent implements Component, Focusable {
 	private cachedLines: string[] = [];
 	private version = 0;
 	private cachedVersion = -1;
+	private layoutLeftWidth = 0;
+	private layoutRightTopSplitRow = 0;
+	private layoutContentStartRow = 0;
 
 	constructor(
 		private tui: TUI,
@@ -609,6 +612,12 @@ export class MissionControlComponent implements Component, Focusable {
 			return;
 		}
 
+		if (this.handleMouseScroll(data)) {
+			this.version++;
+			this.tui.requestRender();
+			return;
+		}
+
 		if (this.handleScroll(data)) {
 			this.version++;
 			this.tui.requestRender();
@@ -618,13 +627,33 @@ export class MissionControlComponent implements Component, Focusable {
 		this.dispatchAction(action);
 	}
 
-	parseMouseScroll(data: string): number {
-		const match = data.match(/^\x1b\[<(\d+);\d+;\d+[Mm]$/);
-		if (!match) return 0;
-		const button = parseInt(match[1]!, 10);
-		if (button === 64) return -3;
-		if (button === 65) return 3;
-		return 0;
+	private parseMouseEvent(data: string): { button: number; x: number; y: number } | null {
+		const match = data.match(/^\x1b\[<(\d+);(\d+);(\d+)[Mm]$/);
+		if (!match) return null;
+		return {
+			button: Number.parseInt(match[1]!, 10),
+			x: Number.parseInt(match[2]!, 10),
+			y: Number.parseInt(match[3]!, 10),
+		};
+	}
+
+	private paneFromMousePosition(x: number, y: number): "left" | "right-top" | "right-bottom" | null {
+		if (y < this.layoutContentStartRow || y < 1) return null;
+		if (x <= this.layoutLeftWidth) return "left";
+		if (y < this.layoutRightTopSplitRow) return "right-top";
+		return "right-bottom";
+	}
+
+	private handleMouseScroll(data: string): boolean {
+		const event = this.parseMouseEvent(data);
+		if (!event) return false;
+		if (event.button !== 64 && event.button !== 65) return false;
+		const delta = event.button === 64 ? -3 : 3;
+		const pane = this.paneFromMousePosition(event.x, event.y);
+		if (!pane) return false;
+		this.activePane = pane;
+		this.applyScrollToActivePane(delta);
+		return true;
 	}
 
 	private applyScrollToActivePane(delta: number): void {
@@ -1312,6 +1341,11 @@ export class MissionControlComponent implements Component, Focusable {
 		return lines;
 	}
 
+	private activePanelStyle(): FrameStyle | undefined {
+		if (!this.style) return undefined;
+		return { ...this.style, borderFn: this.style.accentFn };
+	}
+
 	private renderMainOverlay(state: MissionState, plan: MissionPlan | null, width: number): string[] {
 		const termRows = this.tui.terminal.rows;
 		const FOOTER_LINES = 3;
@@ -1328,13 +1362,14 @@ export class MissionControlComponent implements Component, Focusable {
 
 		const leftContentWidth = leftWidth - 4;
 		const leftContent = plan ? this.buildFeaturePanelLines(state, plan, leftContentWidth) : ["No Active Feature"];
+		const leftStyle = this.activePane === "left" ? this.activePanelStyle() : this.style;
 		const leftPanel = panel(
 			"Current Feature",
 			leftContent,
 			leftWidth,
 			availablePanelRows,
 			this.leftScrollOffset,
-			this.style,
+			leftStyle,
 		);
 
 		const rightTopHeight = Math.floor(availablePanelRows * 0.45);
@@ -1343,6 +1378,7 @@ export class MissionControlComponent implements Component, Focusable {
 		const rightContentWidth = rightWidth - 4;
 		const { done, total } = countFeatureStats(plan);
 		const featuresContent = plan ? this.buildOutlineLines(plan, rightContentWidth) : ["(no plan loaded)"];
+		const rightTopStyle = this.activePane === "right-top" ? this.activePanelStyle() : this.style;
 		const featuresPanel = panelWithCount(
 			"Features",
 			`${done}/${total}`,
@@ -1350,11 +1386,12 @@ export class MissionControlComponent implements Component, Focusable {
 			rightWidth,
 			rightTopHeight,
 			this.rightTopScrollOffset,
-			this.style,
+			rightTopStyle,
 		);
 
 		const logContent = this.buildLogLines(state, rightContentWidth);
 		const logCount = `${state.progressLog.length}`;
+		const rightBottomStyle = this.activePane === "right-bottom" ? this.activePanelStyle() : this.style;
 		const logPanel = panelWithCount(
 			"Progress Log",
 			logCount,
@@ -1362,7 +1399,7 @@ export class MissionControlComponent implements Component, Focusable {
 			rightWidth,
 			rightBottomHeight,
 			this.rightBottomScrollOffset,
-			this.style,
+			rightBottomStyle,
 		);
 
 		const rightLines = [...featuresPanel, ...logPanel];
@@ -1370,6 +1407,11 @@ export class MissionControlComponent implements Component, Focusable {
 
 		const output: string[] = [];
 		const bgFn = this.style?.bgFn;
+
+		const CONTENT_START_ROW = 4;
+		this.layoutLeftWidth = leftWidth;
+		this.layoutContentStartRow = CONTENT_START_ROW;
+		this.layoutRightTopSplitRow = CONTENT_START_ROW + rightTopHeight;
 
 		const titleLine = titleBar("Mission Control", width, this.style);
 		output.push(bgFn ? applyBg(titleLine, width, bgFn) : titleLine);
@@ -1384,8 +1426,11 @@ export class MissionControlComponent implements Component, Focusable {
 			output.push(`${leftPadded}${leftPad > 0 ? " ".repeat(leftPad) : ""}${truncateToWidth(right, rightWidth)}`);
 		}
 
-		const shortcuts = this.viewingMissionDetail ? "Esc: Back to list" : "P: Pause  R: Redirect  X: Reset  Esc: Close";
-		for (const line of footerBar(shortcuts, width, this.style)) {
+		const tabHint = "Tab: Switch pane";
+		const baseShortcuts = this.viewingMissionDetail
+			? "Esc: Back to list"
+			: `P: Pause  R: Redirect  X: Reset  ${tabHint}  Esc: Close`;
+		for (const line of footerBar(baseShortcuts, width, this.style)) {
 			output.push(line);
 		}
 
