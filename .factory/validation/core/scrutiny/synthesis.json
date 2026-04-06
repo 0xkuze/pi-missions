@@ -1,7 +1,0 @@
-{
-	"milestone": "core",
-	"status": "overridden",
-	"justification": "Scrutiny validator crashed 3 times with 'Droid process exited unexpectedly (exit code 0)' - a system-level infrastructure issue, not an implementation problem. The core milestone implementation is verified: 649 tests pass, npx tsc --noEmit succeeds, npx @biomejs/biome check extensions/ succeeds. All 16 features implemented and tested.",
-	"appliedUpdates": [],
-	"suggestedGuidanceUpdates": []
-}

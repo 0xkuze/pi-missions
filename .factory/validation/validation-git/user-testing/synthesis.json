@@ -1,5 +1,0 @@
-{
-	"milestone": "validation-git",
-	"status": "overridden",
-	"justification": "User testing validator crashes with same system-level issue. Assertions verified via comprehensive tests."
-}

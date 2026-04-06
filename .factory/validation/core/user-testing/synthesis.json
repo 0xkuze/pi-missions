@@ -1,5 +1,0 @@
-{
-	"milestone": "core",
-	"status": "overridden",
-	"justification": "User testing validator crashed before starting due to same system-level issue as scrutiny validator. Core milestone assertions are verified through comprehensive unit and integration tests (649 tests covering all VAL-* assertion IDs assigned to core milestone features). Assertions remain as 'pending' in validation-state.json and will be tested in future milestones."
-}
