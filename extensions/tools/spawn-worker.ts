@@ -15,6 +15,7 @@ import { loadConfig, loadPlan, loadState, savePlan, saveState } from "../state/m
 import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionPlan, MissionState, WorkerAttempt, WorkerResult } from "../types.js";
 import { nowISO } from "../utils.js";
+import { removePidFile, writePidFile } from "../worker-pid.js";
 import { synthesizeWorkerResult } from "./result-synthesis.js";
 
 interface StreamLike {
@@ -26,6 +27,7 @@ interface ProcLike {
 	stderr: StreamLike | null;
 	kill?: (signal: string) => void;
 	killed?: boolean;
+	pid?: number;
 	on(event: string, handler: (...args: unknown[]) => void): unknown;
 }
 
@@ -126,7 +128,7 @@ function spawnWorkerProcess(
 	command: string,
 	args: string[],
 	cwd: string,
-	options?: { signal?: AbortSignal; timeoutMs?: number; onChunk?: (stdout: string) => void },
+	options?: { signal?: AbortSignal; timeoutMs?: number; onChunk?: (stdout: string) => void; runtimeDir?: string },
 ): Promise<{
 	stdout: string;
 	stderr: string;
@@ -137,6 +139,10 @@ function spawnWorkerProcess(
 }> {
 	return new Promise((resolve) => {
 		const proc = spawnFn(command, args, { cwd, stdio: ["ignore", "pipe", "pipe"] });
+
+		if (options?.runtimeDir && typeof proc.pid === "number") {
+			writePidFile(options.runtimeDir, proc.pid);
+		}
 		let stdoutBuf = "";
 		let stderrBuf = "";
 		let killed = false;
@@ -177,6 +183,7 @@ function spawnWorkerProcess(
 
 		proc.on("close", (...closeArgs: unknown[]) => {
 			if (timeoutId) clearTimeout(timeoutId);
+			if (options?.runtimeDir) removePidFile(options.runtimeDir);
 			activeWorkerProcess = null;
 			const code = closeArgs[0] as number | null;
 			const sig = closeArgs[1] as string | null;
@@ -192,6 +199,7 @@ function spawnWorkerProcess(
 
 		proc.on("error", (...errArgs: unknown[]) => {
 			if (timeoutId) clearTimeout(timeoutId);
+			if (options?.runtimeDir) removePidFile(options.runtimeDir);
 			activeWorkerProcess = null;
 			const err = errArgs[0] as NodeJS.ErrnoException;
 			resolve({
@@ -482,6 +490,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				signal: signal ?? undefined,
 				timeoutMs,
 				onChunk,
+				runtimeDir,
 			});
 
 			clearInterval(widgetInterval);

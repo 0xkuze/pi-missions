@@ -4,9 +4,9 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set(["completed", "failed", "
 
 let protocolCache: { key: string; value: string | null } | null = null;
 
-function protocolCacheKey(state: MissionState, plan?: MissionPlan, config?: MissionConfig): string {
+function protocolCacheKey(state: MissionState, plan?: MissionPlan, config?: MissionConfig, compact?: boolean): string {
 	const autonomy = config?.autonomy ?? "medium";
-	return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${plan?.planVersion ?? 0}|${autonomy}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}`;
+	return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${plan?.planVersion ?? 0}|${autonomy}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}|${compact ? "c" : ""}`;
 }
 
 export function clearProtocolCache(): void {
@@ -129,15 +129,26 @@ function pausedProtocol(): string {
 The mission has been paused by the user. Stop all work and wait for the user to resume.`;
 }
 
+export function buildCompactMissionSummary(state: MissionState, plan?: MissionPlan): string {
+	const allFeatures = plan?.milestones.flatMap((m) => m.features) ?? [];
+	const total = allFeatures.length;
+	const done = state.totalFeaturesCompleted + state.totalFeaturesSkipped;
+	const failed = state.totalFeaturesFailed;
+	const currentFeature = allFeatures.find((f) => f.id === state.currentFeatureId)?.name ?? "none";
+	const currentMilestone = plan?.milestones.find((m) => m.id === state.currentMilestoneId)?.name ?? "none";
+	return `MISSION STATE: ${state.status}, Progress: ${done}/${total} features done (${failed} failed), Current: ${currentFeature} in milestone ${currentMilestone}. Continue executing the mission plan.`;
+}
+
 export function buildOrchestratorProtocol(
 	state: MissionState | null,
 	plan?: MissionPlan,
 	config?: MissionConfig,
+	compact?: boolean,
 ): string | null {
 	if (!state) return null;
 	if (TERMINAL_STATUSES.has(state.status)) return null;
 
-	const key = protocolCacheKey(state, plan, config);
+	const key = protocolCacheKey(state, plan, config, compact);
 	if (protocolCache && protocolCache.key === key) {
 		return protocolCache.value;
 	}
@@ -145,28 +156,32 @@ export function buildOrchestratorProtocol(
 	const autonomy = config?.autonomy ?? "medium";
 	let result: string | null;
 
-	switch (state.status) {
-		case "planning":
-			result = planningProtocol(autonomy);
-			break;
-		case "draft_review":
-			result = draftReviewProtocol();
-			break;
-		case "approved":
-			result = approvedProtocol(plan);
-			break;
-		case "executing":
-			result = executingProtocol(state, plan, autonomy);
-			break;
-		case "validating":
-			result = validatingProtocol();
-			break;
-		case "paused":
-			result = pausedProtocol();
-			break;
-		default:
-			result = null;
-			break;
+	if (compact && state.status === "executing") {
+		result = buildCompactMissionSummary(state, plan);
+	} else {
+		switch (state.status) {
+			case "planning":
+				result = planningProtocol(autonomy);
+				break;
+			case "draft_review":
+				result = draftReviewProtocol();
+				break;
+			case "approved":
+				result = approvedProtocol(plan);
+				break;
+			case "executing":
+				result = executingProtocol(state, plan, autonomy);
+				break;
+			case "validating":
+				result = validatingProtocol();
+				break;
+			case "paused":
+				result = pausedProtocol();
+				break;
+			default:
+				result = null;
+				break;
+		}
 	}
 
 	protocolCache = { key, value: result };

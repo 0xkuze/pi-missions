@@ -195,6 +195,16 @@ describe("extension entry point (index.ts)", () => {
 			expect(handlers.has("before_agent_start")).toBe(true);
 			expect(handlers.has("session_compact")).toBe(true);
 		});
+
+		it("registers context event handler (Point 20)", () => {
+			const { handlers } = registerExtension(tmpDir);
+			expect(handlers.has("context")).toBe(true);
+		});
+
+		it("registers session_before_compact event handler (Point 25)", () => {
+			const { handlers } = registerExtension(tmpDir);
+			expect(handlers.has("session_before_compact")).toBe(true);
+		});
 	});
 
 	describe("session_start handler u2014 VAL-STATE-011", () => {
@@ -690,6 +700,116 @@ describe("extension entry point (index.ts)", () => {
 			await handler({ type: "session_start", reason: "startup" }, ctx);
 
 			expect(confirmCalls.length).toBe(0);
+		});
+	});
+
+	describe("context event handler (Point 20)", () => {
+		it("does not crash when mission mode is inactive", () => {
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("context")!;
+			expect(() => handler({ type: "context", messages: [] }, ctx)).not.toThrow();
+		});
+
+		it("does not crash when getContextUsage returns undefined", () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			ctx.getContextUsage = () => undefined;
+
+			const { handlers } = registerExtension(tmpDir);
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
+			const handler = handlers.get("context")!;
+			expect(() => handler({ type: "context", messages: [] }, ctx)).not.toThrow();
+		});
+
+		it("tracks context usage for before_agent_start compact mode", () => {
+			const state = makePlanningState();
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			ctx.getContextUsage = () => ({ tokens: 70000, contextWindow: 100000, percent: 75 });
+
+			const { handlers } = registerExtension(tmpDir);
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
+			const contextHandler = handlers.get("context")!;
+			contextHandler({ type: "context", messages: [] }, ctx);
+
+			const event = { type: "before_agent_start", prompt: "", systemPrompt: "base" };
+			const result = handlers.get("before_agent_start")!(event, ctx) as { systemPrompt: string } | undefined;
+			expect(result).toBeDefined();
+			expect(result!.systemPrompt.length).toBeGreaterThan(0);
+		});
+	});
+
+	describe("session_before_compact handler (Point 25)", () => {
+		it("does not crash when mission mode is inactive", () => {
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			const handler = handlers.get("session_before_compact")!;
+			const event = {
+				type: "session_before_compact",
+				preparation: {},
+				branchEntries: [],
+				signal: new AbortController().signal,
+			};
+			expect(() => handler(event, ctx)).not.toThrow();
+		});
+
+		it("injects mission summary into customInstructions when state exists", () => {
+			const state = makeExecutingState();
+			saveState(basePath, state);
+			savePlan(basePath, _sp());
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
+
+			const event = {
+				type: "session_before_compact",
+				preparation: {},
+				branchEntries: [],
+				signal: new AbortController().signal,
+				customInstructions: undefined as string | undefined,
+			};
+			handlers.get("session_before_compact")!(event, ctx);
+			expect(event.customInstructions).toBeDefined();
+			expect(event.customInstructions!).toContain("executing");
+		});
+
+		it("appends to existing customInstructions", () => {
+			const state = makeExecutingState();
+			saveState(basePath, state);
+			savePlan(basePath, _sp());
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
+
+			const event = {
+				type: "session_before_compact",
+				preparation: {},
+				branchEntries: [],
+				signal: new AbortController().signal,
+				customInstructions: "Existing instructions",
+			};
+			handlers.get("session_before_compact")!(event, ctx);
+			expect(event.customInstructions).toContain("Existing instructions");
+			expect(event.customInstructions).toContain("executing");
+		});
+
+		it("does nothing when no state exists", () => {
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+
+			const event = {
+				type: "session_before_compact",
+				preparation: {},
+				branchEntries: [],
+				signal: new AbortController().signal,
+				customInstructions: undefined as string | undefined,
+			};
+			handlers.get("session_before_compact")!(event, ctx);
+			expect(event.customInstructions).toBeUndefined();
 		});
 	});
 });

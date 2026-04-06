@@ -6,7 +6,7 @@ import { Container, Text } from "@mariozechner/pi-tui";
 import { registerCommands } from "./commands.js";
 import { captureGitSnapshot, isGitAvailable } from "./git.js";
 import { handleMissionInput } from "./input-handler.js";
-import { buildOrchestratorProtocol, clearProtocolCache } from "./orchestrator/protocol.js";
+import { buildCompactMissionSummary, buildOrchestratorProtocol, clearProtocolCache } from "./orchestrator/protocol.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
 import { invalidateCaches, loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
 import { appendMutation, clearHistory } from "./state/plan-history.js";
@@ -27,6 +27,7 @@ import { QuestionsOverlayComponent } from "./ui/questions-overlay.js";
 import type { ThemeStyler } from "./ui/widget.js";
 import { buildWidgetLines } from "./ui/widget.js";
 import { generateId, nowISO } from "./utils.js";
+import { checkOrphanedWorker, killOrphanedWorker } from "./worker-pid.js";
 
 const SESSION_CACHE_KEY = "mission-state-cache";
 const TERMINAL_STATUSES = new Set(["completed", "failed", "aborted"]);
@@ -291,6 +292,8 @@ export default function (pi: ExtensionAPI): void {
 	// Auto-activates if filesystem state exists on session start.
 	let missionModeActive = false;
 
+	let lastContextPercent: number | null = null;
+
 	let lastWidgetKey = "";
 
 	function widgetCacheKey(state: MissionState, plan?: MissionPlan): string {
@@ -341,6 +344,7 @@ export default function (pi: ExtensionAPI): void {
 			missionModeActive = true;
 			// Capture git snapshot if not yet present and git is available.
 			const stateWithSnapshot = captureSnapshotIfNeeded(fsState, projectDir);
+			cleanupOrphanedWorker(stateWithSnapshot, basePath);
 			// Filesystem is authoritative — run crash recovery then render.
 			const {
 				state: recoveredState,
@@ -394,7 +398,8 @@ export default function (pi: ExtensionAPI): void {
 
 		const plan = loadPlan(basePath);
 		const config = loadConfig(basePath);
-		const protocol = buildOrchestratorProtocol(state, plan ?? undefined, config);
+		const isHighUsage = lastContextPercent !== null && lastContextPercent > 70;
+		const protocol = buildOrchestratorProtocol(state, plan ?? undefined, config, isHighUsage);
 
 		if (!protocol) return undefined;
 
@@ -425,6 +430,26 @@ export default function (pi: ExtensionAPI): void {
 		const state = loadState(basePath);
 		if (state !== null) {
 			pi.appendEntry(SESSION_CACHE_KEY, state);
+		}
+	});
+
+	pi.on("context", (_event, ctx) => {
+		if (!missionModeActive) return;
+		const usage = ctx.getContextUsage();
+		lastContextPercent = usage?.percent ?? null;
+	});
+
+	pi.on("session_before_compact", (event, _ctx) => {
+		if (!missionModeActive) return;
+		const state = loadState(basePath);
+		if (!state) return;
+		const plan = loadPlan(basePath);
+		const summary = buildCompactMissionSummary(state, plan ?? undefined);
+		const mutableEvent = event as { customInstructions?: string };
+		if (mutableEvent.customInstructions) {
+			mutableEvent.customInstructions += `\n\n${summary}`;
+		} else {
+			mutableEvent.customInstructions = summary;
 		}
 	});
 
@@ -697,6 +722,19 @@ export default function (pi: ExtensionAPI): void {
 			}
 		},
 	});
+}
+
+function cleanupOrphanedWorker(state: MissionState, basePath: string): void {
+	if (state.status !== "executing" || !state.currentFeatureId) return;
+	const plan = loadPlan(basePath);
+	if (!plan) return;
+	const feature = findFeatureInPlan(plan, state.currentFeatureId);
+	if (!feature) return;
+	const attemptNumber = feature.attempts.length + 1;
+	const workerStatus = checkOrphanedWorker(basePath, state.currentFeatureId, attemptNumber);
+	if (workerStatus === "alive") {
+		killOrphanedWorker(basePath, state.currentFeatureId, attemptNumber);
+	}
 }
 
 function captureSnapshotIfNeeded(state: MissionState, projectDir: string): MissionState {
