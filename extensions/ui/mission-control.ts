@@ -528,6 +528,8 @@ export class MissionControlComponent implements Component, Focusable {
 	private cachedLines: string[] = [];
 	private version = 0;
 	private cachedVersion = -1;
+	private cachedSortedLog: ProgressEvent[] = [];
+	private cachedLogLength = -1;
 	private layoutLeftWidth = 0;
 	private layoutRightTopSplitRow = 0;
 	private layoutContentStartRow = 0;
@@ -1312,9 +1314,13 @@ export class MissionControlComponent implements Component, Focusable {
 			return [mf("(no events yet)")];
 		}
 
-		const events = [...state.progressLog].sort(
-			(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-		);
+		if (state.progressLog.length !== this.cachedLogLength) {
+			this.cachedSortedLog = [...state.progressLog].sort(
+				(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+			);
+			this.cachedLogLength = state.progressLog.length;
+		}
+		const events = this.cachedSortedLog;
 
 		const lines: string[] = [];
 		for (const event of events) {

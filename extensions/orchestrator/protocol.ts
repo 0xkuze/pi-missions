@@ -2,6 +2,17 @@ import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
 
 const TERMINAL_STATUSES: ReadonlySet<string> = new Set(["completed", "failed", "aborted", "idle"]);
 
+let protocolCache: { key: string; value: string | null } | null = null;
+
+function protocolCacheKey(state: MissionState, plan?: MissionPlan, config?: MissionConfig): string {
+	const autonomy = config?.autonomy ?? "medium";
+	return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${plan?.planVersion ?? 0}|${autonomy}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}`;
+}
+
+export function clearProtocolCache(): void {
+	protocolCache = null;
+}
+
 function autonomyInstructions(autonomy: MissionConfig["autonomy"]): string {
 	switch (autonomy) {
 		case "low":
@@ -126,22 +137,38 @@ export function buildOrchestratorProtocol(
 	if (!state) return null;
 	if (TERMINAL_STATUSES.has(state.status)) return null;
 
+	const key = protocolCacheKey(state, plan, config);
+	if (protocolCache && protocolCache.key === key) {
+		return protocolCache.value;
+	}
+
 	const autonomy = config?.autonomy ?? "medium";
+	let result: string | null;
 
 	switch (state.status) {
 		case "planning":
-			return planningProtocol(autonomy);
+			result = planningProtocol(autonomy);
+			break;
 		case "draft_review":
-			return draftReviewProtocol();
+			result = draftReviewProtocol();
+			break;
 		case "approved":
-			return approvedProtocol(plan);
+			result = approvedProtocol(plan);
+			break;
 		case "executing":
-			return executingProtocol(state, plan, autonomy);
+			result = executingProtocol(state, plan, autonomy);
+			break;
 		case "validating":
-			return validatingProtocol();
+			result = validatingProtocol();
+			break;
 		case "paused":
-			return pausedProtocol();
+			result = pausedProtocol();
+			break;
 		default:
-			return null;
+			result = null;
+			break;
 	}
+
+	protocolCache = { key, value: result };
+	return result;
 }

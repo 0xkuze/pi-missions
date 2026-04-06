@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { buildOrchestratorProtocol } from "../../extensions/orchestrator/protocol.js";
+import { afterEach, describe, expect, it } from "bun:test";
+import { buildOrchestratorProtocol, clearProtocolCache } from "../../extensions/orchestrator/protocol.js";
 import type { MissionConfig, MissionState } from "../../extensions/types.js";
 import { makeFeature, makeMilestone, makePlan, makeState } from "../helpers/index.js";
 
@@ -59,6 +59,10 @@ function makeProtocolPlan(overrides: Parameters<typeof makePlan>[0] = {}) {
 }
 
 describe("buildOrchestratorProtocol", () => {
+	afterEach(() => {
+		clearProtocolCache();
+	});
+
 	describe("null and terminal states return null", () => {
 		it("returns null when state is null", () => {
 			expect(buildOrchestratorProtocol(null)).toBeNull();
@@ -546,6 +550,81 @@ describe("buildOrchestratorProtocol", () => {
 			const result = buildOrchestratorProtocol(state);
 			expect(result).not.toBeNull();
 			expect(typeof result).toBe("string");
+		});
+	});
+
+	describe("protocol cache", () => {
+		it("returns same string reference for same cache key inputs", () => {
+			const state = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesCompleted: 1 });
+			const plan = makeProtocolPlan();
+			const config: MissionConfig = { autonomy: "medium" };
+			const first = buildOrchestratorProtocol(state, plan, config);
+			const second = buildOrchestratorProtocol(state, plan, config);
+			expect(first).toBe(second);
+		});
+
+		it("returns different string when status changes", () => {
+			const state1 = makeState({ status: "planning" });
+			const state2 = makeState({ status: "paused" });
+			const first = buildOrchestratorProtocol(state1);
+			const second = buildOrchestratorProtocol(state2);
+			expect(first).not.toBe(second);
+		});
+
+		it("returns different string when currentFeatureId changes", () => {
+			const plan = makeProtocolPlan();
+			const state1 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f1" });
+			const state2 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2" });
+			const first = buildOrchestratorProtocol(state1, plan);
+			const second = buildOrchestratorProtocol(state2, plan);
+			expect(first).not.toBe(second);
+		});
+
+		it("clearProtocolCache forces rebuild (returns equal content)", () => {
+			const state = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesCompleted: 1 });
+			const plan = makeProtocolPlan();
+			const first = buildOrchestratorProtocol(state, plan);
+			clearProtocolCache();
+			const second = buildOrchestratorProtocol(state, plan);
+			expect(first).toEqual(second);
+		});
+
+		it("returns different string when totalFeaturesCompleted changes", () => {
+			const plan = makeProtocolPlan();
+			const state1 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesCompleted: 0 });
+			const state2 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesCompleted: 1 });
+			const first = buildOrchestratorProtocol(state1, plan);
+			clearProtocolCache();
+			const second = buildOrchestratorProtocol(state2, plan);
+			expect(first).not.toBe(second);
+		});
+
+		it("returns different string when totalFeaturesSkipped changes", () => {
+			const plan = makeProtocolPlan();
+			const state1 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesSkipped: 0 });
+			const state2 = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2", totalFeaturesSkipped: 1 });
+			const first = buildOrchestratorProtocol(state1, plan);
+			clearProtocolCache();
+			const second = buildOrchestratorProtocol(state2, plan);
+			expect(first).not.toBe(second);
+		});
+
+		it("returns different string when autonomy config changes", () => {
+			const state = makeState({ status: "executing", currentMilestoneId: "m1", currentFeatureId: "f2" });
+			const plan = makeProtocolPlan();
+			const first = buildOrchestratorProtocol(state, plan, { autonomy: "low" });
+			clearProtocolCache();
+			const second = buildOrchestratorProtocol(state, plan, { autonomy: "high" });
+			expect(first).not.toBe(second);
+		});
+
+		it("cache key includes planVersion so different versions get different entries", () => {
+			const state = makeState({ status: "approved" });
+			const plan1 = makeProtocolPlan({ planVersion: 1, description: "Plan v1" });
+			const plan2 = makeProtocolPlan({ planVersion: 2, description: "Plan v2" });
+			const first = buildOrchestratorProtocol(state, plan1);
+			const second = buildOrchestratorProtocol(state, plan2);
+			expect(first).not.toEqual(second);
 		});
 	});
 });

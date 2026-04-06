@@ -5,6 +5,22 @@ import { getDefaultConfig } from "../config.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
 import { MissionConfigSchema, MissionPlanSchema, MissionStateSchema } from "../types.js";
 
+let stateCache: { basePath: string; state: MissionState } | null = null;
+let planCache: { basePath: string; plan: MissionPlan } | null = null;
+
+export function clearStateCache(): void {
+	stateCache = null;
+}
+
+export function clearPlanCache(): void {
+	planCache = null;
+}
+
+export function invalidateCaches(basePath: string): void {
+	if (stateCache && stateCache.basePath === basePath) stateCache = null;
+	if (planCache && planCache.basePath === basePath) planCache = null;
+}
+
 function ensureDir(filePath: string): void {
 	mkdirSync(dirname(filePath), { recursive: true });
 }
@@ -30,10 +46,14 @@ function configPath(basePath: string): string {
 
 export function saveState(basePath: string, state: MissionState, cacheCallback?: (data: MissionState) => void): void {
 	atomicWrite(statePath(basePath), JSON.stringify(state, null, 2));
+	stateCache = { basePath, state };
 	cacheCallback?.(state);
 }
 
 export function loadState(basePath: string): MissionState | null {
+	if (stateCache && stateCache.basePath === basePath) {
+		return stateCache.state;
+	}
 	const file = statePath(basePath);
 	let raw: string;
 	try {
@@ -54,15 +74,20 @@ export function loadState(basePath: string): MissionState | null {
 			`state.json failed schema validation: ${first ? `${first.path} ${first.message}` : "unknown error"}`,
 		);
 	}
+	stateCache = { basePath, state: parsed };
 	return parsed;
 }
 
 export function savePlan(basePath: string, plan: MissionPlan, cacheCallback?: (data: MissionPlan) => void): void {
 	atomicWrite(planPath(basePath), JSON.stringify(plan, null, 2));
+	planCache = { basePath, plan };
 	cacheCallback?.(plan);
 }
 
 export function loadPlan(basePath: string): MissionPlan | null {
+	if (planCache && planCache.basePath === basePath) {
+		return planCache.plan;
+	}
 	const file = planPath(basePath);
 	let raw: string;
 	try {
@@ -83,6 +108,7 @@ export function loadPlan(basePath: string): MissionPlan | null {
 			`plan.json failed schema validation: ${first ? `${first.path} ${first.message}` : "unknown error"}`,
 		);
 	}
+	planCache = { basePath, plan: parsed };
 	return parsed;
 }
 

@@ -5,9 +5,9 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { Container, Text } from "@mariozechner/pi-tui";
 import { registerCommands } from "./commands.js";
 import { captureGitSnapshot, isGitAvailable } from "./git.js";
-import { buildOrchestratorProtocol } from "./orchestrator/protocol.js";
+import { buildOrchestratorProtocol, clearProtocolCache } from "./orchestrator/protocol.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
-import { loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
+import { invalidateCaches, loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
 import { appendMutation, clearHistory } from "./state/plan-history.js";
 import { loadRegistry, removeFromRegistry, updateRegistry } from "./state/registry.js";
 import { transitionState } from "./state/transitions.js";
@@ -290,7 +290,16 @@ export default function (pi: ExtensionAPI): void {
 	// Auto-activates if filesystem state exists on session start.
 	let missionModeActive = false;
 
+	let lastWidgetKey = "";
+
+	function widgetCacheKey(state: MissionState, plan?: MissionPlan): string {
+		return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}|${plan?.planVersion ?? 0}`;
+	}
+
 	function renderMissionWidget(ctx: ExtensionContext, state: MissionState, plan?: MissionPlan): void {
+		const key = widgetCacheKey(state, plan);
+		if (key === lastWidgetKey) return;
+		lastWidgetKey = key;
 		ctx.ui.setWidget("mission", (_tui, theme) => {
 			const styler: ThemeStyler = { fg: theme.fg.bind(theme), bold: theme.bold.bind(theme) };
 			const lines = buildWidgetLines(state, plan, undefined, styler);
@@ -313,6 +322,7 @@ export default function (pi: ExtensionAPI): void {
 	}
 
 	function clearWidget(): void {
+		lastWidgetKey = "";
 		if (latestCtx) {
 			latestCtx.ui.setWidget("mission", undefined);
 		}
@@ -537,6 +547,8 @@ export default function (pi: ExtensionAPI): void {
 		} catch {
 			// why: directory may not exist if mission never started; ignore
 		}
+		invalidateCaches(basePath);
+		clearProtocolCache();
 		clearWidget();
 		pi.setSessionName("");
 		pi.appendEntry(SESSION_CACHE_KEY, null);

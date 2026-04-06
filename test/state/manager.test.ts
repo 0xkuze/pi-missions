@@ -1,7 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig, loadPlan, loadState, saveConfig, savePlan, saveState } from "../../extensions/state/manager.js";
+import {
+	clearPlanCache,
+	clearStateCache,
+	invalidateCaches,
+	loadConfig,
+	loadPlan,
+	loadState,
+	saveConfig,
+	savePlan,
+	saveState,
+} from "../../extensions/state/manager.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../../extensions/types.js";
 import type { TempDir } from "../helpers/index.js";
 import { createTempDir, makeFeature, makeMilestone, makePlan, makeState } from "../helpers/index.js";
@@ -18,10 +28,14 @@ function makeTmpDir(): string {
 }
 
 beforeEach(() => {
+	clearStateCache();
+	clearPlanCache();
 	tmp = createTempDir("pi-missions-manager-");
 });
 
 afterEach(() => {
+	clearStateCache();
+	clearPlanCache();
 	tmp.cleanup();
 });
 
@@ -306,5 +320,120 @@ describe("saveConfig / loadConfig", () => {
 		saveConfig(dir, {});
 		expect(existsSync(join(dir, "config.json.tmp"))).toBe(false);
 		expect(existsSync(join(dir, "config.json"))).toBe(true);
+	});
+});
+
+describe("state cache", () => {
+	it("loadState returns cached value after saveState", () => {
+		const dir = makeTmpDir();
+		saveState(dir, minimalState);
+		rmSync(join(dir, "state.json"));
+		const loaded = loadState(dir);
+		expect(loaded).toEqual(minimalState);
+	});
+
+	it("loadState reads from disk on first call (cold cache)", () => {
+		const dir = makeTmpDir();
+		writeFileSync(join(dir, "state.json"), JSON.stringify(minimalState));
+		const loaded = loadState(dir);
+		expect(loaded).toEqual(minimalState);
+	});
+
+	it("cache is updated when saveState writes new value", () => {
+		const dir = makeTmpDir();
+		saveState(dir, minimalState);
+		const updatedState = makeState({ status: "executing" });
+		saveState(dir, updatedState);
+		rmSync(join(dir, "state.json"));
+		const loaded = loadState(dir);
+		expect(loaded).toEqual(updatedState);
+	});
+
+	it("clearStateCache forces re-read from disk", () => {
+		const dir = makeTmpDir();
+		saveState(dir, minimalState);
+		clearStateCache();
+		const loaded = loadState(dir);
+		expect(loaded).toEqual(minimalState);
+	});
+
+	it("clearStateCache causes null return when file is gone", () => {
+		const dir = makeTmpDir();
+		saveState(dir, minimalState);
+		rmSync(join(dir, "state.json"));
+		clearStateCache();
+		const loaded = loadState(dir);
+		expect(loaded).toBeNull();
+	});
+
+	it("invalidateCaches clears state cache for matching basePath", () => {
+		const dir = makeTmpDir();
+		saveState(dir, minimalState);
+		rmSync(join(dir, "state.json"));
+		invalidateCaches(dir);
+		const loaded = loadState(dir);
+		expect(loaded).toBeNull();
+	});
+
+	it("invalidateCaches does not clear cache for different basePath", () => {
+		const dir = makeTmpDir();
+		saveState(dir, minimalState);
+		rmSync(join(dir, "state.json"));
+		invalidateCaches("/some/other/path");
+		const loaded = loadState(dir);
+		expect(loaded).toEqual(minimalState);
+	});
+});
+
+describe("plan cache", () => {
+	it("loadPlan returns cached value after savePlan", () => {
+		const dir = makeTmpDir();
+		savePlan(dir, minimalPlan);
+		rmSync(join(dir, "plan.json"));
+		const loaded = loadPlan(dir);
+		expect(loaded).toEqual(minimalPlan);
+	});
+
+	it("loadPlan reads from disk on first call (cold cache)", () => {
+		const dir = makeTmpDir();
+		writeFileSync(join(dir, "plan.json"), JSON.stringify(minimalPlan));
+		const loaded = loadPlan(dir);
+		expect(loaded).toEqual(minimalPlan);
+	});
+
+	it("cache is updated when savePlan writes new value", () => {
+		const dir = makeTmpDir();
+		savePlan(dir, minimalPlan);
+		const updatedPlan = makePlan({ description: "Updated plan" });
+		savePlan(dir, updatedPlan);
+		rmSync(join(dir, "plan.json"));
+		const loaded = loadPlan(dir);
+		expect(loaded).toEqual(updatedPlan);
+	});
+
+	it("clearPlanCache forces re-read from disk", () => {
+		const dir = makeTmpDir();
+		savePlan(dir, minimalPlan);
+		clearPlanCache();
+		const loaded = loadPlan(dir);
+		expect(loaded).toEqual(minimalPlan);
+	});
+
+	it("clearPlanCache causes null return when file is gone", () => {
+		const dir = makeTmpDir();
+		savePlan(dir, minimalPlan);
+		rmSync(join(dir, "plan.json"));
+		clearPlanCache();
+		const loaded = loadPlan(dir);
+		expect(loaded).toBeNull();
+	});
+
+	it("invalidateCaches clears plan cache for matching basePath", () => {
+		const dir = makeTmpDir();
+		savePlan(dir, minimalPlan);
+		rmSync(join(dir, "plan.json"));
+		invalidateCaches(dir);
+		const loaded = loadPlan(dir);
+		expect(loaded).toBeNull();
 	});
 });
