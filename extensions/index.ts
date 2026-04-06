@@ -8,7 +8,7 @@ import { captureGitSnapshot, isGitAvailable } from "./git.js";
 import { buildOrchestratorProtocol } from "./orchestrator/protocol.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
 import { loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
-import { appendMutation } from "./state/plan-history.js";
+import { appendMutation, clearHistory } from "./state/plan-history.js";
 import { loadRegistry, removeFromRegistry, updateRegistry } from "./state/registry.js";
 import { transitionState } from "./state/transitions.js";
 import { type Question, type QuestionAnswer, registerAskQuestionsTool } from "./tools/ask-questions.js";
@@ -590,7 +590,24 @@ export default function (pi: ExtensionAPI): void {
 		onDeactivate: deactivateMissionMode,
 	});
 
+	function clearStalePlanData(): void {
+		const planFile = join(basePath, "plan.json");
+		const runtimeDir = join(basePath, "runtime");
+		try {
+			if (existsSync(planFile)) rmSync(planFile);
+		} catch {
+			// why: best-effort cleanup; file may already be gone
+		}
+		clearHistory(basePath);
+		try {
+			if (existsSync(runtimeDir)) rmSync(runtimeDir, { recursive: true, force: true });
+		} catch {
+			// why: best-effort cleanup
+		}
+	}
+
 	function startNewMission(description: string): void {
+		clearStalePlanData();
 		const now = nowISO();
 		const newState: MissionState = {
 			missionId: generateId(),

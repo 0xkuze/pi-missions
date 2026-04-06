@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { MissionPlan, PlanMutation } from "../types.js";
 import { loadPlan } from "./manager.js";
@@ -42,12 +42,19 @@ function rejectIfCompletedFeature(basePath: string, mutation: PlanMutation): voi
 	}
 }
 
-function lastPlanVersion(basePath: string): number {
+export function lastPlanVersion(basePath: string): number {
 	const history = readHistory(basePath);
 	if (history.length === 0) {
 		return 0;
 	}
 	return history[history.length - 1]!.planVersion;
+}
+
+export function clearHistory(basePath: string): void {
+	const file = historyPath(basePath);
+	if (existsSync(file)) {
+		rmSync(file);
+	}
 }
 
 export function appendMutation(basePath: string, mutation: PlanMutation): void {

@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
 import { loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
-import { appendMutation } from "../state/plan-history.js";
+import { appendMutation, lastPlanVersion } from "../state/plan-history.js";
 import { transitionState } from "../state/transitions.js";
 import type { MissionPlan, MissionState } from "../types.js";
 import { generateId, nowISO } from "../utils.js";
@@ -236,7 +236,10 @@ export function registerSubmitPlanTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const existingPlan = loadPlan(deps.basePath);
 			const isResubmission = state.status === "draft_review" && existingPlan !== null;
-			const planVersion = isResubmission ? existingPlan.planVersion + 1 : 1;
+			const historyVersion = lastPlanVersion(deps.basePath);
+			const planVersion = isResubmission
+				? Math.max(existingPlan.planVersion + 1, historyVersion + 1)
+				: historyVersion + 1;
 			const planId = isResubmission ? existingPlan.id : generateId();
 			const createdAt = isResubmission ? existingPlan.createdAt : nowISO();
 
@@ -244,14 +247,26 @@ export function registerSubmitPlanTool(pi: ExtensionAPI, deps: Deps): void {
 			savePlan(deps.basePath, plan);
 
 			const mutationKind = isResubmission ? "plan-revised" : "plan-created";
-			appendMutation(deps.basePath, {
-				planVersion,
-				timestamp: nowISO(),
-				actor: "orchestrator",
-				kind: mutationKind,
-				summary: isResubmission ? `Plan revised to version ${planVersion}` : "Plan created",
-				payload: { description: plan.description, milestoneCount: plan.milestones.length },
-			});
+			try {
+				appendMutation(deps.basePath, {
+					planVersion,
+					timestamp: nowISO(),
+					actor: "orchestrator",
+					kind: mutationKind,
+					summary: isResubmission ? `Plan revised to version ${planVersion}` : "Plan created",
+					payload: { description: plan.description, milestoneCount: plan.milestones.length },
+				});
+			} catch (err) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Error: failed to record plan mutation: ${err instanceof Error ? err.message : String(err)}`,
+						},
+					],
+					details: {},
+				};
+			}
 
 			let newState = state;
 			if (state.status === "planning") {

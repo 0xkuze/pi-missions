@@ -417,6 +417,45 @@ describe("registerSubmitPlanTool", () => {
 		});
 	});
 
+	describe("stale history handling", () => {
+		it("succeeds when plan-history.jsonl has stale entries from previous mission", async () => {
+			const { appendMutation } = await import("../../extensions/state/plan-history.js");
+			const state = makePlanningState();
+			saveState(tmpDir, state);
+
+			appendMutation(tmpDir, {
+				planVersion: 1,
+				timestamp: "2024-01-01T00:00:00.000Z",
+				actor: "orchestrator",
+				kind: "plan-created",
+				summary: "old plan",
+				payload: {},
+			});
+			appendMutation(tmpDir, {
+				planVersion: 2,
+				timestamp: "2024-01-01T00:01:00.000Z",
+				actor: "orchestrator",
+				kind: "plan-revised",
+				summary: "old revision",
+				payload: {},
+			});
+
+			const result = await callTool(tmpDir, makeMinimalPlanParams(), state);
+			expect(result.content[0].text).toContain("submitted successfully");
+
+			const plan = loadPlan(tmpDir);
+			expect(plan).not.toBeNull();
+			expect(plan!.planVersion).toBe(3);
+		});
+
+		it("returns error content instead of throwing on appendMutation failure", async () => {
+			const state = makePlanningState();
+			const result = await callTool(tmpDir, makeMinimalPlanParams(), state);
+			expect(result.content[0].text).toContain("submitted");
+			expect(result.content[0].text).not.toContain("Error");
+		});
+	});
+
 	describe("dependencies can reference features in other milestones", () => {
 		it("allows cross-milestone dependencies to valid feature IDs", async () => {
 			const state = makePlanningState();

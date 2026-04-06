@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { appendFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { savePlan } from "../../extensions/state/manager.js";
-import { appendMutation, readHistory } from "../../extensions/state/plan-history.js";
+import { appendMutation, clearHistory, lastPlanVersion, readHistory } from "../../extensions/state/plan-history.js";
 import type { Feature, PlanMutation } from "../../extensions/types.js";
 import type { TempDir } from "../helpers/index.js";
 import { createTempDir, makeFeature, makeMilestone, makePlan } from "../helpers/index.js";
@@ -187,6 +187,46 @@ describe("appendMutation", () => {
 		for (const line of lines) {
 			expect(() => JSON.parse(line)).not.toThrow();
 		}
+	});
+});
+
+describe("lastPlanVersion", () => {
+	it("returns 0 when no history exists", () => {
+		const dir = makeTmpDir();
+		expect(lastPlanVersion(dir)).toBe(0);
+	});
+
+	it("returns the last version from history", () => {
+		const dir = makeTmpDir();
+		appendMutation(dir, makeMutation(1));
+		appendMutation(dir, makeMutation(2));
+		appendMutation(dir, makeMutation(5));
+		expect(lastPlanVersion(dir)).toBe(5);
+	});
+});
+
+describe("clearHistory", () => {
+	it("removes the history file", () => {
+		const dir = makeTmpDir();
+		appendMutation(dir, makeMutation(1));
+		expect(existsSync(join(dir, "plan-history.jsonl"))).toBe(true);
+		clearHistory(dir);
+		expect(existsSync(join(dir, "plan-history.jsonl"))).toBe(false);
+	});
+
+	it("does not throw when no history file exists", () => {
+		const dir = makeTmpDir();
+		expect(() => clearHistory(dir)).not.toThrow();
+	});
+
+	it("allows appendMutation to start fresh after clearing", () => {
+		const dir = makeTmpDir();
+		appendMutation(dir, makeMutation(1));
+		appendMutation(dir, makeMutation(2));
+		clearHistory(dir);
+		expect(() => appendMutation(dir, makeMutation(1))).not.toThrow();
+		expect(readHistory(dir)).toHaveLength(1);
+		expect(readHistory(dir)[0]!.planVersion).toBe(1);
 	});
 });
 
