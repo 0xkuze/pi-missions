@@ -490,7 +490,7 @@ export interface MissionControlDeps {
 	loadState: (basePath: string) => MissionState | null;
 	loadPlan: (basePath: string) => MissionPlan | null;
 	loadConfig: (basePath: string) => MissionConfig;
-	sendUserMessage: (content: string) => void;
+	sendUserMessage: (content: string, options?: { deliverAs?: "steer" | "followUp" }) => void;
 	getInput: (title: string, placeholder?: string) => Promise<string | undefined>;
 	confirm: (title: string, message: string) => Promise<boolean>;
 	notify: (message: string, type?: "info" | "warning" | "error") => void;
@@ -780,6 +780,7 @@ export class MissionControlComponent implements Component, Focusable {
 						this.deps.updateWidget(newState, updatedPlan);
 						this.deps.sendUserMessage(
 							"I have approved the mission plan. Please begin execution by calling spawn_worker for the first feature.",
+							{ deliverAs: "followUp" },
 						);
 					}
 					this.currentSubView = null;
@@ -809,6 +810,7 @@ export class MissionControlComponent implements Component, Focusable {
 				} else if (action.kind === "retry") {
 					this.deps.sendUserMessage(
 						`Please retry the blocked feature '${subView.featureId}' with additional guidance.`,
+						{ deliverAs: "steer" },
 					);
 					this.done();
 				} else if (action.kind === "skip") {
@@ -861,7 +863,9 @@ export class MissionControlComponent implements Component, Focusable {
 				this.applySkip();
 				return;
 			case "done":
-				this.deps.sendUserMessage("Please call complete_mission to finalize the mission and generate the report.");
+				this.deps.sendUserMessage("Please call complete_mission to finalize the mission and generate the report.", {
+					deliverAs: "followUp",
+				});
 				this.done();
 				return;
 			case "redirect":
@@ -928,7 +932,7 @@ export class MissionControlComponent implements Component, Focusable {
 			this.plan = plan;
 			this.deps.updateWidget(newState, plan ?? undefined);
 			this.tui.requestRender();
-			this.deps.sendUserMessage("Mission resumed. Please continue from where you left off.");
+			this.deps.sendUserMessage("Mission resumed. Please continue from where you left off.", { deliverAs: "steer" });
 		} catch (err) {
 			this.deps.notify(`Error: ${(err as Error).message}`, "error");
 		}
@@ -979,7 +983,9 @@ export class MissionControlComponent implements Component, Focusable {
 		this.plan = updatedPlan;
 		this.deps.updateWidget(updatedState, updatedPlan);
 		this.tui.requestRender();
-		this.deps.sendUserMessage(`Feature '${featureName}' has been skipped. Please continue with the next feature.`);
+		this.deps.sendUserMessage(`Feature '${featureName}' has been skipped. Please continue with the next feature.`, {
+			deliverAs: "followUp",
+		});
 	}
 
 	private applyRedirect(): void {
@@ -1004,7 +1010,7 @@ export class MissionControlComponent implements Component, Focusable {
 				this.deps.updateWidget(updatedState, this.plan ?? undefined);
 			}
 
-			this.deps.sendUserMessage(message);
+			this.deps.sendUserMessage(message, { deliverAs: "steer" });
 			this.done();
 		});
 	}

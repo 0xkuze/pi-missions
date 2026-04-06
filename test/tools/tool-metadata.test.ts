@@ -107,3 +107,63 @@ describe("tool metadata (promptSnippet and promptGuidelines)", () => {
 		}
 	});
 });
+
+describe("tool metadata (renderCall and renderResult)", () => {
+	const mock = registerAllTools();
+
+	it("spawn_worker has renderCall defined", () => {
+		const tool = mock.getRegisteredTool("spawn_worker");
+		expect(tool).toBeDefined();
+		expect(tool!.renderCall).toBeDefined();
+		expect(typeof tool!.renderCall).toBe("function");
+	});
+
+	it("spawn_worker has renderResult defined", () => {
+		const tool = mock.getRegisteredTool("spawn_worker");
+		expect(tool).toBeDefined();
+		expect(tool!.renderResult).toBeDefined();
+		expect(typeof tool!.renderResult).toBe("function");
+	});
+
+	it("run_validation has renderCall defined", () => {
+		const tool = mock.getRegisteredTool("run_validation");
+		expect(tool).toBeDefined();
+		expect(tool!.renderCall).toBeDefined();
+		expect(typeof tool!.renderCall).toBe("function");
+	});
+
+	it("run_validation has renderResult defined", () => {
+		const tool = mock.getRegisteredTool("run_validation");
+		expect(tool).toBeDefined();
+		expect(tool!.renderResult).toBeDefined();
+		expect(typeof tool!.renderResult).toBe("function");
+	});
+
+	it("commit_changes has renderCall defined", () => {
+		const tool = mock.getRegisteredTool("commit_changes");
+		expect(tool).toBeDefined();
+		expect(tool!.renderCall).toBeDefined();
+		expect(typeof tool!.renderCall).toBe("function");
+	});
+
+	it("commit_changes has renderResult defined", () => {
+		const tool = mock.getRegisteredTool("commit_changes");
+		expect(tool).toBeDefined();
+		expect(tool!.renderResult).toBeDefined();
+		expect(typeof tool!.renderResult).toBe("function");
+	});
+
+	it("complete_mission has renderCall defined", () => {
+		const tool = mock.getRegisteredTool("complete_mission");
+		expect(tool).toBeDefined();
+		expect(tool!.renderCall).toBeDefined();
+		expect(typeof tool!.renderCall).toBe("function");
+	});
+
+	it("complete_mission has renderResult defined", () => {
+		const tool = mock.getRegisteredTool("complete_mission");
+		expect(tool).toBeDefined();
+		expect(tool!.renderResult).toBeDefined();
+		expect(typeof tool!.renderResult).toBe("function");
+	});
+});

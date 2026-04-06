@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { detectOutOfScopeChanges, getChangedFiles, isGitAvailable, stageAndCommit } from "../git.js";
 import { loadPlan, loadState, saveState } from "../state/manager.js";
@@ -72,6 +73,29 @@ export function registerCommitChangesTool(pi: ExtensionAPI, deps: Deps): void {
 			featureId: Type.String({ description: "ID of the feature whose changes to commit" }),
 			message: Type.Optional(Type.String({ description: "Override the default commit message" })),
 		}),
+		renderCall(
+			args: { featureId?: string },
+			theme: { fg: (...a: unknown[]) => string; bold: (t: string) => string },
+		) {
+			return new Text(
+				theme.fg("toolTitle", theme.bold("commit_changes ")) + theme.fg("accent", args.featureId || "..."),
+				0,
+				0,
+			);
+		},
+		renderResult(
+			result: { content?: Array<{ type: string; text: string }> },
+			_options: unknown,
+			theme: { fg: (...a: unknown[]) => string },
+		) {
+			const text = result.content?.[0];
+			const output = text?.type === "text" ? text.text : "(no output)";
+			const icon = output.includes("Committed")
+				? (theme.fg("success", "\u2713") as string)
+				: (theme.fg("warning", "\u2013") as string);
+			const firstLine = output.split("\n")[0];
+			return new Text(`${icon} ${firstLine}`, 0, 0);
+		},
 		async execute(_toolCallId, params) {
 			if (!gitAvailable(deps.projectDir)) {
 				return {

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { loadMissionConfig, resolveValidationCommands } from "../config.js";
 import { loadPlan, loadState, saveState } from "../state/manager.js";
@@ -69,6 +70,48 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 		parameters: Type.Object({
 			milestoneId: Type.String({ description: "ID of the milestone to validate" }),
 		}),
+		renderCall(
+			args: { milestoneId?: string },
+			theme: { fg: (...a: unknown[]) => string; bold: (t: string) => string },
+		) {
+			return new Text(
+				theme.fg("toolTitle", theme.bold("run_validation ")) + theme.fg("accent", args.milestoneId || "..."),
+				0,
+				0,
+			);
+		},
+		renderResult(
+			result: { content?: Array<{ type: string; text: string }> },
+			{ expanded }: { expanded: boolean },
+			theme: { fg: (...a: unknown[]) => string },
+		) {
+			const text = result.content?.[0];
+			if (text?.type !== "text") return new Text("(no output)", 0, 0);
+			try {
+				const parsed = JSON.parse(text.text) as {
+					status?: string;
+					summary?: string;
+					commands?: Array<{ exitCode?: number; label?: string }>;
+				};
+				const icon =
+					parsed.status === "pass"
+						? (theme.fg("success", "\u2713") as string)
+						: (theme.fg("error", "\u2717") as string);
+				const summary = parsed.summary || "Validation complete";
+				if (!expanded) return new Text(`${icon} ${summary}`, 0, 0);
+				const lines = [summary];
+				for (const cmd of parsed.commands || []) {
+					const cmdIcon =
+						cmd.exitCode === 0
+							? (theme.fg("success", "\u2713") as string)
+							: (theme.fg("error", "\u2717") as string);
+					lines.push(`  ${cmdIcon} ${cmd.label}: ${cmd.exitCode === 0 ? "passed" : "failed"}`);
+				}
+				return new Text(`${icon} ${lines.join("\n")}`, 0, 0);
+			} catch {
+				return new Text(text.text, 0, 0);
+			}
+		},
 		async execute(_toolCallId, params) {
 			const state = loadState(deps.basePath);
 			if (!state) {

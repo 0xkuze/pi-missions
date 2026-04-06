@@ -16,6 +16,8 @@ type RegisteredTool = {
 		onUpdate: unknown,
 		ctx: ExtensionContext,
 	) => Promise<ToolResult>;
+	renderCall?: (...args: unknown[]) => unknown;
+	renderResult?: (...args: unknown[]) => unknown;
 };
 
 type EventHandler = (event: unknown, ctx: ExtensionContext) => unknown;
@@ -29,6 +31,7 @@ interface MockPi {
 	shortcuts: Map<string, { description?: string; handler: (ctx: ExtensionContext) => Promise<void> | void }>;
 	appendedEntries: Array<{ type: string; data: unknown }>;
 	sentUserMessages: string[];
+	sentUserMessageDetails: Array<{ content: string; options?: { deliverAs?: string } }>;
 	sessionNames: string[];
 	getRegisteredTool(name: string): RegisteredTool | undefined;
 	getRegisteredTools(): RegisteredTool[];
@@ -44,6 +47,7 @@ function createMockPi(overrides: Partial<Record<keyof ExtensionAPI, unknown>> = 
 	>();
 	const appendedEntries: Array<{ type: string; data: unknown }> = [];
 	const sentUserMessages: string[] = [];
+	const sentUserMessageDetails: Array<{ content: string; options?: { deliverAs?: string } }> = [];
 	const sessionNames: string[] = [];
 
 	const pi = {
@@ -65,8 +69,9 @@ function createMockPi(overrides: Partial<Record<keyof ExtensionAPI, unknown>> = 
 		appendEntry: (type: string, data: unknown) => {
 			appendedEntries.push({ type, data });
 		},
-		sendUserMessage: (content: string) => {
+		sendUserMessage: (content: string, options?: { deliverAs?: string }) => {
 			sentUserMessages.push(content);
+			sentUserMessageDetails.push({ content, options });
 		},
 		setSessionName: (name: string) => {
 			sessionNames.push(name);
@@ -97,6 +102,7 @@ function createMockPi(overrides: Partial<Record<keyof ExtensionAPI, unknown>> = 
 		shortcuts,
 		appendedEntries,
 		sentUserMessages,
+		sentUserMessageDetails,
 		sessionNames,
 		getRegisteredTool: (name: string) => tools.get(name),
 		getRegisteredTools: () => [...tools.values()],

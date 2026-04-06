@@ -463,6 +463,7 @@ export default function (pi: ExtensionAPI): void {
 									updateWidget(newState, updatedPlan);
 									pi.sendUserMessage(
 										"I have approved the mission plan. Please begin execution by calling spawn_worker for the first feature.",
+										{ deliverAs: "followUp" },
 									);
 								}
 							},
@@ -654,7 +655,8 @@ export default function (pi: ExtensionAPI): void {
 				loadState,
 				loadPlan,
 				loadConfig,
-				sendUserMessage: (content: string) => pi.sendUserMessage(content),
+				sendUserMessage: (content: string, options?: { deliverAs?: "steer" | "followUp" }) =>
+					pi.sendUserMessage(content, options),
 				getInput: (title: string, placeholder?: string) => ctx.ui.input(title, placeholder),
 				confirm: (title: string, message: string) => ctx.ui.confirm(title, message),
 				notify: (message: string, type?: "info" | "warning" | "error") => ctx.ui.notify(message, type),

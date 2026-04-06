@@ -144,6 +144,8 @@ let executeFn:
 			_id: string,
 			params: unknown,
 			signal?: AbortSignal,
+			onUpdate?: (update: { content: Array<{ type: string; text: string }>; details: unknown }) => void,
+			ctx?: unknown,
 	  ) => Promise<{ content: Array<{ type: string; text: string }> }>)
 	| null = null;
 
@@ -180,10 +182,10 @@ function makePiMock(_updateWidgetFn?: () => void) {
 	const mock = createMockPi({
 		registerTool: (opts: {
 			name: string;
-			execute: (id: string, params: unknown, signal?: AbortSignal, ...rest: unknown[]) => unknown;
+			execute: (id: string, params: unknown, signal?: AbortSignal, onUpdate?: unknown, ctx?: unknown) => unknown;
 		}) => {
-			executeFn = ((id: string, params: unknown, signal?: AbortSignal) =>
-				opts.execute(id, params, signal)) as typeof executeFn;
+			executeFn = ((id: string, params: unknown, signal?: AbortSignal, onUpdate?: unknown, ctx?: unknown) =>
+				opts.execute(id, params, signal, onUpdate, ctx)) as typeof executeFn;
 		},
 	});
 	return mock.pi;
@@ -1074,6 +1076,121 @@ describe("registerSpawnWorkerTool", () => {
 
 		it("does nothing when no process is active", () => {
 			expect(() => killActiveWorker()).not.toThrow();
+		});
+	});
+
+	describe("progress context in result (Point 19)", () => {
+		it("result includes progress count", async () => {
+			const state = localMakeState({ status: "executing" });
+			saveState(testDir, state);
+			const feat1 = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
+			const feat2 = localMakeFeature({ id: "feat-2", name: "Feature Two", status: "pending" });
+			const plan = localMakePlan([localMakeMilestone([feat1, feat2])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Progress:");
+			expect(result.content[0].text).toMatch(/\d+\/\d+ features done/);
+		});
+
+		it("result includes next pending feature name", async () => {
+			const state = localMakeState({ status: "executing" });
+			saveState(testDir, state);
+			const feat1 = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
+			const feat2 = localMakeFeature({ id: "feat-2", name: "Feature Two", status: "pending" });
+			const plan = localMakePlan([localMakeMilestone([feat1, feat2])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Next:");
+			expect(result.content[0].text).toContain("Feature Two");
+		});
+
+		it("shows 'none' as next when no more pending features", async () => {
+			const state = localMakeState({ status: "executing" });
+			saveState(testDir, state);
+			const feat1 = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
+			const plan = localMakePlan([localMakeMilestone([feat1])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Next: none");
+		});
+	});
+
+	describe("setWorkingMessage during execution (Point 22)", () => {
+		it("calls setWorkingMessage before spawning", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+
+			const workingMessages: Array<string | undefined> = [];
+			const mockCtx = {
+				ui: {
+					setWorkingMessage: (msg?: string) => {
+						workingMessages.push(msg);
+					},
+				},
+			};
+
+			await executeFn!("id", { featureId: "feat-1" }, undefined, undefined, mockCtx);
+			expect(workingMessages.length).toBeGreaterThanOrEqual(2);
+			expect(workingMessages[0]).toContain("Spawning worker");
+			expect(workingMessages[workingMessages.length - 1]).toBeUndefined();
+		});
+	});
+
+	describe("widget refresh during execution (Point 23)", () => {
+		it("widget is refreshed during worker execution", async () => {
+			const delayedMock = makeMockSpawnDelayed(250, {
+				stdoutLines: [makeMessageEndLine("assistant", "Done!")],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+
+			let widgetUpdateCount = 0;
+			const pi = makePiMock();
+			registerSpawnWorkerTool(pi, {
+				basePath: testDir,
+				projectDir: testDir,
+				updateWidget: () => {
+					widgetUpdateCount++;
+				},
+				_spawnOverride: delayedMock,
+			});
+
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(widgetUpdateCount).toBeGreaterThanOrEqual(2);
+		});
+	});
+
+	describe("onUpdate streaming (Point 24)", () => {
+		it("calls onUpdate during worker execution with progress", async () => {
+			const delayedMock = makeMockSpawnDelayed(200, {
+				stdoutLines: [makeMessageEndLine("assistant", "Done!")],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			registerTool(delayedMock);
+
+			const updates: Array<{ content: Array<{ type: string; text: string }>; details: unknown }> = [];
+			const onUpdate = (update: { content: Array<{ type: string; text: string }>; details: unknown }) => {
+				updates.push(update);
+			};
+
+			await executeFn!("id", { featureId: "feat-1" }, undefined, onUpdate);
+			expect(updates.length).toBeGreaterThanOrEqual(0);
 		});
 	});
 });

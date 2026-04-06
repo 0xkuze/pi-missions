@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { generateReport } from "../report.js";
 import { loadPlan, loadState, saveState } from "../state/manager.js";
@@ -47,6 +48,22 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 				Type.Array(Type.String(), { description: "Any remaining notes or observations" }),
 			),
 		}),
+		renderCall(_args: unknown, theme: { fg: (...a: unknown[]) => string; bold: (t: string) => string }) {
+			return new Text(theme.fg("toolTitle", theme.bold("complete_mission")), 0, 0);
+		},
+		renderResult(
+			result: { content?: Array<{ type: string; text: string }> },
+			_options: unknown,
+			theme: { fg: (...a: unknown[]) => string },
+		) {
+			const text = result.content?.[0];
+			const output = text?.type === "text" ? text.text : "(no output)";
+			const icon = output.includes("completed")
+				? (theme.fg("success", "\u2713") as string)
+				: (theme.fg("error", "\u2717") as string);
+			const firstLine = output.split("\n")[0];
+			return new Text(`${icon} ${firstLine}`, 0, 0);
+		},
 		async execute(_toolCallId, params) {
 			const { summary, remainingNotes } = params;
 

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { resolveModel } from "../config.js";
 import {
@@ -72,6 +73,17 @@ function findAllFeatures(plan: MissionPlan): Map<string, Feature> {
 	return map;
 }
 
+function findNextPending(plan: MissionPlan, currentFeatureId: string): Feature | null {
+	for (const milestone of plan.milestones) {
+		for (const feature of milestone.features) {
+			if (feature.id !== currentFeatureId && feature.status === "pending") {
+				return feature;
+			}
+		}
+	}
+	return null;
+}
+
 function checkDependencies(feature: Feature, allFeatures: Map<string, Feature>): string | null {
 	for (const depId of feature.dependencies) {
 		const dep = allFeatures.get(depId);
@@ -114,7 +126,7 @@ function spawnWorkerProcess(
 	command: string,
 	args: string[],
 	cwd: string,
-	options?: { signal?: AbortSignal; timeoutMs?: number },
+	options?: { signal?: AbortSignal; timeoutMs?: number; onChunk?: (stdout: string) => void },
 ): Promise<{
 	stdout: string;
 	stderr: string;
@@ -130,6 +142,8 @@ function spawnWorkerProcess(
 		let killed = false;
 		let timedOut = false;
 		let aborted = false;
+		let lastChunkTime = 0;
+		const CHUNK_INTERVAL_MS = 3000;
 
 		const killProc = () => {
 			if (killed) return;
@@ -148,6 +162,11 @@ function spawnWorkerProcess(
 
 		proc.stdout?.on("data", (chunk: Buffer) => {
 			stdoutBuf += chunk.toString();
+			const now = Date.now();
+			if (options?.onChunk && now - lastChunkTime > CHUNK_INTERVAL_MS) {
+				lastChunkTime = now;
+				options.onChunk(stdoutBuf);
+			}
 		});
 
 		proc.stderr?.on("data", (chunk: Buffer) => {
@@ -311,7 +330,31 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			featureId: Type.String({ description: "ID of the feature to implement" }),
 			additionalContext: Type.Optional(Type.String({ description: "Extra context or guidance for retry attempts" })),
 		}),
-		async execute(_toolCallId, params, signal) {
+		renderCall(
+			args: { featureId?: string },
+			theme: { fg: (...a: unknown[]) => string; bold: (t: string) => string },
+		) {
+			const featureName = args.featureId || "...";
+			const text = theme.fg("toolTitle", theme.bold("spawn_worker ")) + theme.fg("accent", featureName);
+			return new Text(text, 0, 0);
+		},
+		renderResult(
+			result: { content?: Array<{ type: string; text: string }> },
+			{ expanded }: { expanded: boolean },
+			theme: { fg: (...a: unknown[]) => string },
+		) {
+			const text = result.content?.[0];
+			const output = text?.type === "text" ? text.text : "(no output)";
+			const firstLine = output.split("\n")[0];
+			const icon = output.includes("succeeded")
+				? (theme.fg("success", "\u2713") as string)
+				: (theme.fg("error", "\u2717") as string);
+			if (!expanded) {
+				return new Text(`${icon} ${firstLine}`, 0, 0);
+			}
+			return new Text(`${icon} ${output}`, 0, 0);
+		},
+		async execute(_toolCallId, params, signal, onUpdate, ctx) {
 			const state = loadState(deps.basePath);
 			if (!state) {
 				return { content: [{ type: "text", text: "Error: no active mission state." }], details: {} };
@@ -410,12 +453,39 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const savedThinkingLevel = deps.getThinkingLevel ? deps.getThinkingLevel() : undefined;
 
+			const uiCtx = ctx as { ui?: { setWorkingMessage?: (msg?: string) => void } } | undefined;
+			uiCtx?.ui?.setWorkingMessage?.(
+				`Spawning worker: ${feature.name} (${activeState.totalFeaturesCompleted + 1}/${allFeatures.size})`,
+			);
+
+			const widgetInterval = setInterval(() => {
+				const currentState = loadState(deps.basePath);
+				const currentPlan = loadPlan(deps.basePath);
+				if (currentState) deps.updateWidget(currentState, currentPlan ?? undefined);
+			}, 2000);
+
 			const timeoutMs = config.workerTimeoutMs ?? DEFAULT_WORKER_TIMEOUT_MS;
 			const startTime = Date.now();
+
+			const onChunk = onUpdate
+				? (stdout: string) => {
+						const elapsed = Math.round((Date.now() - startTime) / 1000);
+						const lines = stdout.split("\n").filter((l: string) => l.trim());
+						onUpdate({
+							content: [{ type: "text", text: `Worker running for ${elapsed}s (${lines.length} events)...` }],
+							details: {},
+						});
+					}
+				: undefined;
+
 			const procResult = await spawnWorkerProcess(spawnFn, command, commandArgs, deps.projectDir, {
 				signal: signal ?? undefined,
 				timeoutMs,
+				onChunk,
 			});
+
+			clearInterval(widgetInterval);
+			uiCtx?.ui?.setWorkingMessage?.();
 
 			if (savedThinkingLevel !== undefined && deps.setThinkingLevel) {
 				deps.setThinkingLevel(savedThinkingLevel);
@@ -575,11 +645,14 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			deps.updateWidget(activeState, updatedPlan);
 
 			const statusText = result.status === "success" ? "succeeded" : `failed (attempt ${attemptNumber})`;
+			const nextPending = findNextPending(updatedPlan, feature.id);
+			const nextPendingName = nextPending ? nextPending.name : "none";
+			const progressDone = activeState.totalFeaturesCompleted + activeState.totalFeaturesSkipped;
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Worker ${statusText} for feature '${feature.name}'.\n\n${result.summary}`,
+						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. Next: ${nextPendingName}.\n\n${result.summary}`,
 					},
 				],
 				details: {},
