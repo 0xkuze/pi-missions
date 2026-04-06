@@ -73,6 +73,31 @@ describe("generateWorkerSkill", () => {
 		expect(skill).toContain("(none specified)");
 	});
 
+	it("contains Procedure section", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("## Procedure");
+	});
+
+	it("contains Verification section", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("## Verification");
+	});
+
+	it("contains Completion section", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("## Completion");
+	});
+
+	it("contains instruction to run project test command", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("Run the project's test command");
+	});
+
+	it("contains instruction to run project lint command", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("Run the project's lint command");
+	});
+
 	describe("mission terminology exclusion (VAL-WORKER-002)", () => {
 		for (const term of FORBIDDEN_TERMS) {
 			it(`does not contain forbidden term '${term}'`, () => {

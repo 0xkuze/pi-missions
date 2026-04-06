@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { synthesizeWorkerResult } from "../../extensions/tools/result-synthesis.js";
+import { parseStructuredSummary, synthesizeWorkerResult } from "../../extensions/tools/result-synthesis.js";
 
 function makeMessageEnd(role: string, textContent?: string, usage?: object): string {
 	const content = textContent ? [{ type: "text", text: textContent }] : [];
@@ -631,5 +631,82 @@ describe("synthesizeWorkerResult", () => {
 			expect(result.filesChanged).toEqual([]);
 			expect(result.commandsRun).toEqual([]);
 		});
+	});
+
+	describe("structured summary integration", () => {
+		it("returns failure when exit code 0 but structured summary says tests failed", () => {
+			const summaryText =
+				"Done.\n- Files changed: src/index.ts\n- Tests: failed\n- Lint: clean\n- Remaining issues: test failures";
+			const stdout = makeStdout([makeMessageEnd("assistant", summaryText)]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("failure");
+			expect(result.error?.kind).toBe("validation");
+		});
+
+		it("returns success when exit code 0 and structured summary says tests passed", () => {
+			const summaryText =
+				"Done.\n- Files changed: src/index.ts\n- Tests: passed\n- Lint: clean\n- Remaining issues: none";
+			const stdout = makeStdout([makeMessageEnd("assistant", summaryText)]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
+		});
+
+		it("returns success when no structured summary in output", () => {
+			const stdout = makeStdout([makeMessageEnd("assistant", "Task completed successfully.")]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
+		});
+	});
+});
+
+describe("parseStructuredSummary", () => {
+	it("extracts tests: passed", () => {
+		const text = "- Files changed: a.ts\n- Tests: passed\n- Lint: clean\n- Remaining issues: none";
+		const result = parseStructuredSummary(text);
+		expect(result.testsStatus).toBe("passed");
+	});
+
+	it("extracts lint: clean", () => {
+		const text = "- Files changed: a.ts\n- Tests: passed\n- Lint: clean\n- Remaining issues: none";
+		const result = parseStructuredSummary(text);
+		expect(result.lintStatus).toBe("clean");
+	});
+
+	it("extracts tests: failed", () => {
+		const text = "- Files changed: a.ts\n- Tests: failed\n- Lint: issues\n- Remaining issues: test failures";
+		const result = parseStructuredSummary(text);
+		expect(result.testsStatus).toBe("failed");
+	});
+
+	it("extracts lint: issues", () => {
+		const text = "- Files changed: a.ts\n- Tests: passed\n- Lint: issues\n- Remaining issues: lint errors";
+		const result = parseStructuredSummary(text);
+		expect(result.lintStatus).toBe("issues");
+	});
+
+	it("extracts tests: not run", () => {
+		const text = "- Files changed: a.ts\n- Tests: not run\n- Lint: not run\n- Remaining issues: none";
+		const result = parseStructuredSummary(text);
+		expect(result.testsStatus).toBe("not_run");
+	});
+
+	it("extracts lint: not run", () => {
+		const text = "- Files changed: a.ts\n- Tests: passed\n- Lint: not run\n- Remaining issues: none";
+		const result = parseStructuredSummary(text);
+		expect(result.lintStatus).toBe("not_run");
+	});
+
+	it("returns unknown when no structured summary found", () => {
+		const text = "Task completed successfully. All files updated.";
+		const result = parseStructuredSummary(text);
+		expect(result.testsStatus).toBe("unknown");
+		expect(result.lintStatus).toBe("unknown");
+	});
+
+	it("is case-insensitive", () => {
+		const text = "- tests: PASSED\n- lint: CLEAN";
+		const result = parseStructuredSummary(text);
+		expect(result.testsStatus).toBe("passed");
+		expect(result.lintStatus).toBe("clean");
 	});
 });

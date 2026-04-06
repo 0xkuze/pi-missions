@@ -1,5 +1,13 @@
 import type { WorkerResult } from "../types.js";
 
+export type TestsStatus = "passed" | "failed" | "not_run" | "unknown";
+export type LintStatus = "clean" | "issues" | "not_run" | "unknown";
+
+export interface StructuredSummary {
+	testsStatus: TestsStatus;
+	lintStatus: LintStatus;
+}
+
 type ParsedEvent = Record<string, unknown>;
 
 function parseEvents(stdout: string): ParsedEvent[] {
@@ -121,6 +129,33 @@ function extractMetrics(events: ParsedEvent[]): { tokensUsed?: number; estimated
 	return { tokensUsed: totalTokens, estimatedCost: totalCost };
 }
 
+function parseTestsStatus(text: string): TestsStatus {
+	const testsMatch = /- Tests:\s*(passed|failed|not run)/i.exec(text);
+	if (!testsMatch) return "unknown";
+	const value = testsMatch[1].toLowerCase();
+	if (value === "passed") return "passed";
+	if (value === "failed") return "failed";
+	if (value === "not run") return "not_run";
+	return "unknown";
+}
+
+function parseLintStatus(text: string): LintStatus {
+	const lintMatch = /- Lint:\s*(clean|issues|not run)/i.exec(text);
+	if (!lintMatch) return "unknown";
+	const value = lintMatch[1].toLowerCase();
+	if (value === "clean") return "clean";
+	if (value === "issues") return "issues";
+	if (value === "not run") return "not_run";
+	return "unknown";
+}
+
+export function parseStructuredSummary(text: string): StructuredSummary {
+	return {
+		testsStatus: parseTestsStatus(text),
+		lintStatus: parseLintStatus(text),
+	};
+}
+
 export function synthesizeWorkerResult(
 	stdout: string,
 	_stderr: string,
@@ -188,6 +223,21 @@ export function synthesizeWorkerResult(
 			error: {
 				kind: "tool",
 				message: "Worker encountered a fatal tool error",
+			},
+			metrics: { durationMs, ...tokenMetrics },
+		};
+	}
+
+	const structuredSummary = parseStructuredSummary(summary);
+	if (structuredSummary.testsStatus === "failed") {
+		return {
+			status: "failure",
+			summary,
+			filesChanged,
+			commandsRun,
+			error: {
+				kind: "validation",
+				message: "Worker reported failing tests in structured summary",
 			},
 			metrics: { durationMs, ...tokenMetrics },
 		};
