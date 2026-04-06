@@ -1,32 +1,18 @@
 <p align="center">
   <img src="https://img.shields.io/badge/pi-missions-7c3aed?style=for-the-badge&labelColor=1e1e2e&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM3YzNhZWQiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMmwzLjA5IDYuMjZMIDIyIDkuMjdsLTUgNC44NyAxLjE4IDYuODhMMTIgMTcuNzdsLTYuMTggMy4yNUw3IDEzLjE0IDIgOS4yN2w2LjkxLTEuMDFMMTIgMnoiLz48L3N2Zz4=" alt="pi-missions" />
-</p>
-
-<h1 align="center">pi-missions</h1>
-
-<p align="center">
-  <strong>Factory AI Missions-inspired orchestration for <a href="https://github.com/nichochar/pi-coding-agent">pi</a></strong>
   <br />
-  <em>Describe a goal → Plan with AI → Execute with isolated workers → Ship with confidence</em>
-</p>
-
-<p align="center">
-  <a href="#quickstart">Quickstart</a> •
-  <a href="#features">Features</a> •
-  <a href="#how-it-works">How It Works</a> •
-  <a href="#architecture">Architecture</a> •
-  <a href="#commands">Commands</a> •
-  <a href="#configuration">Configuration</a> •
-  <a href="#faq">FAQ</a>
-</p>
-
-<p align="center">
   <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/tests-1506_passing-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/pi-v0.65.0+-7c3aed?style=flat-square" alt="Pi Compatible" />
 </p>
+
+# pi-missions
+
+Factory AI Missions-inspired orchestration for [pi](https://github.com/nichochar/pi-coding-agent). Describe a goal, plan with AI, execute with isolated workers, ship with confidence.
+
+[Quickstart](#quickstart) · [Features](#features) · [How It Works](#how-it-works) · [Architecture](#architecture) · [Commands](#commands) · [Configuration](#configuration) · [FAQ](#faq)
 
 ---
 
@@ -71,35 +57,35 @@ P: Pause  R: Redirect  X: Reset  Esc: Close
 
 ## Features
 
-🎯 **Planning-First Workflow** — The AI orchestrator converses with you, analyzes your codebase, asks clarifying questions, and drafts a structured plan before writing any code.
+**Planning-First Workflow** — The orchestrator converses with you, analyzes your codebase, asks clarifying questions, and drafts a structured plan before writing any code.
 
-🧩 **Structured Missions** — Goals are broken into milestones containing features, with validation checkpoints at every milestone boundary.
+**Structured Missions** — Goals are broken into milestones containing features, with validation checkpoints at every milestone boundary.
 
-🔀 **Isolated Workers** — Each feature is executed by a fresh, isolated pi process with clean context. No cross-contamination between tasks.
+**Isolated Workers** — Each feature is executed by a fresh pi process with clean context. No cross-contamination between tasks.
 
-✅ **Automated Validation** — Typecheck, lint, test, and build commands run at milestone boundaries. Failures automatically generate fix features.
+**Automated Validation** — Typecheck, lint, test, and build commands run at milestone boundaries. Failures automatically generate fix features.
 
-🎮 **Mission Control TUI** — A full terminal overlay (`Ctrl+Shift+M`) to monitor progress, pause/resume, redirect, switch models, and view logs in real-time.
+**Mission Control TUI** — A terminal overlay (`Ctrl+Shift+M`) for monitoring progress, pausing, resuming, redirecting, switching models, and viewing logs.
 
-🔧 **Self-Healing** — When workers fail or validation catches issues, the orchestrator creates fix features and retries automatically.
+**Self-Healing** — When workers fail or validation catches issues, the orchestrator creates fix features and retries automatically.
 
-💾 **Crash-Safe Persistence** — All state lives on the filesystem under `.pi/missions/`. Survives session switches, crashes, and `/compact`. Resume exactly where you left off.
+**Crash-Safe Persistence** — All state lives on the filesystem under `.pi/missions/`. Survives session switches, crashes, and `/compact`. Resume exactly where you left off.
 
-🔒 **Git Safety** — Pre-mission snapshots, per-feature change tracking, selective staging (never `git add -A`), and dirty-repo awareness. Works without git too.
+**Git Safety** — Pre-mission snapshots, per-feature change tracking, selective staging (never `git add -A`), and dirty-repo awareness. Works without git too.
 
-🤖 **Multi-Model Support** — Assign different models to orchestrator, worker, and validator roles. Switch models mid-mission from Mission Control.
+**Multi-Model Support** — Assign different models to orchestrator, worker, and validator roles. Switch models mid-mission from Mission Control.
 
-📊 **Detailed Reporting** — Generates a comprehensive report at mission completion: timings, outcomes, fix features, git commits, and deviations.
+**Detailed Reporting** — Generates a report at mission completion: timings, outcomes, fix features, git commits, and deviations.
 
-⏸️ **Full User Control** — Pause, resume, skip features, redirect the orchestrator, re-plan, or abort at any time. You're the project manager.
+**Full User Control** — Pause, resume, skip features, redirect the orchestrator, re-plan, or abort at any time.
 
-🔍 **Interactive Planning** — Ask questions tool presents structured questionnaires during planning so the AI gathers exactly the constraints it needs.
+**Interactive Planning** — The ask questions tool presents structured questionnaires during planning so the AI gathers exactly the constraints it needs.
 
 ---
 
 ## How It Works
 
-pi-missions turns your pi session into a project manager + engineering team:
+pi-missions turns your pi session into a project manager backed by an engineering team of isolated workers:
 
 ```
  You                    Orchestrator (main LLM)              Workers (isolated pi processes)
@@ -123,7 +109,7 @@ pi-missions turns your pi session into a project manager + engineering team:
   │                            │── spawn_worker(feature-3) ──────────> │
   │                            │   ...                                 │
   │                            │── complete_mission ──>                │
-  │  📊 report.md              │                                       │
+  │  report.md                 │                                       │
   │<───────────────────────────│                                       │
 ```
 
@@ -151,11 +137,10 @@ pi install pi-missions
 # 4. Review and approve the plan
 /mission-approve
 
-# 5. Watch it work — open Mission Control anytime
-# Press Ctrl+Shift+M
+# 5. Open Mission Control anytime with Ctrl+Shift+M
 ```
 
-The orchestrator handles everything from there: spawning workers, committing changes, running validation, creating fix features for failures, and generating a final report.
+The orchestrator handles the rest: spawning workers, committing changes, running validation, creating fix features for failures, and generating a final report.
 
 ---
 
@@ -189,7 +174,7 @@ Then symlink or copy the `extensions/` directory to your pi extensions path.
 
 ### State Machine
 
-Every mission follows a deterministic state machine. All transitions are triggered by explicit tool calls — never by regex parsing of LLM output.
+Every mission follows a deterministic state machine. All transitions are triggered by explicit tool calls, never by regex parsing of LLM output.
 
 ```
                           ┌──────────────────────────────────────────┐
@@ -214,12 +199,12 @@ Every mission follows a deterministic state machine. All transitions are trigger
                           └─────│  validating  │  │ completed │
                                 └──────────────┘  └───────────┘
 
-   Any state ──── /mission-pause ───> ⏸ paused (stores resumeTargetState)
+   Any state ──── /mission-pause ───> || paused (stores resumeTargetState)
    Any state ──── /mission-reset ───> ✗ aborted
    Any state ──── unrecoverable ────> ✗ failed
 ```
 
-### Orchestrator → Worker Flow
+### Orchestrator to Worker Flow
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -240,7 +225,7 @@ Every mission follows a deterministic state machine. All transitions are trigger
 │  │        "Implement JWT token signing..."     │        │
 │  │  4. Block until exit                        │        │
 │  │  5. Synthesize WorkerResult                 │        │
-│  └─────────────────┬───────────────────────────┘        │
+│  └─────────────────────────────────────────────┘        │
 │                    │                                    │
 └────────────────────┼────────────────────────────────────┘
                      │ spawn
@@ -361,7 +346,7 @@ extensions/
 | Key | Action |
 |-----|--------|
 | `P` | Pause / Resume |
-| `R` | Redirect — send new instructions to the orchestrator |
+| `R` | Redirect (send new instructions to the orchestrator) |
 | `X` | Reset mission |
 | `M` | Open model assignment sub-view |
 | `V` | Show validation results |
@@ -420,7 +405,7 @@ If no commands are configured, pi-missions auto-detects from your project:
 | `Makefile` | Corresponding targets |
 | Ecosystem | `cargo test`, `go test ./...`, `pytest`, `bun test`, etc. |
 
-Commands always run in order: **typecheck → lint → test → build** (no fail-fast — all run).
+Commands always run in order: **typecheck → lint → test → build** (no fail-fast, all run).
 
 ---
 
@@ -432,11 +417,11 @@ The widget bar shows compact mission status at all times:
 
 ```
 ● Running  ██████▓░░░  4/10 features  ·  Milestone: auth  ·  Feature: jwt-tokens
-⏸ Paused   ██████▓░░░  4/10 features  ·  waiting for input
-⏳ Planning ·  analyzing codebase...
-📋 Draft    ·  2 milestones, 8 features  ·  awaiting approval
-✓ Done     ██████████  10/10 features  ·  report ready
-✗ Failed   ██████░░░░  6/10 features   ·  blocked on jwt-tokens
+~ Paused   ██████▓░░░  4/10 features  ·  waiting for input
+.. Planning ·  analyzing codebase...
+[] Draft    ·  2 milestones, 8 features  ·  awaiting approval
++ Done     ██████████  10/10 features  ·  report ready
+x Failed   ██████░░░░  6/10 features   ·  blocked on jwt-tokens
 ```
 
 Progress bar: `█` done · `▓` active · `░` pending
@@ -502,18 +487,18 @@ pi-missions replicates the core workflow of [Factory AI's Droid Missions](https:
 |--------|-----------------|-------------|
 | **Runtime** | Cloud containers or local | Local only (pi processes) |
 | **Worker isolation** | Separate cloud sessions | Spawned pi processes (`--no-session`) |
-| **Planning** | Conversational, multi-turn | Conversational, multi-turn ✓ |
-| **Structured plans** | Milestones → features | Milestones → features ✓ |
+| **Planning** | Conversational, multi-turn | Conversational, multi-turn |
+| **Structured plans** | Milestones → features | Milestones → features |
 | **Validation** | Commands + computer-use (visual QA) | Commands only (typecheck, lint, test, build) |
-| **Fix features** | Auto-generated on failure | Auto-generated on failure ✓ |
+| **Fix features** | Auto-generated on failure | Auto-generated on failure |
 | **Parallelism** | Targeted within milestones | Sequential (v1) |
-| **Multi-model** | Per-role model assignment | Per-role model assignment ✓ |
+| **Multi-model** | Per-role model assignment | Per-role model assignment |
 | **Persistence** | Cloud-managed state | Filesystem (`.pi/missions/`) |
 | **UI** | IDE integration + CLI | Terminal TUI overlay |
 | **Skill learning** | Skills refined across missions | Per-feature skill generation |
-| **User control** | Pause, redirect, skip | Pause, redirect, skip, re-plan ✓ |
-| **Git safety** | Built-in | Snapshot, selective staging, dirty-repo aware ✓ |
-| **Crash recovery** | Cloud-managed | Filesystem + lock-based recovery ✓ |
+| **User control** | Pause, redirect, skip | Pause, redirect, skip, re-plan |
+| **Git safety** | Built-in | Snapshot, selective staging, dirty-repo aware |
+| **Crash recovery** | Cloud-managed | Filesystem + lock-based recovery |
 | **Duration profile** | Median ~2h, up to 16 days | Same — long-running missions supported |
 | **Enterprise** | SSO, RBAC, audit logging | Not in scope |
 | **Cost** | Commercial SaaS | Free and open source |
@@ -565,7 +550,7 @@ The orchestrator receives the full `WorkerResult` including error details, chang
 <summary><strong>Is my git history safe?</strong></summary>
 <br>
 
-Yes. pi-missions takes a pre-mission git snapshot, tracks per-feature file changes, and only stages files changed by each worker (never `git add -A`). If your repo is dirty before the mission starts, auto-commit is disabled by default. You can always review changes before they're committed.
+Yes. pi-missions takes a pre-mission git snapshot, tracks per-feature file changes, and only stages files changed by each worker (never `git add -A`). If your repo is dirty before the mission starts, auto-commit is disabled by default. You can review changes before they are committed.
 
 </details>
 
@@ -573,7 +558,7 @@ Yes. pi-missions takes a pre-mission git snapshot, tracks per-feature file chang
 <summary><strong>Can I pause and resume a mission?</strong></summary>
 <br>
 
-Absolutely. Use `/mission-pause` or press `P` in Mission Control. The current worker completes (it's not killed), but no new workers spawn. Resume with `/mission-resume`. State persists to the filesystem, so you can even close pi and resume in a new session.
+Yes. Use `/mission-pause` or press `P` in Mission Control. The current worker completes (it is not killed), but no new workers spawn. Resume with `/mission-resume`. State persists to the filesystem, so you can close pi and resume in a new session.
 
 </details>
 
@@ -589,7 +574,7 @@ All state lives on the filesystem under `.pi/missions/`. On the next session sta
 <summary><strong>Does it work without git?</strong></summary>
 <br>
 
-Yes. Git features degrade gracefully — validation, worker execution, and reporting all work without git. The `commit_changes` tool simply returns a skip message, and file change tracking uses filesystem-level summaries instead.
+Yes. Git features degrade gracefully — validation, worker execution, and reporting all work without git. The `commit_changes` tool returns a skip message, and file change tracking uses filesystem-level summaries instead.
 
 </details>
 
@@ -597,7 +582,7 @@ Yes. Git features degrade gracefully — validation, worker execution, and repor
 
 ## Contributing
 
-Contributions are welcome! pi-missions is built with clear conventions to make contributing straightforward.
+Contributions welcome. pi-missions follows clear conventions to keep contributing straightforward.
 
 ### Development Setup
 
@@ -610,12 +595,12 @@ bun install
 ### Running Tests
 
 ```bash
-bun test                    # Run all 1506 tests
+bun test                    # Run all tests
 bun test --watch            # Watch mode
 bun test test/tools/        # Run specific directory
 ```
 
-### Linting & Formatting
+### Linting and Formatting
 
 ```bash
 npx @biomejs/biome check extensions/          # Check
@@ -634,16 +619,16 @@ npx tsc --noEmit
 - **`interface`** for public API contracts, **`type`** for unions and aliases
 - **`import type`** for type-only imports, **`.js`** extensions on relative imports
 - **Zero comments** — if code needs explanation, refactor it
-- **Early returns** and guard clauses — no deep nesting
+- **Early returns** and guard clauses, no deep nesting
 - **Conventional commits** — `feat:`, `fix:`, `refactor:`, `test:`, `chore:`
 - Tests must pass before every commit
 
 ### Architecture Principles
 
-- All state transitions flow through explicit tool calls — no regex parsing of LLM output
+- All state transitions flow through explicit tool calls, not regex parsing of LLM output
 - Filesystem is the source of truth, session entries are a cache
 - Workers never know about missions — they receive a task and execute it
-- The orchestrator LLM decides what to do; the extension provides tools it calls
+- The orchestrator LLM decides what to do; the extension provides the tools
 - Keep it simple or don't do it
 
 ---
