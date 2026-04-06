@@ -518,6 +518,7 @@ export class MissionControlComponent implements Component, Focusable {
 	private planHistory: PlanMutation[];
 	private currentSubView: SubView | null = null;
 	private subViewScrollOffset = 0;
+	private viewingMissionDetail = false;
 	private modelViewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 	private missionListState: MissionListState = initialMissionListState();
 	private registryEntries: MissionRegistryEntry[] = [];
@@ -583,6 +584,7 @@ export class MissionControlComponent implements Component, Focusable {
 	}
 
 	private isShowingMissionList(): boolean {
+		if (this.viewingMissionDetail) return false;
 		return !this.state || TERMINAL_STATUSES.has(this.state.status);
 	}
 
@@ -810,6 +812,14 @@ export class MissionControlComponent implements Component, Focusable {
 	private dispatchAction(action: OverlayAction): void {
 		switch (action.kind) {
 			case "close":
+				if (this.viewingMissionDetail) {
+					this.viewingMissionDetail = false;
+					this.registryEntries = this.deps.loadRegistry();
+					this.missionListState = initialMissionListState();
+					this.version++;
+					this.tui.requestRender();
+					return;
+				}
 				this.done();
 				return;
 			case "warn":
@@ -1002,6 +1012,27 @@ export class MissionControlComponent implements Component, Focusable {
 			case "new_mission":
 				this.done("new_mission");
 				return;
+			case "select": {
+				const entry = filtered[action.entryIndex];
+				if (!entry) return;
+				if (entry.projectPath !== this.deps.projectPath) {
+					this.deps.notify(`Mission is in a different project: ${entry.projectPath}`, "info");
+					return;
+				}
+				const loadedState = this.deps.loadState(this.deps.basePath);
+				const loadedPlan = this.deps.loadPlan(this.deps.basePath);
+				if (loadedState) {
+					this.state = loadedState;
+					this.plan = loadedPlan;
+					this.viewingMissionDetail = true;
+					this.leftScrollOffset = 0;
+					this.rightTopScrollOffset = 0;
+					this.rightBottomScrollOffset = 0;
+					this.version++;
+					this.tui.requestRender();
+				}
+				return;
+			}
 			case "noop":
 				this.version++;
 				this.tui.requestRender();
@@ -1019,7 +1050,7 @@ export class MissionControlComponent implements Component, Focusable {
 		const state = this.state;
 		const plan = this.plan;
 
-		if (!state || TERMINAL_STATUSES.has(state.status)) {
+		if (this.isShowingMissionList()) {
 			const height = this.tui.terminal.rows - 5;
 			return renderMissionList(
 				this.registryEntries,
@@ -1353,7 +1384,7 @@ export class MissionControlComponent implements Component, Focusable {
 			output.push(`${leftPadded}${leftPad > 0 ? " ".repeat(leftPad) : ""}${truncateToWidth(right, rightWidth)}`);
 		}
 
-		const shortcuts = "P: Pause  R: Redirect  X: Reset  Esc: Close";
+		const shortcuts = this.viewingMissionDetail ? "Esc: Back to list" : "P: Pause  R: Redirect  X: Reset  Esc: Close";
 		for (const line of footerBar(shortcuts, width, this.style)) {
 			output.push(line);
 		}
