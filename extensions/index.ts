@@ -318,6 +318,9 @@ export default function (pi: ExtensionAPI): void {
 
 	const missionToolSet = new Set<string>(MISSION_TOOL_NAMES);
 
+	const RESTRICTED_TOOLS = new Set(["edit", "write"]);
+	const RESTRICTED_STATUSES = new Set(["executing", "validating"]);
+
 	function enableMissionTools(): void {
 		const current = new Set(pi.getActiveTools());
 		let changed = false;
@@ -334,6 +337,24 @@ export default function (pi: ExtensionAPI): void {
 		const current = pi.getActiveTools();
 		const filtered = current.filter((name) => !missionToolSet.has(name));
 		if (filtered.length !== current.length) pi.setActiveTools(filtered);
+	}
+
+	function restrictOrchestratorTools(): void {
+		const current = pi.getActiveTools();
+		const filtered = current.filter((name) => !RESTRICTED_TOOLS.has(name));
+		if (filtered.length !== current.length) pi.setActiveTools(filtered);
+	}
+
+	function restoreOrchestratorTools(): void {
+		const current = new Set(pi.getActiveTools());
+		let changed = false;
+		for (const name of RESTRICTED_TOOLS) {
+			if (!current.has(name)) {
+				current.add(name);
+				changed = true;
+			}
+		}
+		if (changed) pi.setActiveTools([...current]);
 	}
 
 	let lastContextPercent: number | null = null;
@@ -427,6 +448,9 @@ export default function (pi: ExtensionAPI): void {
 				if (recoveryContext) pendingRecoveryContext = recoveryContext;
 			}
 			renderMissionWidget(ctx, activeState, recoveredPlan ?? undefined);
+			if (RESTRICTED_STATUSES.has(activeState.status)) {
+				restrictOrchestratorTools();
+			}
 			if (!TERMINAL_STATUSES.has(activeState.status)) {
 				await handleLockConflict(basePath, ctx);
 			}
@@ -473,6 +497,9 @@ export default function (pi: ExtensionAPI): void {
 		saveState(basePath, cachedState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
 		const plan = loadPlan(basePath);
 		renderMissionWidget(ctx, cachedState, plan ?? undefined);
+		if (RESTRICTED_STATUSES.has(cachedState.status)) {
+			restrictOrchestratorTools();
+		}
 		if (!TERMINAL_STATUSES.has(cachedState.status)) {
 			await handleLockConflict(basePath, ctx);
 		}
@@ -719,6 +746,11 @@ export default function (pi: ExtensionAPI): void {
 				} catch {
 					// why: best-effort resume — if transition fails, show paused state
 				}
+			}
+			if (RESTRICTED_STATUSES.has(state.status)) {
+				restrictOrchestratorTools();
+			} else {
+				restoreOrchestratorTools();
 			}
 			const plan = loadPlan(basePath);
 			updateWidget(state, plan ?? undefined);

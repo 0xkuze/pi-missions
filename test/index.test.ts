@@ -357,6 +357,41 @@ describe("extension entry point (index.ts)", () => {
 				expect(activeTools).toContain(name);
 			}
 		});
+
+		it("removes edit and write tools during executing state", async () => {
+			const state = _ss({ status: "executing" });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			activeTools.push("edit", "write", "read", "bash");
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			expect(activeTools).not.toContain("edit");
+			expect(activeTools).not.toContain("write");
+			expect(activeTools).toContain("read");
+			expect(activeTools).toContain("bash");
+		});
+
+		it("removes edit and write tools during validating state", async () => {
+			const state = _ss({ status: "validating" });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			activeTools.push("edit", "write", "read", "bash");
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			expect(activeTools).not.toContain("edit");
+			expect(activeTools).not.toContain("write");
+		});
+
+		it("does not remove edit and write during planning state", async () => {
+			const state = _ss({ status: "planning" });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			activeTools.push("edit", "write");
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			expect(activeTools).toContain("edit");
+			expect(activeTools).toContain("write");
+		});
 	});
 
 	describe("session_start handler u2014 VAL-STATE-011", () => {

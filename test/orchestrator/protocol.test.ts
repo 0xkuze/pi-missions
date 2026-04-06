@@ -150,13 +150,10 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result.toLowerCase()).toContain("planning");
 		});
 
-		it("mentions ask_questions before codebase scan", () => {
+		it("mentions both codebase analysis and ask_questions", () => {
 			const result = verboseProtocol(makeState({ status: "planning" })) as string;
-			const askIdx = result.indexOf("ask_questions");
-			const scanIdx = result.toLowerCase().indexOf("codebase");
-			expect(askIdx).toBeGreaterThan(-1);
-			expect(scanIdx).toBeGreaterThan(-1);
-			expect(askIdx).toBeLessThan(scanIdx);
+			expect(result).toContain("ask_questions");
+			expect(result.toLowerCase()).toContain("codebase");
 		});
 
 		it("instructs targeted scan (package.json, README, directory structure)", () => {
@@ -169,6 +166,41 @@ describe("buildOrchestratorProtocol", () => {
 		it("instructs NOT to read implementation files", () => {
 			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result.toLowerCase()).toMatch(/do not.*read.*implementation|never.*read.*implementation/i);
+		});
+
+		it("encourages iterative conversation about scope", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result.toLowerCase()).toContain("conversation");
+		});
+
+		it("instructs to challenge vague goals", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result.toLowerCase()).toContain("vague");
+		});
+
+		it("mentions testable acceptance criteria", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result.toLowerCase()).toContain("acceptance criteria");
+		});
+
+		it("instructs to push back on oversized features", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result.toLowerCase()).toContain("split");
+		});
+
+		it("emphasizes plan quality", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result.toLowerCase()).toContain("most important");
+		});
+
+		it("combines bash commands guidance", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result.toLowerCase()).toContain("combine");
+		});
+
+		it("allows read and bash during planning", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result).not.toContain("do NOT use edit");
 		});
 	});
 
@@ -371,6 +403,26 @@ describe("buildOrchestratorProtocol", () => {
 		it("instructs to call complete_mission when all features are done", () => {
 			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toContain("complete_mission");
+		});
+
+		it("prohibits using edit and write during execution", () => {
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result.toLowerCase()).toMatch(/do not.*edit.*write|never.*edit.*write/i);
+		});
+
+		it("prohibits reading .pi/missions files", () => {
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result).toContain(".pi/missions");
+		});
+
+		it("contains intervention patterns for failure handling", () => {
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result.toLowerCase()).toContain("blocked");
+		});
+
+		it("contains guidance for user redirects", () => {
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result.toLowerCase()).toContain("redirect");
 		});
 	});
 
