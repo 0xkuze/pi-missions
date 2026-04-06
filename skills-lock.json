@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "pi-tui-design": {
+      "source": "joelhooks/pi-tools",
+      "sourceType": "github",
+      "computedHash": "3d27e681a66a7f82655beacf77eb00dfe6574c6e8c598e79b3ba2f7fb3c337a8"
+    }
+  }
+}
