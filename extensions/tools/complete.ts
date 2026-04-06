@@ -40,6 +40,7 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 		name: "complete_mission",
 		label: "Complete Mission",
 		description: "Mark the mission as complete. Generates a report and transitions state to completed.",
+		promptSnippet: "Complete the mission and generate the final report.",
 		parameters: Type.Object({
 			summary: Type.String({ description: "Summary of what was accomplished in this mission" }),
 			remainingNotes: Type.Optional(

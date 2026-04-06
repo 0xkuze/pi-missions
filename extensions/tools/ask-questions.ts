@@ -25,6 +25,7 @@ export function registerAskQuestionsTool(pi: ExtensionAPI, deps: Deps): void {
 		label: "Ask Questions",
 		description:
 			"Present structured questions to the user with pre-defined answer options. Opens an interactive overlay where the user can select from options or provide custom answers. Use during planning to gather requirements and preferences efficiently.",
+		promptSnippet: "Present structured questions to the user via interactive overlay.",
 		parameters: Type.Object({
 			questions: Type.Array(
 				Type.Object({

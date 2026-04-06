@@ -784,8 +784,9 @@ function makeDeps(tmpDir: string, overrides: Partial<MissionControlDeps> = {}): 
 }
 
 function makeTUI(overridesOrRows?: number | { rows?: number; requestRender?: () => void }) {
-	const rows = typeof overridesOrRows === "number" ? overridesOrRows : overridesOrRows?.rows ?? 50;
-	const requestRender = typeof overridesOrRows === "object" ? overridesOrRows?.requestRender ?? (() => {}) : () => {};
+	const rows = typeof overridesOrRows === "number" ? overridesOrRows : (overridesOrRows?.rows ?? 50);
+	const requestRender =
+		typeof overridesOrRows === "object" ? (overridesOrRows?.requestRender ?? (() => {})) : () => {};
 	return {
 		requestRender,
 		terminal: { rows, columns: 120, write: () => {} },
@@ -1388,7 +1389,9 @@ describe("MissionControlComponent mouse scroll", () => {
 	function makeScrollableComponent() {
 		const tmpDir = join(tmpdir(), `mc-mouse-scroll-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		mkdirSync(tmpDir, { recursive: true });
-		const features = Array.from({ length: 20 }, (_, i) => makeFeature(`f${i}`, i === 0 ? "active" : "pending", `feature-${i}`));
+		const features = Array.from({ length: 20 }, (_, i) =>
+			makeFeature(`f${i}`, i === 0 ? "active" : "pending", `feature-${i}`),
+		);
 		const milestone = makeMilestone("m1", features, "active");
 		const plan = makePlan([milestone]);
 		const events = Array.from({ length: 20 }, (_, i) =>

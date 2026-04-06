@@ -2,9 +2,9 @@ import { describe, expect, it, mock } from "bun:test";
 import type { TUI } from "@mariozechner/pi-tui";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
 import {
-	StatusOverlayComponent,
 	handleStatusOverlayKey,
 	renderStatusOverlay,
+	StatusOverlayComponent,
 } from "../../extensions/ui/status-overlay.js";
 import { nowISO } from "../../extensions/utils.js";
 import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "../helpers/index.js";

@@ -26,6 +26,7 @@ export function registerCreateFixTool(pi: ExtensionAPI, deps: Deps): void {
 		label: "Create Fix Feature",
 		description:
 			"Add a fix feature to a milestone in response to a worker failure or validation failure. Tracks origin information for reporting.",
+		promptSnippet: "Create a fix feature for worker or validation failures.",
 		parameters: Type.Object({
 			milestoneId: Type.String({ description: "ID of the milestone to add the fix feature to" }),
 			name: Type.String({ description: "Name of the fix feature" }),

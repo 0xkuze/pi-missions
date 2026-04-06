@@ -65,6 +65,7 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 		label: "Run Validation",
 		description:
 			"Run validation commands for a milestone. Executes typecheck, lint, test, and build in canonical order. All commands run even if earlier ones fail. Returns a structured ValidationResult.",
+		promptSnippet: "Run validation commands (typecheck, lint, test, build) for a milestone.",
 		parameters: Type.Object({
 			milestoneId: Type.String({ description: "ID of the milestone to validate" }),
 		}),

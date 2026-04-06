@@ -160,6 +160,7 @@ export function registerSubmitPlanTool(pi: ExtensionAPI, deps: Deps): void {
 		label: "Submit Plan",
 		description:
 			"Submit a structured mission plan for review. Called during planning phase to persist the plan and transition to draft review.",
+		promptSnippet: "Submit a structured mission plan with milestones, features, and acceptance criteria.",
 		parameters: Type.Object({
 			description: Type.String({ description: "High-level description of what this mission accomplishes" }),
 			milestones: Type.Array(

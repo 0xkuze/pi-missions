@@ -1,11 +1,7 @@
 import { describe, expect, it, mock } from "bun:test";
 import type { TUI } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../../extensions/types.js";
-import {
-	PlanOverlayComponent,
-	handlePlanOverlayKey,
-	renderPlanOverlay,
-} from "../../extensions/ui/plan-overlay.js";
+import { handlePlanOverlayKey, PlanOverlayComponent, renderPlanOverlay } from "../../extensions/ui/plan-overlay.js";
 import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp } from "../helpers/index.js";
 
 const DEFAULT_WIDTH = 80;

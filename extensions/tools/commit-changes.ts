@@ -67,6 +67,7 @@ export function registerCommitChangesTool(pi: ExtensionAPI, deps: Deps): void {
 		label: "Commit Changes",
 		description:
 			"Commit files changed by the current feature. Stages only feature-changed files against the pre-worker snapshot. Never uses git add -A in dirty repos. Returns commit SHA on success or a skip reason when conditions are not met.",
+		promptSnippet: "Commit feature changes. Only call after successful worker completion.",
 		parameters: Type.Object({
 			featureId: Type.String({ description: "ID of the feature whose changes to commit" }),
 			message: Type.Optional(Type.String({ description: "Override the default commit message" })),

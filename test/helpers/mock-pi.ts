@@ -7,6 +7,8 @@ type RegisteredTool = {
 	label: string;
 	description: string;
 	parameters: unknown;
+	promptSnippet?: string;
+	promptGuidelines?: string[];
 	execute: (
 		toolCallId: string,
 		params: unknown,

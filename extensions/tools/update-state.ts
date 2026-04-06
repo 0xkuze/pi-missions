@@ -259,6 +259,7 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 		label: "Update Mission State",
 		description:
 			"Update milestone or feature status. Actions: start_milestone, complete_milestone, skip_feature, block_feature, note, add_feature, remove_feature.",
+		promptSnippet: "Update mission state: start/complete milestones, skip/block features.",
 		parameters: Type.Object({
 			action: Type.Union(
 				[

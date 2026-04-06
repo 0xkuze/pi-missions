@@ -16,55 +16,38 @@ function autonomyInstructions(autonomy: MissionConfig["autonomy"]): string {
 function planningProtocol(autonomy: MissionConfig["autonomy"]): string {
 	return `## MISSION ORCHESTRATOR \u2014 PLANNING PHASE
 
-You are in the planning phase. Your task: deeply understand the codebase, gather constraints from the user, and produce a structured plan by calling \`submit_plan\`.
-
 STEPS (follow in order):
-1. Analyze the codebase \u2014 use read, bash, and grep to understand structure, technology stack, existing patterns, and constraints.
-2. Identify what exists and what needs to be built. Check for AGENTS.md, package.json, README, and similar context files.
-3. REQUIRED: Call \`ask_questions\` to interview the user before creating a plan. Ask about scope, priorities, constraints, architecture preferences, and anything ambiguous about the goal. This presents an interactive overlay. You MUST call ask_questions at least once before calling submit_plan.
-4. After receiving the user's answers, call \`submit_plan\` with milestones, features, acceptance criteria, and validation commands.
+1. Call \`ask_questions\` to interview the user about scope, priorities, constraints, and architecture preferences.
+2. Targeted codebase scan \u2014 check package.json, README, AGENTS.md, directory structure ONLY. Do NOT read implementation files.
+3. Call \`submit_plan\` with milestones, features, acceptance criteria, and validation commands.
 
 RULES:
-- This is the planning phase only. Do not begin executing features or running workers.
-- Do NOT call submit_plan before calling ask_questions first. The interview step is mandatory.
-- Submit a plan with at least one milestone and at least one feature per milestone.
+- Do NOT call submit_plan before calling ask_questions first.
+- Do NOT read implementation files during planning. Only scan project metadata and structure.
 - Each feature must have clear, testable acceptance criteria.
 - Group features into milestones that represent validation checkpoints.
 
-${autonomyInstructions(autonomy)}
-
-TOOLS: ask_questions, submit_plan, plus standard pi tools (read, bash, edit, write)`;
+${autonomyInstructions(autonomy)}`;
 }
 
 function draftReviewProtocol(): string {
 	return `## MISSION ORCHESTRATOR \u2014 DRAFT REVIEW
 
-A plan has been submitted and is awaiting user approval. The plan is visible in the Mission Control overlay.
-
-RULES:
-- Do NOT start executing features. Execution is prohibited until the user approves the plan.
-- Wait for the user to approve via \`/mission-approve\` or to request changes.
-- If the user requests changes, you may call \`submit_plan\` again with a revised plan.`;
+Plan submitted, awaiting user approval. Do NOT start executing features.
+Wait for approval via \`/mission-approve\` or request changes via \`submit_plan\`.`;
 }
 
 function approvedProtocol(plan: MissionPlan | undefined): string {
 	const description = plan?.description ?? "(no description)";
 	const totalFeatures = plan?.milestones.flatMap((m) => m.features).length ?? 0;
 	const totalMilestones = plan?.milestones.length ?? 0;
-	return `## MISSION ORCHESTRATOR \u2014 EXECUTION READY
-
-The plan has been approved and execution is ready to begin.
+	return `## MISSION ORCHESTRATOR \u2014 APPROVED
 
 MISSION: ${description}
 SCOPE: ${totalMilestones} milestones, ${totalFeatures} features
 
-START EXECUTION NOW:
-1. Call \`update_mission_state\` with action \`start_milestone\` for the first milestone.
-2. Call \`spawn_worker\` with the first feature's ID to begin execution.
-
-TOOLS AVAILABLE: spawn_worker, update_mission_state, run_validation, commit_changes, create_fix_feature, complete_mission
-
-NOTE: If a worker fails, do not debug it yourself. Use create_fix_feature to create a fix and spawn a new worker.`;
+Start now: call \`update_mission_state\` (start_milestone), then \`spawn_worker\` for the first feature.
+On worker failure, use \`create_fix_feature\` instead of debugging yourself.`;
 }
 
 function progressSummary(state: MissionState, plan: MissionPlan | undefined): string {
@@ -105,18 +88,6 @@ function gitWarnings(state: MissionState): string {
 	return `\n${warnings.join("\n")}`;
 }
 
-function workerFailureInstructions(): string {
-	return `WORKER FAILURE HANDLING:
-When spawn_worker reports a failure:
-1. Do NOT try to debug or fix the issue yourself. You are the orchestrator, not a worker.
-2. Call create_fix_feature to create a new feature that describes what needs to be fixed, including:
-   - The original feature name and its acceptance criteria
-   - The error details from the worker failure
-   - Any relevant context about what the worker accomplished before failing
-3. Call spawn_worker with the new fix feature ID to let a fresh worker handle it.
-4. If a worker fails on non-critical issues (commit errors, formatting), consider calling spawn_worker on the NEXT pending feature instead, as the work may already be done.`;
-}
-
 function executingProtocol(
 	state: MissionState,
 	plan: MissionPlan | undefined,
@@ -126,14 +97,11 @@ function executingProtocol(
 	const warnings = gitWarnings(state);
 	return `## MISSION ORCHESTRATOR \u2014 EXECUTING
 
-CURRENT PROGRESS:
 ${progress}${warnings}
 
-TOOLS: spawn_worker, update_mission_state, run_validation, commit_changes, create_fix_feature, complete_mission
-
-NEXT STEP: Call spawn_worker with the next pending feature ID. After all features in a milestone complete, call run_validation before proceeding.
-
-${workerFailureInstructions()}
+You are a project manager, not an implementer. Never read implementation files, edit code, or run tests. Delegate all implementation to workers.
+On failure: call create_fix_feature, then spawn_worker for the fix. Do not debug yourself.
+Call spawn_worker for the next pending feature. After all milestone features complete, call run_validation.
 
 ${autonomyInstructions(autonomy)}`;
 }
@@ -141,11 +109,7 @@ ${autonomyInstructions(autonomy)}`;
 function validatingProtocol(): string {
 	return `## MISSION ORCHESTRATOR \u2014 VALIDATING
 
-Milestone validation is in progress. Wait for the validation results before taking further action.
-
-RULES:
-- Do NOT start any new worker tasks while validation is running.
-- When validation completes, analyze the results and decide: proceed to the next milestone or create fix features.`;
+Validation in progress. Do NOT start new workers. Wait for results, then proceed or create fix features.`;
 }
 
 function pausedProtocol(): string {

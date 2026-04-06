@@ -105,11 +105,6 @@ describe("buildOrchestratorProtocol", () => {
 			expect(typeof result).toBe("string");
 		});
 
-		it("contains codebase analysis instructions", () => {
-			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
-			expect(result.toLowerCase()).toContain("analyze");
-		});
-
 		it("contains reference to submit_plan", () => {
 			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
 			expect(result).toContain("submit_plan");
@@ -138,6 +133,27 @@ describe("buildOrchestratorProtocol", () => {
 		it("mentions planning phase", () => {
 			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
 			expect(result.toLowerCase()).toContain("planning");
+		});
+
+		it("mentions ask_questions before codebase scan", () => {
+			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			const askIdx = result.indexOf("ask_questions");
+			const scanIdx = result.toLowerCase().indexOf("codebase");
+			expect(askIdx).toBeGreaterThan(-1);
+			expect(scanIdx).toBeGreaterThan(-1);
+			expect(askIdx).toBeLessThan(scanIdx);
+		});
+
+		it("instructs targeted scan (package.json, README, directory structure)", () => {
+			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			expect(result).toContain("package.json");
+			expect(result).toContain("README");
+			expect(result.toLowerCase()).toContain("directory");
+		});
+
+		it("instructs NOT to read implementation files", () => {
+			const result = buildOrchestratorProtocol(makeState({ status: "planning" })) as string;
+			expect(result.toLowerCase()).toMatch(/do not.*read.*implementation|never.*read.*implementation/i);
 		});
 	});
 
@@ -209,6 +225,12 @@ describe("buildOrchestratorProtocol", () => {
 			const result = buildOrchestratorProtocol(makeState({ status: "approved" }), makeProtocolPlan()) as string;
 			expect(result).toContain("create_fix_feature");
 		});
+
+		it("is concise (under 300 tokens / 1500 chars)", () => {
+			const plan = makeProtocolPlan();
+			const result = buildOrchestratorProtocol(makeState({ status: "approved" }), plan) as string;
+			expect(result.length).toBeLessThan(1500);
+		});
 	});
 
 	describe("executing state (VAL-PROTO-003)", () => {
@@ -250,17 +272,31 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result).toMatch(/\d+\/4/);
 		});
 
-		it("references available tools", () => {
+		it("does not contain explicit tool list", () => {
 			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
-			expect(result).toContain("spawn_worker");
-			expect(result).toContain("run_validation");
-			expect(result).toContain("commit_changes");
+			expect(result).not.toMatch(/^TOOLS:/m);
 		});
 
-		it("fits within ~300-500 tokens (~1200-2500 chars)", () => {
+		it("contains progress summary", () => {
 			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
-			expect(result.length).toBeLessThan(2500);
+			expect(result).toContain("Foundation");
+			expect(result).toContain("auth-endpoint");
+		});
+
+		it("is under 400 tokens (char count < 2000)", () => {
+			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result.length).toBeLessThan(2000);
 			expect(result.length).toBeGreaterThan(200);
+		});
+
+		it("contains delegation boundary (project manager)", () => {
+			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result.toLowerCase()).toContain("project manager");
+		});
+
+		it("contains 'Never read implementation files'", () => {
+			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result.toLowerCase()).toContain("never read implementation files");
 		});
 
 		it("includes dirty repo warning when autoCommitEnabled is false", () => {
@@ -291,16 +327,9 @@ describe("buildOrchestratorProtocol", () => {
 			expect(typeof result).toBe("string");
 		});
 
-		it("includes worker failure handling instructions", () => {
+		it("includes concise worker failure handling", () => {
 			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
-			expect(result).toContain("WORKER FAILURE HANDLING");
 			expect(result).toContain("create_fix_feature");
-			expect(result.toLowerCase()).toContain("do not");
-		});
-
-		it("instructs orchestrator not to debug failures itself", () => {
-			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
-			expect(result).toContain("You are the orchestrator, not a worker");
 		});
 	});
 

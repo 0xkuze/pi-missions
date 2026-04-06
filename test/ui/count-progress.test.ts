@@ -88,10 +88,7 @@ describe("countProgress", () => {
 			milestones: [
 				makeMilestone({
 					id: "m1",
-					features: [
-						makeFeature({ id: "f1", status: "done" }),
-						makeFeature({ id: "f2", status: "done" }),
-					],
+					features: [makeFeature({ id: "f1", status: "done" }), makeFeature({ id: "f2", status: "done" })],
 				}),
 				makeMilestone({
 					id: "m2",

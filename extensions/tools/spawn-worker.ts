@@ -302,6 +302,11 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 		label: "Spawn Worker",
 		description:
 			"Spawn an isolated worker process to implement a single feature. Blocks until the worker completes. Reads the feature from plan.json, generates a skill and prompt, spawns pi, captures output, and returns a WorkerResult.",
+		promptSnippet: "Spawn an isolated worker for a single feature. Blocks until complete.",
+		promptGuidelines: [
+			"Never read implementation files yourself \u2014 delegate all coding to workers via spawn_worker.",
+			"If a worker fails, use create_fix_feature instead of debugging yourself.",
+		],
 		parameters: Type.Object({
 			featureId: Type.String({ description: "ID of the feature to implement" }),
 			additionalContext: Type.Optional(Type.String({ description: "Extra context or guidance for retry attempts" })),
