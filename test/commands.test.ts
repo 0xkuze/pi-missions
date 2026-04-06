@@ -4,8 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { type CommandDeps, registerCommands } from "../extensions/commands.js";
-import { saveState } from "../extensions/state/manager.js";
+import { savePlan, saveState } from "../extensions/state/manager.js";
 import type { MissionState } from "../extensions/types.js";
+import { makeFeature, makeMilestone, makePlan } from "./helpers/index.js";
 
 function makePlanningState(): MissionState {
 	return {
@@ -185,6 +186,50 @@ describe("registerCommands", () => {
 			await runCommand(mockPi.commands, "mission-mode", "", ctx);
 			expect(missionModeActive).toBe(false);
 			expect(onDeactivate).toHaveBeenCalled();
+		});
+
+		it("does not prompt confirmation when executing but all features are done", async () => {
+			missionModeActive = true;
+			const state: MissionState = {
+				...makePlanningState(),
+				status: "executing",
+				totalFeaturesCompleted: 2,
+			};
+			saveState(basePath, state);
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "f1", status: "done" }), makeFeature({ id: "f2", status: "done" })],
+					}),
+				],
+			});
+			savePlan(basePath, plan);
+			mockPi.confirmResult = false;
+			await runCommand(mockPi.commands, "mission-mode", "", ctx);
+			expect(missionModeActive).toBe(false);
+			expect(onDeactivate).toHaveBeenCalled();
+		});
+
+		it("prompts confirmation when executing with pending features", async () => {
+			missionModeActive = true;
+			const state: MissionState = {
+				...makePlanningState(),
+				status: "executing",
+				totalFeaturesCompleted: 1,
+			};
+			saveState(basePath, state);
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "f1", status: "done" }), makeFeature({ id: "f2", status: "pending" })],
+					}),
+				],
+			});
+			savePlan(basePath, plan);
+			mockPi.confirmResult = false;
+			await runCommand(mockPi.commands, "mission-mode", "", ctx);
+			expect(missionModeActive).toBe(true);
+			expect(onDeactivate).not.toHaveBeenCalled();
 		});
 
 		it("toggles on then off", async () => {

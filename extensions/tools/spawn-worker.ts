@@ -338,25 +338,17 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			featureId: Type.String({ description: "ID of the feature to implement" }),
 			additionalContext: Type.Optional(Type.String({ description: "Extra context or guidance for retry attempts" })),
 		}),
-		renderCall(
-			args: { featureId?: string },
-			theme: { fg: (...a: unknown[]) => string; bold: (t: string) => string },
-		) {
+		// why: pi Theme uses branded ThemeColor types; we accept `any` at this API boundary
+		renderCall(args: any, theme: any) {
 			const featureName = args.featureId || "...";
 			const text = theme.fg("toolTitle", theme.bold("spawn_worker ")) + theme.fg("accent", featureName);
 			return new Text(text, 0, 0);
 		},
-		renderResult(
-			result: { content?: Array<{ type: string; text: string }> },
-			{ expanded }: { expanded: boolean },
-			theme: { fg: (...a: unknown[]) => string },
-		) {
+		renderResult(result: any, { expanded }: any, theme: any) {
 			const text = result.content?.[0];
 			const output = text?.type === "text" ? text.text : "(no output)";
 			const firstLine = output.split("\n")[0];
-			const icon = output.includes("succeeded")
-				? (theme.fg("success", "\u2713") as string)
-				: (theme.fg("error", "\u2717") as string);
+			const icon = output.includes("succeeded") ? theme.fg("success", "\u2713") : theme.fg("error", "\u2717");
 			if (!expanded) {
 				return new Text(`${icon} ${firstLine}`, 0, 0);
 			}
@@ -655,13 +647,15 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const statusText = result.status === "success" ? "succeeded" : `failed (attempt ${attemptNumber})`;
 			const nextPending = findNextPending(updatedPlan, feature.id);
-			const nextPendingName = nextPending ? nextPending.name : "none";
 			const progressDone = activeState.totalFeaturesCompleted + activeState.totalFeaturesSkipped;
+			const completionHint = nextPending
+				? `Next: ${nextPending.name}.`
+				: "ALL FEATURES DONE. Call complete_mission now with a summary of what was accomplished.";
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. Next: ${nextPendingName}.\n\n${result.summary}`,
+						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${result.summary}`,
 					},
 				],
 				details: {},

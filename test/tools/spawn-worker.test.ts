@@ -1106,7 +1106,7 @@ describe("registerSpawnWorkerTool", () => {
 			expect(result.content[0].text).toContain("Feature Two");
 		});
 
-		it("shows 'none' as next when no more pending features", async () => {
+		it("instructs to call complete_mission when no more pending features", async () => {
 			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
 			const feat1 = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
@@ -1114,7 +1114,21 @@ describe("registerSpawnWorkerTool", () => {
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
-			expect(result.content[0].text).toContain("Next: none");
+			expect(result.content[0].text).toContain("ALL FEATURES DONE");
+			expect(result.content[0].text).toContain("complete_mission");
+		});
+
+		it("shows next feature name when more features are pending", async () => {
+			const state = localMakeState({ status: "executing" });
+			saveState(testDir, state);
+			const feat1 = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
+			const feat2 = localMakeFeature({ id: "feat-2", name: "Feature Two", status: "pending" });
+			const plan = localMakePlan([localMakeMilestone([feat1, feat2])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Next: Feature Two");
+			expect(result.content[0].text).not.toContain("ALL FEATURES DONE");
 		});
 	});
 

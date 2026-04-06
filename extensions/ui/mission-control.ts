@@ -17,7 +17,6 @@ import {
 	panel,
 	panelWithCount,
 	section,
-	sectionWithCount,
 	styledFeatureIcon,
 	styledFeatureName,
 	themeFrameStyle,
@@ -30,9 +29,9 @@ import {
 	type MissionListState,
 	renderMissionList,
 } from "./mission-list.js";
-import { handlePlanHistoryKey, renderPlanHistoryView } from "./plan-history.js";
-import { handlePlanningSetupKey, renderPlanningSetupView } from "./planning-setup.js";
-import { handleProgressLogKey, renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
+import { renderPlanHistoryView } from "./plan-history.js";
+import { renderPlanningSetupView } from "./planning-setup.js";
+import { renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
 import {
 	handleModelViewKey,
 	handleReportViewKey,
@@ -40,15 +39,13 @@ import {
 	renderModelView,
 	renderReportView,
 } from "./report-view.js";
-import { type CommandDisplayEntry, handleValidationViewKey, renderValidationView } from "./validation-view.js";
+import { type CommandDisplayEntry, renderValidationView } from "./validation-view.js";
 
 const ICON_FIX = "\u27a1";
 
 const PROGRESS_BAR_DONE = "\u2588";
 const PROGRESS_BAR_ACTIVE = "\u2593";
 const PROGRESS_BAR_PENDING = "\u2591";
-const MAX_LOG_ENTRIES = 13;
-
 function capitalize(s: string): string {
 	return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -156,103 +153,6 @@ export function renderMissionOutline(plan: MissionPlan, width = 40, style?: Fram
 	return frame("Mission Outline", lines, width, undefined, style);
 }
 
-function renderFeaturePanelContent(
-	state: MissionState,
-	plan: MissionPlan,
-	contentWidth: number,
-	style?: FrameStyle,
-): string[] {
-	const feature = findCurrentFeature(state, plan);
-	const milestone = findCurrentMilestone(state, plan);
-	const mf = style?.mutedFn ?? ((t: string) => t);
-	const tf = style?.textFn ?? ((t: string) => t);
-	const bf = style?.boldFn ?? ((t: string) => t);
-	const wf = style?.warningFn ?? ((t: string) => t);
-	const lines: string[] = [];
-
-	lines.push(section("Current Feature", contentWidth, style));
-
-	if (!feature) {
-		if (state.status === "executing" || state.status === "validating") {
-			const nextPending = plan.milestones.flatMap((m) => m.features).find((f) => f.status === "pending");
-			if (nextPending) {
-				lines.push(mf("Waiting to start:"));
-				lines.push(bf(tf(nextPending.name)));
-				if (milestone) lines.push(`${mf("Milestone:")} ${tf(milestone.name)}`);
-			} else {
-				lines.push(mf("All features dispatched"));
-			}
-		} else {
-			lines.push(mf("No Active Feature"));
-		}
-		return lines;
-	}
-
-	lines.push(bf(tf(feature.name)));
-
-	if (milestone) {
-		lines.push(`${mf("Milestone:")} ${tf(milestone.name)}`);
-	}
-
-	const workerModel = plan.modelAssignment.worker;
-	if (workerModel) {
-		lines.push(`${mf("Worker:")} ${tf(workerModel)}`);
-	}
-
-	const attemptCount = feature.attempts.length;
-	const maxRetries = 3;
-	lines.push(`${mf("Attempt:")} ${tf(`${attemptCount + 1}/${maxRetries}`)}`);
-
-	if (feature.acceptanceCriteria.length > 0) {
-		lines.push(section("Acceptance Criteria", contentWidth, style));
-		for (const criterion of feature.acceptanceCriteria) {
-			lines.push(`\u2022 ${tf(criterion)}`);
-		}
-	}
-
-	const warnings = buildWarnings(state);
-	if (warnings.length > 0) {
-		lines.push(section("Warnings", contentWidth, style));
-		for (const warning of warnings) {
-			lines.push(`\u2022 ${wf(warning)}`);
-		}
-	}
-
-	return lines;
-}
-
-function renderOutlinePanelContent(
-	state: MissionState,
-	plan: MissionPlan,
-	contentWidth: number,
-	style?: FrameStyle,
-): string[] {
-	const lines: string[] = [];
-	const { done, total } = countProgress(state, plan);
-	const tf = style?.textFn ?? ((t: string) => t);
-
-	lines.push(sectionWithCount("Features", `${done}/${total}`, contentWidth, style));
-
-	for (const milestone of plan.milestones) {
-		lines.push(tf(milestone.name));
-		for (const feature of milestone.features) {
-			const icon = styledFeatureIcon(feature.status, style);
-			const fixMarker = feature.fixOrigin ? ` ${ICON_FIX}` : "";
-			const prefix = `  ${icon} `;
-			const prefixWidth = visibleWidth(prefix);
-			const availableWidth = contentWidth - prefixWidth;
-			const rawName = `${feature.name}${fixMarker}`;
-			const wrappedRaw = wrapText(rawName, availableWidth);
-			lines.push(`${prefix}${styledFeatureName(wrappedRaw[0], feature.status, style)}`);
-			for (let i = 1; i < wrappedRaw.length; i++) {
-				lines.push(" ".repeat(prefixWidth) + styledFeatureName(wrappedRaw[i], feature.status, style));
-			}
-		}
-	}
-
-	return lines;
-}
-
 function styledProgressEventIcon(type: ProgressEvent["type"], style?: FrameStyle): string {
 	switch (type) {
 		case "feature_complete":
@@ -272,43 +172,6 @@ function styledProgressEventIcon(type: ProgressEvent["type"], style?: FrameStyle
 		default:
 			return (style?.mutedFn ?? ((t: string) => t))("\u00b7");
 	}
-}
-
-function renderLogPanelContent(state: MissionState, contentWidth: number, style?: FrameStyle): string[] {
-	const lines: string[] = [];
-	const mf = style?.mutedFn ?? ((t: string) => t);
-	const tf = style?.textFn ?? ((t: string) => t);
-
-	if (state.progressLog.length === 0) {
-		lines.push(sectionWithCount("Progress Log", "0", contentWidth, style));
-		lines.push(mf("(no events yet)"));
-		return lines;
-	}
-
-	const events = [...state.progressLog].sort(
-		(a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
-	);
-
-	const totalCount = events.length;
-	const displayed = events.slice(0, MAX_LOG_ENTRIES);
-	const pageLabel = totalCount <= MAX_LOG_ENTRIES ? `${totalCount}` : `1-${displayed.length} of ${totalCount}`;
-
-	lines.push(sectionWithCount("Progress Log", pageLabel, contentWidth, style));
-
-	for (const event of displayed) {
-		const time = formatRelativeTime(event.timestamp);
-		const icon = styledProgressEventIcon(event.type, style);
-		const prefix = `${mf(time.padEnd(4))} ${icon} `;
-		const prefixWidth = visibleWidth(prefix);
-		const availableWidth = contentWidth - prefixWidth;
-		const wrappedRaw = wrapText(event.detail, availableWidth);
-		lines.push(`${prefix}${tf(wrappedRaw[0])}`);
-		for (let i = 1; i < wrappedRaw.length; i++) {
-			lines.push(" ".repeat(prefixWidth) + tf(wrappedRaw[i]));
-		}
-	}
-
-	return lines;
 }
 
 export function renderProgressLog(state: MissionState, width = 40, style?: FrameStyle): string[] {
@@ -1091,6 +954,8 @@ export class MissionControlComponent implements Component, Focusable {
 				this.style,
 			);
 		}
+
+		if (!state) return ["No mission state."];
 
 		const activeView = this.resolveActiveView();
 		if (activeView !== null) {

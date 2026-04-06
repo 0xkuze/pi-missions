@@ -441,19 +441,34 @@ describe("extension entry point (index.ts)", () => {
 			expect(handlers.has("session_shutdown")).toBe(true);
 		});
 
-		it("pauses an executing mission on shutdown", () => {
+		it("pauses an executing mission with pending work on shutdown", () => {
 			const state = makeExecutingState();
 			saveState(basePath, state);
+			savePlan(basePath, _sp({ milestones: [{ id: "m1", name: "M1", description: "d", features: [{ id: "f1", name: "F1", description: "d", acceptanceCriteria: [], relevantFiles: [], dependencies: [], estimatedComplexity: "low" as const, status: "pending" as const, attempts: [] }], status: "active" as const }] }));
 
 			const ctx = buildMockCtx([]);
 			const { handlers } = registerExtension(tmpDir);
-			// session_start auto-activates mission mode
 			handlers.get("session_start")!({ type: "session_start" }, ctx);
 			const handler = handlers.get("session_shutdown")!;
 			handler({ type: "session_shutdown" }, ctx);
 
 			const saved = JSON.parse(readFileSync(join(basePath, "state.json"), "utf8"));
 			expect(saved.status).toBe("paused");
+		});
+
+		it("does not pause executing mission when all features are done on shutdown", () => {
+			const state = makeExecutingState();
+			saveState(basePath, state);
+			savePlan(basePath, _sp({ milestones: [{ id: "m1", name: "M1", description: "d", features: [{ id: "f1", name: "F1", description: "d", acceptanceCriteria: [], relevantFiles: [], dependencies: [], estimatedComplexity: "low" as const, status: "done" as const, attempts: [] }], status: "done" as const }] }));
+
+			const ctx = buildMockCtx([]);
+			const { handlers } = registerExtension(tmpDir);
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
+			const handler = handlers.get("session_shutdown")!;
+			handler({ type: "session_shutdown" }, ctx);
+
+			const saved = JSON.parse(readFileSync(join(basePath, "state.json"), "utf8"));
+			expect(saved.status).toBe("executing");
 		});
 
 		it("does not crash on completed state", () => {

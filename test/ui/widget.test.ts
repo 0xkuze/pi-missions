@@ -144,6 +144,26 @@ describe("buildWidgetLines", () => {
 			const line = lines.join(" ");
 			expect(line).toContain("jwt-tokens");
 		});
+		it("shows 'Done' and 'completing' when all features are done but state is still executing", () => {
+			const features = [makeFeature("f1", "done"), makeFeature("f2", "done")];
+			const plan = makePlan([makeMilestone("m1", features, "done")]);
+			const state = makeState("executing", { totalFeaturesCompleted: 2 });
+			const lines = buildWidgetLines(state, plan);
+			const line = lines.join(" ");
+			expect(line).toContain("Done");
+			expect(line).toContain("completing");
+			expect(line).not.toContain("Running");
+		});
+
+		it("shows 'Running' when some features are still pending", () => {
+			const features = [makeFeature("f1", "done"), makeFeature("f2", "pending")];
+			const plan = makePlan([makeMilestone("m1", features)]);
+			const state = makeState("executing", { totalFeaturesCompleted: 1 });
+			const lines = buildWidgetLines(state, plan);
+			const line = lines.join(" ");
+			expect(line).toContain("Running");
+			expect(line).not.toContain("completing");
+		});
 	});
 
 	describe("paused state (VAL-UI-001)", () => {

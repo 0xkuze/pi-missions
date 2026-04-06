@@ -70,21 +70,15 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 		parameters: Type.Object({
 			milestoneId: Type.String({ description: "ID of the milestone to validate" }),
 		}),
-		renderCall(
-			args: { milestoneId?: string },
-			theme: { fg: (...a: unknown[]) => string; bold: (t: string) => string },
-		) {
+		// why: pi Theme uses branded ThemeColor types; we accept `any` at this API boundary
+		renderCall(args: any, theme: any) {
 			return new Text(
 				theme.fg("toolTitle", theme.bold("run_validation ")) + theme.fg("accent", args.milestoneId || "..."),
 				0,
 				0,
 			);
 		},
-		renderResult(
-			result: { content?: Array<{ type: string; text: string }> },
-			{ expanded }: { expanded: boolean },
-			theme: { fg: (...a: unknown[]) => string },
-		) {
+		renderResult(result: any, { expanded }: any, theme: any) {
 			const text = result.content?.[0];
 			if (text?.type !== "text") return new Text("(no output)", 0, 0);
 			try {
@@ -93,18 +87,12 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 					summary?: string;
 					commands?: Array<{ exitCode?: number; label?: string }>;
 				};
-				const icon =
-					parsed.status === "pass"
-						? (theme.fg("success", "\u2713") as string)
-						: (theme.fg("error", "\u2717") as string);
+				const icon = parsed.status === "pass" ? theme.fg("success", "\u2713") : theme.fg("error", "\u2717");
 				const summary = parsed.summary || "Validation complete";
 				if (!expanded) return new Text(`${icon} ${summary}`, 0, 0);
 				const lines = [summary];
 				for (const cmd of parsed.commands || []) {
-					const cmdIcon =
-						cmd.exitCode === 0
-							? (theme.fg("success", "\u2713") as string)
-							: (theme.fg("error", "\u2717") as string);
+					const cmdIcon = cmd.exitCode === 0 ? theme.fg("success", "\u2713") : theme.fg("error", "\u2717");
 					lines.push(`  ${cmdIcon} ${cmd.label}: ${cmd.exitCode === 0 ? "passed" : "failed"}`);
 				}
 				return new Text(`${icon} ${lines.join("\n")}`, 0, 0);

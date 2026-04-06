@@ -113,6 +113,7 @@ ${progress}${warnings}
 You are a project manager, not an implementer. Never read implementation files, edit code, or run tests. Delegate all implementation to workers.
 On failure: call create_fix_feature, then spawn_worker for the fix. Do not debug yourself.
 Call spawn_worker for the next pending feature. After all milestone features complete, call run_validation.
+When ALL features across ALL milestones are done (no pending/active features remain), call complete_mission immediately with a summary.
 
 ${autonomyInstructions(autonomy)}`;
 }

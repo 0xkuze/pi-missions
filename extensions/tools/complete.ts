@@ -48,19 +48,14 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 				Type.Array(Type.String(), { description: "Any remaining notes or observations" }),
 			),
 		}),
-		renderCall(_args: unknown, theme: { fg: (...a: unknown[]) => string; bold: (t: string) => string }) {
+		// why: pi Theme uses branded ThemeColor types; we accept `any` at this API boundary
+		renderCall(_args: any, theme: any) {
 			return new Text(theme.fg("toolTitle", theme.bold("complete_mission")), 0, 0);
 		},
-		renderResult(
-			result: { content?: Array<{ type: string; text: string }> },
-			_options: unknown,
-			theme: { fg: (...a: unknown[]) => string },
-		) {
+		renderResult(result: any, _options: any, theme: any) {
 			const text = result.content?.[0];
 			const output = text?.type === "text" ? text.text : "(no output)";
-			const icon = output.includes("completed")
-				? (theme.fg("success", "\u2713") as string)
-				: (theme.fg("error", "\u2717") as string);
+			const icon = output.includes("completed") ? theme.fg("success", "\u2713") : theme.fg("error", "\u2717");
 			const firstLine = output.split("\n")[0];
 			return new Text(`${icon} ${firstLine}`, 0, 0);
 		},

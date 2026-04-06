@@ -10,7 +10,7 @@
 
 # pi-missions
 
-Factory AI Missions-inspired orchestration for [pi](https://github.com/nichochar/pi-coding-agent). Describe a goal, plan with AI, execute with isolated workers, ship with confidence.
+Structured orchestration for [pi](https://github.com/nichochar/pi-coding-agent), inspired by [Factory AI Missions](https://www.factory.ai/). Describe a goal, get a plan, execute with isolated workers, validate at every checkpoint.
 
 [Quickstart](#quickstart) · [Features](#features) · [How It Works](#how-it-works) · [Architecture](#architecture) · [Commands](#commands) · [Configuration](#configuration) · [FAQ](#faq)
 
@@ -57,35 +57,35 @@ P: Pause  R: Redirect  X: Reset  Esc: Close
 
 ## Features
 
-**Planning-First Workflow** — The orchestrator converses with you, analyzes your codebase, asks clarifying questions, and drafts a structured plan before writing any code.
+**Planning-first workflow** — The orchestrator reads your codebase, asks clarifying questions, and produces a structured plan before writing any code.
 
-**Structured Missions** — Goals are broken into milestones containing features, with validation checkpoints at every milestone boundary.
+**Structured missions** — Goals decompose into milestones containing features. Validation checkpoints run at every milestone boundary.
 
-**Isolated Workers** — Each feature is executed by a fresh pi process with clean context. No cross-contamination between tasks.
+**Isolated workers** — Each feature runs in a fresh pi process with clean context. No cross-contamination between tasks.
 
-**Automated Validation** — Typecheck, lint, test, and build commands run at milestone boundaries. Failures automatically generate fix features.
+**Automated validation** — Typecheck, lint, test, and build run at milestone boundaries. Failures generate fix features automatically.
 
-**Mission Control TUI** — A terminal overlay (`Ctrl+Shift+M`) for monitoring progress, pausing, resuming, redirecting, switching models, and viewing logs.
+**Mission Control TUI** — A terminal overlay (`Ctrl+Shift+M`) for monitoring progress, pausing, resuming, redirecting, switching models, and reading logs.
 
-**Self-Healing** — When workers fail or validation catches issues, the orchestrator creates fix features and retries automatically.
+**Self-healing execution** — When workers fail or validation catches regressions, the orchestrator creates targeted fix features and retries.
 
-**Crash-Safe Persistence** — All state lives on the filesystem under `.pi/missions/`. Survives session switches, crashes, and `/compact`. Resume exactly where you left off.
+**Crash-safe persistence** — All state lives on the filesystem under `.pi/missions/`. Survives session switches, crashes, and `/compact`. Resume exactly where you left off.
 
-**Git Safety** — Pre-mission snapshots, per-feature change tracking, selective staging (never `git add -A`), and dirty-repo awareness. Works without git too.
+**Git safety** — Pre-mission snapshots, per-feature change tracking, selective staging (never `git add -A`), and dirty-repo awareness. Works without git too.
 
-**Multi-Model Support** — Assign different models to orchestrator, worker, and validator roles. Switch models mid-mission from Mission Control.
+**Multi-model support** — Assign different models to orchestrator, worker, and validator roles. Switch models mid-mission from Mission Control.
 
-**Detailed Reporting** — Generates a report at mission completion: timings, outcomes, fix features, git commits, and deviations.
+**Completion reports** — Each mission produces a report with timings, outcomes, fix features, git commits, and deviations from the plan.
 
-**Full User Control** — Pause, resume, skip features, redirect the orchestrator, re-plan, or abort at any time.
+**Full user control** — Pause, resume, skip features, redirect the orchestrator, re-plan, or abort at any time.
 
-**Interactive Planning** — The ask questions tool presents structured questionnaires during planning so the AI gathers exactly the constraints it needs.
+**Interactive planning** — The `ask_questions` tool presents structured questionnaires so the AI gathers exact constraints upfront.
 
 ---
 
 ## How It Works
 
-pi-missions turns your pi session into a project manager backed by an engineering team of isolated workers:
+pi-missions turns your pi session into a project manager backed by an engineering team of isolated workers.
 
 ```
  You                    Orchestrator (main LLM)              Workers (isolated pi processes)
@@ -116,17 +116,17 @@ pi-missions turns your pi session into a project manager backed by an engineerin
 ### The Lifecycle
 
 1. **Plan** — You describe a goal. The orchestrator explores your codebase, asks questions, and drafts a plan with milestones and features.
-2. **Review** — You review the draft plan in a structured overlay. Approve it, or keep refining.
-3. **Execute** — The orchestrator spawns isolated worker processes one feature at a time. Each worker gets a generated skill and prompt scoped to its task.
-4. **Validate** — At milestone boundaries, validation commands (typecheck, lint, test, build) run automatically. Failures trigger fix features.
-5. **Complete** — A detailed report is generated with timings, outcomes, and git history.
+2. **Review** — You inspect the draft in a structured overlay. Approve it or keep refining.
+3. **Execute** — The orchestrator spawns isolated workers one feature at a time. Each worker gets a generated skill and prompt scoped to its task.
+4. **Validate** — At milestone boundaries, validation commands run automatically. Failures trigger fix features.
+5. **Complete** — A report is generated covering timings, outcomes, and git history.
 
 ---
 
 ## Quickstart
 
 ```bash
-# 1. Install pi-missions into your pi extensions
+# 1. Install pi-missions into your project
 cd your-project
 pi install pi-missions
 
@@ -150,7 +150,7 @@ The orchestrator handles the rest: spawning workers, committing changes, running
 
 - [pi](https://github.com/nichochar/pi-coding-agent) v0.65.0 or later
 - Node.js 18+
-- Git (optional, but recommended)
+- Git (optional but recommended)
 
 ### Install
 
@@ -166,7 +166,7 @@ cd pi-missions
 bun install
 ```
 
-Then symlink or copy the `extensions/` directory to your pi extensions path.
+Then symlink or copy `extensions/` to your pi extensions path.
 
 ---
 
@@ -174,7 +174,7 @@ Then symlink or copy the `extensions/` directory to your pi extensions path.
 
 ### State Machine
 
-Every mission follows a deterministic state machine. All transitions are triggered by explicit tool calls, never by regex parsing of LLM output.
+Every mission follows a deterministic state machine. All transitions are triggered by explicit tool calls, never by parsing LLM output.
 
 ```
                           ┌──────────────────────────────────────────┐
@@ -204,7 +204,7 @@ Every mission follows a deterministic state machine. All transitions are trigger
    Any state ──── unrecoverable ────> ✗ failed
 ```
 
-### Orchestrator to Worker Flow
+### Orchestrator-to-Worker Flow
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -341,7 +341,7 @@ extensions/
 |----------|--------|
 | `Ctrl+Shift+M` | Open Mission Control overlay |
 
-### Mission Control Keyboard Actions
+### Mission Control Actions
 
 | Key | Action |
 |-----|--------|
@@ -356,7 +356,7 @@ extensions/
 
 ## Configuration
 
-Mission configuration is stored in `.pi/missions/config.json`. All fields are optional with sensible defaults.
+Mission configuration lives in `.pi/missions/config.json`. All fields are optional with sensible defaults.
 
 ```jsonc
 {
@@ -397,7 +397,7 @@ Mission configuration is stored in `.pi/missions/config.json`. All fields are op
 
 ### Validation Discovery
 
-If no commands are configured, pi-missions auto-detects from your project:
+When no commands are configured, pi-missions auto-detects from your project:
 
 | Source | Detection |
 |--------|-----------|
@@ -405,7 +405,7 @@ If no commands are configured, pi-missions auto-detects from your project:
 | `Makefile` | Corresponding targets |
 | Ecosystem | `cargo test`, `go test ./...`, `pytest`, `bun test`, etc. |
 
-Commands always run in order: **typecheck → lint → test → build** (no fail-fast, all run).
+Commands run in order: typecheck, lint, test, build. No fail-fast — all run regardless of earlier results.
 
 ---
 
@@ -413,7 +413,7 @@ Commands always run in order: **typecheck → lint → test → build** (no fail
 
 ### Widget (Always Visible)
 
-The widget bar shows compact mission status at all times:
+A compact status bar visible throughout the mission:
 
 ```
 ● Running  ██████▓░░░  4/10 features  ·  Milestone: auth  ·  Feature: jwt-tokens
@@ -488,7 +488,7 @@ pi-missions replicates the core workflow of [Factory AI's Droid Missions](https:
 | **Runtime** | Cloud containers or local | Local only (pi processes) |
 | **Worker isolation** | Separate cloud sessions | Spawned pi processes (`--no-session`) |
 | **Planning** | Conversational, multi-turn | Conversational, multi-turn |
-| **Structured plans** | Milestones → features | Milestones → features |
+| **Structured plans** | Milestones / features | Milestones / features |
 | **Validation** | Commands + computer-use (visual QA) | Commands only (typecheck, lint, test, build) |
 | **Fix features** | Auto-generated on failure | Auto-generated on failure |
 | **Parallelism** | Targeted within milestones | Sequential (v1) |
@@ -526,7 +526,7 @@ pi-missions replicates the core workflow of [Factory AI's Droid Missions](https:
 <summary><strong>How is this different from just using pi normally?</strong></summary>
 <br>
 
-pi is a coding agent — it handles one task at a time in a single context. pi-missions adds orchestration on top: it breaks large goals into structured plans, executes each piece with isolated workers that have clean context, validates at checkpoints, auto-fixes failures, and tracks everything. Think of it as giving pi a project manager.
+pi handles one task at a time in a single context. pi-missions adds orchestration: it breaks large goals into structured plans, executes each piece with isolated workers that have clean context, validates at checkpoints, auto-fixes failures, and tracks everything. Think of it as giving pi a project manager.
 
 </details>
 
@@ -534,7 +534,7 @@ pi is a coding agent — it handles one task at a time in a single context. pi-m
 <summary><strong>Can I use different models for different parts of the mission?</strong></summary>
 <br>
 
-Yes. Configure `models.orchestrator` and `models.worker` in `.pi/missions/config.json`, or switch models live from the Mission Control overlay (`M` key). The orchestrator can also suggest models during planning.
+Yes. Set `models.orchestrator` and `models.worker` in `.pi/missions/config.json`, or switch models live from the Mission Control overlay (`M` key). The orchestrator can also suggest models during planning.
 
 </details>
 
@@ -542,7 +542,7 @@ Yes. Configure `models.orchestrator` and `models.worker` in `.pi/missions/config
 <summary><strong>What happens if a worker fails?</strong></summary>
 <br>
 
-The orchestrator receives the full `WorkerResult` including error details, changed files, and commands run. It can retry the feature (up to `maxRetries`, default 3), create a fix feature to address the specific issue, skip the feature, or ask you for guidance. Validation failures at milestone boundaries also trigger automatic fix feature creation.
+The orchestrator receives the full `WorkerResult` including error details, changed files, and commands run. It can retry the feature (up to `maxRetries`, default 3), create a fix feature targeting the specific issue, skip the feature, or ask for your guidance. Validation failures at milestone boundaries also trigger automatic fix feature creation.
 
 </details>
 
@@ -550,7 +550,7 @@ The orchestrator receives the full `WorkerResult` including error details, chang
 <summary><strong>Is my git history safe?</strong></summary>
 <br>
 
-Yes. pi-missions takes a pre-mission git snapshot, tracks per-feature file changes, and only stages files changed by each worker (never `git add -A`). If your repo is dirty before the mission starts, auto-commit is disabled by default. You can review changes before they are committed.
+Yes. pi-missions takes a pre-mission snapshot, tracks per-feature file changes, and only stages files changed by each worker — never `git add -A`. If your repo is dirty when the mission starts, auto-commit is disabled. You can review all changes before they are committed.
 
 </details>
 
@@ -558,7 +558,7 @@ Yes. pi-missions takes a pre-mission git snapshot, tracks per-feature file chang
 <summary><strong>Can I pause and resume a mission?</strong></summary>
 <br>
 
-Yes. Use `/mission-pause` or press `P` in Mission Control. The current worker completes (it is not killed), but no new workers spawn. Resume with `/mission-resume`. State persists to the filesystem, so you can close pi and resume in a new session.
+Yes. Use `/mission-pause` or press `P` in Mission Control. The current worker finishes (it is not killed), but no new workers spawn. Resume with `/mission-resume`. State persists to the filesystem, so you can close pi entirely and pick up in a new session.
 
 </details>
 
@@ -566,7 +566,7 @@ Yes. Use `/mission-pause` or press `P` in Mission Control. The current worker co
 <summary><strong>What if my session crashes mid-mission?</strong></summary>
 <br>
 
-All state lives on the filesystem under `.pi/missions/`. On the next session start, the extension detects the interrupted mission, reconciles any in-progress work (checking for completed results), and the orchestrator resumes from where it left off.
+All state lives on the filesystem under `.pi/missions/`. On the next session start, the extension detects the interrupted mission, reconciles any in-progress work by checking for completed results, and the orchestrator resumes from where it left off.
 
 </details>
 
@@ -574,7 +574,7 @@ All state lives on the filesystem under `.pi/missions/`. On the next session sta
 <summary><strong>Does it work without git?</strong></summary>
 <br>
 
-Yes. Git features degrade gracefully — validation, worker execution, and reporting all work without git. The `commit_changes` tool returns a skip message, and file change tracking uses filesystem-level summaries instead.
+Yes. Git features degrade gracefully. Validation, worker execution, and reporting all work without git. The `commit_changes` tool returns a skip message, and file change tracking falls back to filesystem-level summaries.
 
 </details>
 
@@ -582,7 +582,7 @@ Yes. Git features degrade gracefully — validation, worker execution, and repor
 
 ## Contributing
 
-Contributions welcome. pi-missions follows clear conventions to keep contributing straightforward.
+Contributions welcome. The project follows clear conventions.
 
 ### Development Setup
 
@@ -595,9 +595,9 @@ bun install
 ### Running Tests
 
 ```bash
-bun test                    # Run all tests
+bun test                    # All tests
 bun test --watch            # Watch mode
-bun test test/tools/        # Run specific directory
+bun test test/tools/        # Specific directory
 ```
 
 ### Linting and Formatting
@@ -615,18 +615,18 @@ npx tsc --noEmit
 
 ### Code Conventions
 
-- **TypeScript strict mode** — no implicit returns, no unused variables
-- **`interface`** for public API contracts, **`type`** for unions and aliases
-- **`import type`** for type-only imports, **`.js`** extensions on relative imports
-- **Zero comments** — if code needs explanation, refactor it
-- **Early returns** and guard clauses, no deep nesting
-- **Conventional commits** — `feat:`, `fix:`, `refactor:`, `test:`, `chore:`
+- TypeScript strict mode, no implicit returns, no unused variables
+- `interface` for public API contracts, `type` for unions and aliases
+- `import type` for type-only imports, `.js` extensions on relative imports
+- Zero comments — if code needs explanation, refactor it
+- Early returns and guard clauses, no deep nesting
+- Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `chore:`
 - Tests must pass before every commit
 
 ### Architecture Principles
 
-- All state transitions flow through explicit tool calls, not regex parsing of LLM output
-- Filesystem is the source of truth, session entries are a cache
+- State transitions flow through explicit tool calls, not regex parsing of LLM output
+- Filesystem is the source of truth; session entries are a cache
 - Workers never know about missions — they receive a task and execute it
 - The orchestrator LLM decides what to do; the extension provides the tools
 - Keep it simple or don't do it
@@ -635,4 +635,4 @@ npx tsc --noEmit
 
 ## License
 
-[MIT](LICENSE) © [0xkuze](https://github.com/0xkuze)
+[MIT](LICENSE)

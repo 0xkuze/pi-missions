@@ -317,7 +317,15 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 				updateWidget,
 				_spawnOverride: mockSpawn as never,
 			});
-			registerCommands(mockPi.pi, { basePath, updateWidget, clearWidget });
+			registerCommands(mockPi.pi, {
+				basePath,
+				updateWidget,
+				clearWidget,
+				isMissionModeActive: () => true,
+				setMissionModeActive: () => {},
+				onActivate: () => {},
+				onDeactivate: () => {},
+			});
 
 			const approvedState = makeState("approved");
 			saveState(basePath, approvedState);

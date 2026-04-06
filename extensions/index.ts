@@ -32,6 +32,17 @@ import { checkOrphanedWorker, killOrphanedWorker } from "./worker-pid.js";
 const SESSION_CACHE_KEY = "mission-state-cache";
 const TERMINAL_STATUSES = new Set(["completed", "failed", "aborted"]);
 
+function hasPendingFeatures(basePath: string): boolean {
+	const plan = loadPlan(basePath);
+	if (!plan) return false;
+	for (const milestone of plan.milestones) {
+		for (const feature of milestone.features) {
+			if (feature.status === "pending" || feature.status === "active") return true;
+		}
+	}
+	return false;
+}
+
 type RecoveryAction =
 	| { kind: "none" }
 	| { kind: "feature_done"; featureId: string }
@@ -415,8 +426,10 @@ export default function (pi: ExtensionAPI): void {
 		if (!missionModeActive) return;
 		const state = loadState(basePath);
 		if (!state) return;
-		const activeStatuses = new Set(["planning", "draft_review", "approved", "executing", "validating"]);
-		if (!activeStatuses.has(state.status)) return;
+		const pausableStatuses = new Set(["planning", "draft_review", "approved", "validating"]);
+		const shouldPause =
+			pausableStatuses.has(state.status) || (state.status === "executing" && hasPendingFeatures(basePath));
+		if (!shouldPause) return;
 		try {
 			const newState = transitionState(state, "paused");
 			saveState(basePath, newState);
@@ -609,8 +622,10 @@ export default function (pi: ExtensionAPI): void {
 	function deactivateMissionMode(): void {
 		const state = loadState(basePath);
 		if (state) {
-			const activeStatuses = new Set(["planning", "draft_review", "approved", "executing", "validating"]);
-			if (activeStatuses.has(state.status)) {
+			const pausableStatuses = new Set(["planning", "draft_review", "approved", "validating"]);
+			const shouldPause =
+				pausableStatuses.has(state.status) || (state.status === "executing" && hasPendingFeatures(basePath));
+			if (shouldPause) {
 				try {
 					const newState = transitionState(state, "paused");
 					saveState(basePath, newState);

@@ -335,6 +335,11 @@ describe("buildOrchestratorProtocol", () => {
 			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result).toContain("create_fix_feature");
 		});
+
+		it("instructs to call complete_mission when all features are done", () => {
+			const result = buildOrchestratorProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result).toContain("complete_mission");
+		});
 	});
 
 	describe("validating state (VAL-PROTO-007)", () => {

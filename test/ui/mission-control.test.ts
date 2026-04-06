@@ -1402,7 +1402,7 @@ describe("MissionControlComponent mouse scroll", () => {
 			currentFeatureId: "f0",
 			progressLog: events,
 		});
-		const deps = makeDeps(tmpDir, { state, plan });
+		const deps = makeDeps(tmpDir, { loadState: () => state, loadPlan: () => plan });
 		const renderFn = mock(() => {});
 		const tui = makeTUI({ requestRender: renderFn });
 		const component = new MissionControlComponent(tui, () => {}, deps);

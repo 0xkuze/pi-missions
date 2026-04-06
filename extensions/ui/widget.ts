@@ -177,6 +177,17 @@ export function buildWidgetLines(
 				return [`${theme.bold(theme.fg("success", "\u25cf Running"))}${hint(theme)}`];
 			}
 			const { done, total, hasActive } = countProgress(state, plan);
+			const allDone = total > 0 && done >= total && !hasActive;
+			if (allDone) {
+				if (!theme) {
+					const bar = DONE_CHAR.repeat(barWidth);
+					return [formatProgressLine("\u2713 Done", bar, total, total, "completing...")];
+				}
+				const prefix = theme.bold(theme.fg("success", "\u2713 Done"));
+				const bar = theme.fg("success", DONE_CHAR.repeat(barWidth));
+				const body = theme.fg("success", "completing...");
+				return [buildStyledLine(prefix, bar, total, total, body, theme)];
+			}
 			const milestoneName = findCurrentMilestoneName(state, plan);
 			const featureName = findCurrentFeatureName(state, plan);
 			if (!theme) {
