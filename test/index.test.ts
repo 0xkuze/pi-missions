@@ -6,10 +6,10 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 // Import the default export directly
 import setup from "../extensions/index.js";
 import { acquireLock, isLocked } from "../extensions/state/lock.js";
-import { saveState } from "../extensions/state/manager.js";
+import { savePlan, saveState } from "../extensions/state/manager.js";
 import type { ActiveSession, MissionState } from "../extensions/types.js";
 import { nowISO } from "../extensions/utils.js";
-import { makeState as _ss } from "./helpers/index.js";
+import { makePlan as _sp, makeState as _ss } from "./helpers/index.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -179,16 +179,9 @@ describe("extension entry point (index.ts)", () => {
 			expect(tools.has("complete_mission")).toBe(true);
 		});
 
-		it("registers all slash commands", () => {
+		it("registers mission-mode command", () => {
 			const { commands } = registerExtension(tmpDir);
-			expect(commands.has("mission")).toBe(true);
-			expect(commands.has("mission-approve")).toBe(true);
-			expect(commands.has("mission-pause")).toBe(true);
-			expect(commands.has("mission-resume")).toBe(true);
-			expect(commands.has("mission-skip")).toBe(true);
-			expect(commands.has("mission-reset")).toBe(true);
-			expect(commands.has("mission-status")).toBe(true);
-			expect(commands.has("mission-plan")).toBe(true);
+			expect(commands.has("mission-mode")).toBe(true);
 		});
 
 		it("registers Ctrl+Shift+M shortcut", () => {
@@ -361,6 +354,7 @@ describe("extension entry point (index.ts)", () => {
 			const event = { type: "before_agent_start", prompt: "do stuff", systemPrompt: originalPrompt };
 
 			const { handlers } = registerExtension(tmpDir);
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
 			const handler = handlers.get("before_agent_start")!;
 			const result = handler(event, ctx) as { systemPrompt: string } | undefined;
 
@@ -378,6 +372,7 @@ describe("extension entry point (index.ts)", () => {
 			const event = { type: "before_agent_start", prompt: "", systemPrompt: originalPrompt };
 
 			const { handlers } = registerExtension(tmpDir);
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
 			const handler = handlers.get("before_agent_start")!;
 			const result = handler(event, ctx) as { systemPrompt: string } | undefined;
 
@@ -386,6 +381,7 @@ describe("extension entry point (index.ts)", () => {
 		});
 
 		it("injects non-empty protocol for all active states", () => {
+			const needsPlan = new Set(["draft_review", "approved"]);
 			const testStates: MissionState[] = [
 				makePlanningState(),
 				{ ...makePlanningState(), status: "draft_review" },
@@ -397,11 +393,15 @@ describe("extension entry point (index.ts)", () => {
 
 			for (const state of testStates) {
 				saveState(basePath, state);
+				if (needsPlan.has(state.status)) {
+					savePlan(basePath, _sp());
+				}
 
 				const ctx = buildMockCtx([]);
 				const event = { type: "before_agent_start", prompt: "", systemPrompt: "" };
 
 				const { handlers } = registerExtension(tmpDir);
+				handlers.get("session_start")!({ type: "session_start" }, ctx);
 				const handler = handlers.get("before_agent_start")!;
 				const result = handler(event, ctx) as { systemPrompt: string } | undefined;
 
@@ -437,6 +437,8 @@ describe("extension entry point (index.ts)", () => {
 
 			const ctx = buildMockCtx([]);
 			const { handlers } = registerExtension(tmpDir);
+			// session_start auto-activates mission mode
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
 			const handler = handlers.get("session_shutdown")!;
 			handler({ type: "session_shutdown" }, ctx);
 
@@ -469,11 +471,14 @@ describe("extension entry point (index.ts)", () => {
 
 			const ctx = buildMockCtx([]);
 			const { handlers, appendedEntries } = registerExtension(tmpDir);
+			// session_start auto-activates mission mode
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
+			const preCompactCount = appendedEntries.filter((e) => e.type === "mission-state-cache").length;
 			const handler = handlers.get("session_compact")!;
 			handler({ type: "session_compact", compactionEntry: {}, fromExtension: false }, ctx);
 
 			const cacheEntries = appendedEntries.filter((e) => e.type === "mission-state-cache");
-			expect(cacheEntries.length).toBeGreaterThan(0);
+			expect(cacheEntries.length).toBeGreaterThan(preCompactCount);
 			expect(cacheEntries[cacheEntries.length - 1].data).not.toBeNull();
 		});
 
@@ -497,15 +502,18 @@ describe("extension entry point (index.ts)", () => {
 			const ctx = buildMockCtx([]);
 			const { handlers, appendedEntries } = registerExtension(tmpDir);
 
+			// session_start auto-activates mission mode
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
+			const preCompactCount = appendedEntries.filter((e) => e.type === "mission-state-cache").length;
+
 			// Simulate /compact
 			const compactHandler = handlers.get("session_compact")!;
 			compactHandler({ type: "session_compact", compactionEntry: {}, fromExtension: false }, ctx);
 
 			const cacheEntries = appendedEntries.filter((e) => e.type === "mission-state-cache");
-			expect(cacheEntries.length).toBeGreaterThan(0);
+			expect(cacheEntries.length).toBeGreaterThan(preCompactCount);
 			const lastEntry = cacheEntries[cacheEntries.length - 1];
 			expect(lastEntry.data).not.toBeNull();
-			// The cached data should be the current state
 			const cached = lastEntry.data as MissionState;
 			expect(cached.status).toBe("planning");
 		});

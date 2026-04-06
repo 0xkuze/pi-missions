@@ -11,6 +11,7 @@ export function renderPlanningSetupView(
 	width: number,
 	style: FrameStyle | undefined,
 	height: number,
+	scrollOffset = 0,
 ): string[] {
 	const contentWidth = width - 4;
 	const tf = style?.textFn ?? ((t: string) => t);
@@ -41,7 +42,7 @@ export function renderPlanningSetupView(
 	const panelHeight = Math.max(5, height - 7);
 	return [
 		titleBar("Mission Setup", width, style),
-		...panel("Setup", lines, width, panelHeight, 0, style),
+		...panel("Setup", lines, width, panelHeight, scrollOffset, style),
 		...footerBar("Esc: close", width, style),
 	];
 }

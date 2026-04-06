@@ -2,6 +2,7 @@ import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
 import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
 import { saveConfig, savePlan, saveState } from "../state/manager.js";
 import { appendMutation, readHistory } from "../state/plan-history.js";
+import type { MissionRegistryEntry } from "../state/registry.js";
 import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionConfig, MissionPlan, MissionState, PlanMutation, ProgressEvent } from "../types.js";
 import { nowISO } from "../utils.js";
@@ -22,6 +23,12 @@ import {
 	titleBar,
 	wrapText,
 } from "./frame.js";
+import {
+	handleMissionListKey,
+	initialMissionListState,
+	type MissionListState,
+	renderMissionList,
+} from "./mission-list.js";
 import { handlePlanHistoryKey, renderPlanHistoryView } from "./plan-history.js";
 import { handlePlanningSetupKey, renderPlanningSetupView } from "./planning-setup.js";
 import { handleProgressLogKey, renderProgressLog as renderProgressLogStandalone } from "./progress-log.js";
@@ -349,6 +356,7 @@ export type OverlayAction =
 	| { kind: "skip" }
 	| { kind: "done" }
 	| { kind: "redirect" }
+	| { kind: "reset" }
 	| { kind: "open_model_view" }
 	| { kind: "open_validation_view" }
 	| { kind: "open_logs_view" }
@@ -356,6 +364,7 @@ export type OverlayAction =
 	| { kind: "warn"; message: string }
 	| { kind: "noop" };
 
+const TERMINAL_STATUSES = new Set(["completed", "failed", "aborted"]);
 const PAUSABLE_STATUSES = new Set(["planning", "draft_review", "approved", "executing", "validating"]);
 const ACTIVE_STATUSES = new Set(["planning", "draft_review", "approved", "executing", "validating", "paused"]);
 
@@ -425,6 +434,13 @@ export function handleKeyboardAction(key: string, state: MissionState | null): O
 		return { kind: "open_history_view" };
 	}
 
+	if (upper === "X") {
+		if (!state) {
+			return { kind: "warn", message: "X: No mission to reset." };
+		}
+		return { kind: "reset" };
+	}
+
 	return { kind: "noop" };
 }
 
@@ -455,7 +471,7 @@ export type SubView =
 	| { kind: "report" };
 
 export function resolveStateView(state: MissionState, plan: MissionPlan | null): SubView | null {
-	if (state.status === "completed") return { kind: "report" };
+	if (TERMINAL_STATUSES.has(state.status)) return null;
 	if (state.status === "draft_review") return { kind: "draft_review" };
 	if (state.status === "planning") return { kind: "planning" };
 
@@ -477,16 +493,21 @@ export function resolveStateView(state: MissionState, plan: MissionPlan | null):
 
 export interface MissionControlDeps {
 	basePath: string;
+	projectPath: string;
 	loadState: (basePath: string) => MissionState | null;
 	loadPlan: (basePath: string) => MissionPlan | null;
 	loadConfig: (basePath: string) => MissionConfig;
 	sendUserMessage: (content: string) => void;
 	getInput: (title: string, placeholder?: string) => Promise<string | undefined>;
+	confirm: (title: string, message: string) => Promise<boolean>;
 	notify: (message: string, type?: "info" | "warning" | "error") => void;
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
 	availableModels: string[];
 	openFile: (path: string) => void;
 	setModel: (modelId: string) => Promise<void>;
+	resetMission: () => void;
+	loadRegistry: () => MissionRegistryEntry[];
+	startNewMission: (description: string) => void;
 }
 
 export class MissionControlComponent implements Component, Focusable {
@@ -496,7 +517,10 @@ export class MissionControlComponent implements Component, Focusable {
 	private config: MissionConfig;
 	private planHistory: PlanMutation[];
 	private currentSubView: SubView | null = null;
+	private subViewScrollOffset = 0;
 	private modelViewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
+	private missionListState: MissionListState = initialMissionListState();
+	private registryEntries: MissionRegistryEntry[] = [];
 	private pollInterval: ReturnType<typeof setInterval> | null = null;
 	private style: FrameStyle | undefined;
 	private theme:
@@ -513,7 +537,7 @@ export class MissionControlComponent implements Component, Focusable {
 
 	constructor(
 		private tui: TUI,
-		private done: () => void,
+		private done: (result?: string) => void,
 		private deps: MissionControlDeps,
 		// why: pi Theme uses branded union types for color parameters; we accept `any` at this boundary
 		theme?: { fg: (...args: any[]) => string; bg: (...args: any[]) => string; bold: (text: string) => string },
@@ -523,9 +547,9 @@ export class MissionControlComponent implements Component, Focusable {
 		this.plan = deps.loadPlan(deps.basePath);
 		this.config = deps.loadConfig(deps.basePath);
 		this.planHistory = readHistory(deps.basePath);
+		this.registryEntries = deps.loadRegistry();
 		this.pollInterval = setInterval(() => this.poll(), POLL_INTERVAL_MS);
 		this.style = theme ? themeFrameStyle(theme) : undefined;
-		this.enableMouse();
 	}
 
 	private poll(): void {
@@ -558,16 +582,19 @@ export class MissionControlComponent implements Component, Focusable {
 		}
 	}
 
+	private isShowingMissionList(): boolean {
+		return !this.state || TERMINAL_STATUSES.has(this.state.status);
+	}
+
 	handleInput(data: string): void {
-		const activeView = this.resolveActiveView();
-		if (activeView !== null) {
-			this.handleSubViewInput(data, activeView);
+		if (this.isShowingMissionList()) {
+			this.handleMissionListInput(data);
 			return;
 		}
 
-		if (this.handleMouseScroll(data)) {
-			this.version++;
-			this.tui.requestRender();
+		const activeView = this.resolveActiveView();
+		if (activeView !== null) {
+			this.handleSubViewInput(data, activeView);
 			return;
 		}
 
@@ -612,41 +639,6 @@ export class MissionControlComponent implements Component, Focusable {
 		}
 	}
 
-	private handleMouseScroll(data: string): boolean {
-		const match = data.match(/^\x1b\[<(\d+);(\d+);(\d+)[Mm]$/);
-		if (!match) return false;
-		const button = parseInt(match[1]!, 10);
-		if (button !== 64 && button !== 65) return false;
-		const col = parseInt(match[2]!, 10);
-		const row = parseInt(match[3]!, 10);
-		const delta = button === 64 ? -3 : 3;
-
-		const leftWidth = Math.floor(this.tui.terminal.columns * 0.4);
-		const headerRows = 3;
-		const termRows = this.tui.terminal.rows;
-		const footerRows = 3;
-		const availablePanelRows = Math.max(5, termRows - footerRows - headerRows - 2);
-		const rightTopHeight = Math.floor(availablePanelRows * 0.45);
-		const rightTopEnd = headerRows + rightTopHeight;
-
-		if (col <= leftWidth) {
-			this.leftScrollOffset = Math.max(0, this.leftScrollOffset + delta);
-		} else if (row > rightTopEnd) {
-			this.rightBottomScrollOffset = Math.max(0, this.rightBottomScrollOffset + delta);
-		} else {
-			this.rightTopScrollOffset = Math.max(0, this.rightTopScrollOffset + delta);
-		}
-		return true;
-	}
-
-	private enableMouse(): void {
-		this.tui.terminal.write("\x1b[?1000h\x1b[?1006h");
-	}
-
-	private disableMouse(): void {
-		this.tui.terminal.write("\x1b[?1000l\x1b[?1006l");
-	}
-
 	private handleScroll(data: string): boolean {
 		if (matchesKey(data, "up")) {
 			this.applyScrollToActivePane(-1);
@@ -662,6 +654,26 @@ export class MissionControlComponent implements Component, Focusable {
 		}
 		if (matchesKey(data, "pageDown")) {
 			this.applyScrollToActivePane(5);
+			return true;
+		}
+		return false;
+	}
+
+	private handleSubViewScroll(data: string): boolean {
+		if (matchesKey(data, "up")) {
+			this.subViewScrollOffset = Math.max(0, this.subViewScrollOffset - 1);
+			return true;
+		}
+		if (matchesKey(data, "down")) {
+			this.subViewScrollOffset++;
+			return true;
+		}
+		if (matchesKey(data, "pageUp")) {
+			this.subViewScrollOffset = Math.max(0, this.subViewScrollOffset - 10);
+			return true;
+		}
+		if (matchesKey(data, "pageDown")) {
+			this.subViewScrollOffset += 10;
 			return true;
 		}
 		return false;
@@ -690,43 +702,26 @@ export class MissionControlComponent implements Component, Focusable {
 				this.tui.requestRender();
 				return;
 			}
-			case "validation": {
-				const action = handleValidationViewKey(data);
-				if (action.kind === "close") {
-					this.currentSubView = null;
-					this.leftScrollOffset = 0;
-					this.rightTopScrollOffset = 0;
-					this.rightBottomScrollOffset = 0;
-					this.tui.requestRender();
-				}
-				return;
-			}
-			case "logs": {
-				const action = handleProgressLogKey(data);
-				if (action.kind === "close") {
-					this.currentSubView = null;
-					this.leftScrollOffset = 0;
-					this.rightTopScrollOffset = 0;
-					this.rightBottomScrollOffset = 0;
-					this.tui.requestRender();
-				}
-				return;
-			}
-			case "history": {
-				const action = handlePlanHistoryKey(data);
-				if (action.kind === "close") {
-					this.currentSubView = null;
-					this.leftScrollOffset = 0;
-					this.rightTopScrollOffset = 0;
-					this.rightBottomScrollOffset = 0;
-					this.tui.requestRender();
-				}
-				return;
-			}
+			case "validation":
+			case "logs":
+			case "history":
 			case "planning": {
-				const action = handlePlanningSetupKey(data);
-				if (action.kind === "close") {
-					this.done();
+				if (this.handleSubViewScroll(data)) {
+					this.version++;
+					this.tui.requestRender();
+					return;
+				}
+				if (matchesKey(data, "escape")) {
+					if (subView.kind === "planning") {
+						this.done();
+					} else {
+						this.currentSubView = null;
+						this.subViewScrollOffset = 0;
+						this.leftScrollOffset = 0;
+						this.rightTopScrollOffset = 0;
+						this.rightBottomScrollOffset = 0;
+						this.tui.requestRender();
+					}
 				}
 				return;
 			}
@@ -777,6 +772,11 @@ export class MissionControlComponent implements Component, Focusable {
 				return;
 			}
 			case "blocked": {
+				if (this.handleSubViewScroll(data)) {
+					this.version++;
+					this.tui.requestRender();
+					return;
+				}
 				const action = handleBlockedViewKey(data);
 				if (action.kind === "close") {
 					this.done();
@@ -791,6 +791,11 @@ export class MissionControlComponent implements Component, Focusable {
 				return;
 			}
 			case "report": {
+				if (this.handleSubViewScroll(data)) {
+					this.version++;
+					this.tui.requestRender();
+					return;
+				}
 				const action = handleReportViewKey(data);
 				if (action.kind === "close") {
 					this.done();
@@ -828,34 +833,29 @@ export class MissionControlComponent implements Component, Focusable {
 			case "redirect":
 				this.applyRedirect();
 				return;
+			case "reset":
+				this.applyReset();
+				return;
 			case "open_model_view":
 				this.modelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 				this.currentSubView = { kind: "model" };
-				this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+				this.subViewScrollOffset = 0;
 				this.tui.requestRender();
 				return;
 			case "open_validation_view":
 				this.currentSubView = { kind: "validation" };
-				this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+				this.subViewScrollOffset = 0;
 				this.tui.requestRender();
 				return;
 			case "open_logs_view":
 				this.currentSubView = { kind: "logs" };
-				this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+				this.subViewScrollOffset = 0;
 				this.tui.requestRender();
 				return;
 			case "open_history_view":
 				this.planHistory = readHistory(this.deps.basePath);
 				this.currentSubView = { kind: "history" };
-				this.leftScrollOffset = 0;
-				this.rightTopScrollOffset = 0;
-				this.rightBottomScrollOffset = 0;
+				this.subViewScrollOffset = 0;
 				this.tui.requestRender();
 				return;
 		}
@@ -975,6 +975,40 @@ export class MissionControlComponent implements Component, Focusable {
 		});
 	}
 
+	private applyReset(): void {
+		this.deps
+			.confirm("Reset Mission", "This will permanently remove all mission state and files. Are you sure?")
+			.then((confirmed) => {
+				if (!confirmed) return;
+				this.deps.resetMission();
+				this.state = null;
+				this.plan = null;
+				this.registryEntries = this.deps.loadRegistry();
+				this.missionListState = initialMissionListState();
+				this.version++;
+				this.tui.requestRender();
+			});
+	}
+
+	private handleMissionListInput(data: string): void {
+		const filtered = this.registryEntries;
+		const { action, nextState } = handleMissionListKey(data, this.missionListState, filtered.length);
+		this.missionListState = nextState;
+
+		switch (action.kind) {
+			case "close":
+				this.done();
+				return;
+			case "new_mission":
+				this.done("new_mission");
+				return;
+			case "noop":
+				this.version++;
+				this.tui.requestRender();
+				return;
+		}
+	}
+
 	private resolveActiveView(): SubView | null {
 		if (this.currentSubView !== null) return this.currentSubView;
 		if (!this.state) return null;
@@ -985,15 +1019,16 @@ export class MissionControlComponent implements Component, Focusable {
 		const state = this.state;
 		const plan = this.plan;
 
-		if (!state) {
-			const mf = this.style?.mutedFn ?? ((t: string) => t);
-			const emptyLines = [
-				"No active mission.",
-				"",
-				mf("Start a new mission by telling the orchestrator your goal."),
-				mf("The LLM will analyze your codebase and draft a plan."),
-			];
-			return frame("Mission Control", emptyLines, width, "Esc: Close", this.style);
+		if (!state || TERMINAL_STATUSES.has(state.status)) {
+			const height = this.tui.terminal.rows - 5;
+			return renderMissionList(
+				this.registryEntries,
+				this.deps.projectPath,
+				this.missionListState,
+				width,
+				height,
+				this.style,
+			);
 		}
 
 		const activeView = this.resolveActiveView();
@@ -1039,15 +1074,23 @@ export class MissionControlComponent implements Component, Focusable {
 					label: cmd,
 					status: "pending" as const,
 				}));
-				return renderValidationView(milestoneName, commands, false, width, this.style, height);
+				return renderValidationView(
+					milestoneName,
+					commands,
+					false,
+					width,
+					this.style,
+					height,
+					this.subViewScrollOffset,
+				);
 			}
 			case "logs":
-				return renderProgressLogStandalone(state.progressLog, width, this.style, height);
+				return renderProgressLogStandalone(state.progressLog, width, this.style, height, this.subViewScrollOffset);
 			case "history":
-				return renderPlanHistoryView(this.planHistory, width, this.style, height);
+				return renderPlanHistoryView(this.planHistory, width, this.style, height, this.subViewScrollOffset);
 			case "planning": {
 				const goal = plan?.description;
-				return renderPlanningSetupView(state, goal, width, this.style, height);
+				return renderPlanningSetupView(state, goal, width, this.style, height, this.subViewScrollOffset);
 			}
 			case "draft_review":
 				if (!plan) return ["No plan to review.", "", "Esc: close"];
@@ -1059,11 +1102,19 @@ export class MissionControlComponent implements Component, Focusable {
 				const lastFailure: LastFailureDetails | undefined = lastAttempt
 					? { errorMessage: `Exit code: ${lastAttempt.exitCode ?? "unknown"}` }
 					: undefined;
-				return renderBlockedView(feature, 3, lastFailure, width, this.style, height);
+				return renderBlockedView(feature, 3, lastFailure, width, this.style, height, this.subViewScrollOffset);
 			}
 			case "report":
 				if (!plan) return ["No report available.", "", "Esc: close"];
-				return renderReportView(state, plan, this.deps.basePath, width, this.style, height);
+				return renderReportView(
+					state,
+					plan,
+					this.deps.basePath,
+					width,
+					this.style,
+					height,
+					this.subViewScrollOffset,
+				);
 		}
 	}
 
@@ -1302,7 +1353,7 @@ export class MissionControlComponent implements Component, Focusable {
 			output.push(`${leftPadded}${leftPad > 0 ? " ".repeat(leftPad) : ""}${truncateToWidth(right, rightWidth)}`);
 		}
 
-		const shortcuts = "P: Pause  S: Skip  D: Done  R: Redirect  M: Models  L: Logs  H: History  Esc: Close";
+		const shortcuts = "P: Pause  R: Redirect  X: Reset  Esc: Close";
 		for (const line of footerBar(shortcuts, width, this.style)) {
 			output.push(line);
 		}
@@ -1318,7 +1369,6 @@ export class MissionControlComponent implements Component, Focusable {
 	}
 
 	dispose(): void {
-		this.disableMouse();
 		if (this.pollInterval !== null) {
 			clearInterval(this.pollInterval);
 			this.pollInterval = null;

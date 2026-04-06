@@ -593,9 +593,31 @@ describe("handleKeyboardAction (VAL-UI-006)", () => {
 		});
 	});
 
+	describe("reset (X key)", () => {
+		it("returns reset when state exists", () => {
+			const action = handleKeyboardAction("x", makeState("executing"));
+			expect(action.kind).toBe("reset");
+		});
+
+		it("returns reset for uppercase X", () => {
+			const action = handleKeyboardAction("X", makeState("executing"));
+			expect(action.kind).toBe("reset");
+		});
+
+		it("returns warn when no state", () => {
+			const action = handleKeyboardAction("x", null);
+			expect(action.kind).toBe("warn");
+		});
+
+		it("returns reset for completed state", () => {
+			const action = handleKeyboardAction("x", makeState("completed"));
+			expect(action.kind).toBe("reset");
+		});
+	});
+
 	describe("unknown keys", () => {
 		it("returns noop for unknown key", () => {
-			const action = handleKeyboardAction("x", makeState("executing"));
+			const action = handleKeyboardAction("z", makeState("executing"));
 			expect(action.kind).toBe("noop");
 		});
 
@@ -608,11 +630,10 @@ describe("handleKeyboardAction (VAL-UI-006)", () => {
 
 describe("resolveStateView (VAL-WIRE-001..006)", () => {
 	describe("state-triggered views", () => {
-		it("returns report view when mission is completed (VAL-WIRE-006)", () => {
+		it("returns null for completed state (mission list shown instead)", () => {
 			const state = makeState("completed");
 			const view = resolveStateView(state, null);
-			expect(view).not.toBeNull();
-			expect(view?.kind).toBe("report");
+			expect(view).toBeNull();
 		});
 
 		it("returns draft_review view when in draft_review state (VAL-WIRE-004)", () => {
@@ -672,12 +693,12 @@ describe("resolveStateView (VAL-WIRE-001..006)", () => {
 			expect(view).toBeNull();
 		});
 
-		it("completed takes priority over blocked feature", () => {
+		it("completed returns null (mission list shown, not blocked view)", () => {
 			const feature = makeFeature("f1", "failed");
 			const plan = makePlan([makeMilestone("m1", [feature])]);
 			const state = makeState("completed", { currentFeatureId: "f1" });
 			const view = resolveStateView(state, plan);
-			expect(view?.kind).toBe("report");
+			expect(view).toBeNull();
 		});
 	});
 
@@ -743,16 +764,21 @@ function makeDeps(tmpDir: string, overrides: Partial<MissionControlDeps> = {}): 
 	const defaultConfig: MissionConfig = {};
 	return {
 		basePath: tmpDir,
+		projectPath: tmpDir,
 		loadState: () => makeState("executing"),
 		loadPlan: () => null,
 		loadConfig: () => defaultConfig,
 		sendUserMessage: () => {},
 		getInput: async () => undefined,
+		confirm: async () => true,
 		notify: () => {},
 		updateWidget: () => {},
 		availableModels: ["claude-opus", "claude-sonnet"],
 		openFile: () => {},
 		setModel: async () => {},
+		resetMission: () => {},
+		loadRegistry: () => [],
+		startNewMission: () => {},
 		...overrides,
 	};
 }
@@ -933,7 +959,7 @@ describe("MissionControlComponent main overlay frame wrapping", () => {
 
 			expect(text).toContain("Esc: Close");
 			expect(text).toContain("P: Pause");
-			expect(text).toContain("S: Skip");
+			expect(text).toContain("R: Redirect");
 
 			expect(text).toContain("Current Feature");
 			expect(text).toContain("Features");
@@ -1285,83 +1311,8 @@ describe("MissionControlComponent title/status background", () => {
 	});
 });
 
-describe("MissionControlComponent mouse scroll uses row position", () => {
-	it("scrolls right-bottom panel when mouse is below right-top panel boundary", () => {
-		const tmpDir = join(tmpdir(), `mc-mouse-row-${Date.now()}`);
-		mkdirSync(tmpDir, { recursive: true });
-		try {
-			const features: Feature[] = [];
-			for (let i = 0; i < 20; i++) {
-				features.push(makeFeature(`f${i}`, i === 0 ? "active" : "pending", `feature-${i}`));
-			}
-			const plan = makePlan([makeMilestone("m1", features, "active")]);
-			const events: ProgressEvent[] = [];
-			for (let i = 0; i < 30; i++) {
-				events.push(makeEvent("feature_start", `event-${i}`, i * 10_000));
-			}
-			const state = makeState("executing", {
-				currentMilestoneId: "m1",
-				currentFeatureId: "f0",
-				progressLog: events,
-			});
-
-			const deps = makeDeps(tmpDir, {
-				loadState: () => state,
-				loadPlan: () => plan,
-			});
-
-			const tui = makeTUI(25);
-			const component = new MissionControlComponent(tui, () => {}, deps);
-
-			const linesBefore = component.render(120);
-
-			const rightCol = 60;
-			const bottomRow = 18;
-			component.handleInput(`\x1b[<65;${rightCol};${bottomRow}M`);
-			const linesAfter = component.render(120);
-
-			expect(linesAfter).not.toEqual(linesBefore);
-		} finally {
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-
-	it("scrolls right-top panel when mouse is in upper right area", () => {
-		const tmpDir = join(tmpdir(), `mc-mouse-row-top-${Date.now()}`);
-		mkdirSync(tmpDir, { recursive: true });
-		try {
-			const features: Feature[] = [];
-			for (let i = 0; i < 20; i++) {
-				features.push(makeFeature(`f${i}`, i === 0 ? "active" : "pending", `feature-${i}`));
-			}
-			const plan = makePlan([makeMilestone("m1", features, "active")]);
-			const state = makeState("executing", {
-				currentMilestoneId: "m1",
-				currentFeatureId: "f0",
-				progressLog: [makeEvent("feature_start", "started", 60_000)],
-			});
-
-			const deps = makeDeps(tmpDir, {
-				loadState: () => state,
-				loadPlan: () => plan,
-			});
-
-			const tui = makeTUI(40);
-			const component = new MissionControlComponent(tui, () => {}, deps);
-
-			const linesBefore = component.render(120);
-
-			const rightCol = 60;
-			const topRow = 5;
-			component.handleInput(`\x1b[<65;${rightCol};${topRow}M`);
-			const linesAfter = component.render(120);
-
-			expect(linesAfter).not.toEqual(linesBefore);
-		} finally {
-			rmSync(tmpDir, { recursive: true, force: true });
-		}
-	});
-});
+// Mouse scroll removed — terminal mouse tracking interferes with ESC key detection.
+// Scroll via keyboard: ↑↓ arrows, PgUp/PgDn, Tab between panes.
 
 describe("MissionControlComponent footer no ellipsis", () => {
 	it("footer does not contain ellipsis when shortcuts are truncated", () => {

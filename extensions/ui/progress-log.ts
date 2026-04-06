@@ -48,6 +48,7 @@ export function renderProgressLog(
 	width: number,
 	style: FrameStyle | undefined,
 	height: number,
+	scrollOffset = 0,
 ): string[] {
 	const mf = style?.mutedFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);
@@ -57,7 +58,7 @@ export function renderProgressLog(
 	if (progressLog.length === 0) {
 		return [
 			titleBar("Progress Log", width, style),
-			...panel("Events", [mf("(no events yet)")], width, panelHeight, 0, style),
+			...panel("Events", [mf("(no events yet)")], width, panelHeight, scrollOffset, style),
 			...footerBar("Esc: close", width, style),
 		];
 	}
@@ -73,7 +74,7 @@ export function renderProgressLog(
 
 	return [
 		titleBar("Progress Log", width, style),
-		...panel("Events", lines, width, panelHeight, 0, style),
+		...panel("Events", lines, width, panelHeight, scrollOffset, style),
 		...footerBar("Esc: close", width, style),
 	];
 }

@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { exec } from "node:child_process";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Container, Text } from "@mariozechner/pi-tui";
@@ -8,6 +9,7 @@ import { buildOrchestratorProtocol } from "./orchestrator/protocol.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
 import { loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
 import { appendMutation } from "./state/plan-history.js";
+import { loadRegistry, removeFromRegistry, updateRegistry } from "./state/registry.js";
 import { transitionState } from "./state/transitions.js";
 import { type Question, type QuestionAnswer, registerAskQuestionsTool } from "./tools/ask-questions.js";
 import { registerCommitChangesTool } from "./tools/commit-changes.js";
@@ -23,7 +25,7 @@ import { MissionControlComponent } from "./ui/mission-control.js";
 import { QuestionsOverlayComponent } from "./ui/questions-overlay.js";
 import type { ThemeStyler } from "./ui/widget.js";
 import { buildWidgetLines } from "./ui/widget.js";
-import { nowISO } from "./utils.js";
+import { generateId, nowISO } from "./utils.js";
 
 const SESSION_CACHE_KEY = "mission-state-cache";
 const TERMINAL_STATUSES = new Set(["completed", "failed", "aborted"]);
@@ -284,6 +286,10 @@ export default function (pi: ExtensionAPI): void {
 	// recoveryContext is set by session_start crash recovery and injected on the next before_agent_start.
 	let pendingRecoveryContext: string | null = null;
 
+	// Mission mode gate: when false, no protocol injection, no widget, no tools active.
+	// Auto-activates if filesystem state exists on session start.
+	let missionModeActive = false;
+
 	function renderMissionWidget(ctx: ExtensionContext, state: MissionState, plan?: MissionPlan): void {
 		ctx.ui.setWidget("mission", (_tui, theme) => {
 			const styler: ThemeStyler = { fg: theme.fg.bind(theme), bold: theme.bold.bind(theme) };
@@ -303,6 +309,7 @@ export default function (pi: ExtensionAPI): void {
 		// Mirror every state change to the session entry cache so the widget
 		// can be restored after /compact or a fresh session start.
 		pi.appendEntry(SESSION_CACHE_KEY, state);
+		updateRegistry(state, projectDir, plan);
 	}
 
 	function clearWidget(): void {
@@ -320,6 +327,7 @@ export default function (pi: ExtensionAPI): void {
 		const fsState = loadState(basePath);
 
 		if (fsState !== null) {
+			missionModeActive = true;
 			// Capture git snapshot if not yet present and git is available.
 			const stateWithSnapshot = captureSnapshotIfNeeded(fsState, projectDir);
 			// Filesystem is authoritative — run crash recovery then render.
@@ -356,6 +364,7 @@ export default function (pi: ExtensionAPI): void {
 
 		// Restore from cache: write back to filesystem so it becomes authoritative.
 		// Also capture snapshot for the restored state.
+		missionModeActive = true;
 		const cachedWithSnapshot = captureSnapshotIfNeeded(cached, projectDir);
 		saveState(basePath, cachedWithSnapshot, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
 		const plan = loadPlan(basePath);
@@ -368,6 +377,7 @@ export default function (pi: ExtensionAPI): void {
 	// before_agent_start: load state and inject orchestrator protocol into system prompt.
 	// Also injects pending crash recovery context when present.
 	pi.on("before_agent_start", (event, _ctx) => {
+		if (!missionModeActive) return undefined;
 		const state = loadState(basePath);
 		if (!state) return undefined;
 
@@ -385,6 +395,7 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_shutdown", (_event, _ctx) => {
+		if (!missionModeActive) return;
 		const state = loadState(basePath);
 		if (!state) return;
 		const activeStatuses = new Set(["planning", "draft_review", "approved", "executing", "validating"]);
@@ -398,6 +409,7 @@ export default function (pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_compact", (_event, _ctx) => {
+		if (!missionModeActive) return;
 		const state = loadState(basePath);
 		if (state !== null) {
 			pi.appendEntry(SESSION_CACHE_KEY, state);
@@ -513,36 +525,137 @@ export default function (pi: ExtensionAPI): void {
 		},
 	});
 
+	function resetMission(): void {
+		const currentState = loadState(basePath);
+		if (currentState) {
+			removeFromRegistry(currentState.missionId);
+		}
+		try {
+			rmSync(basePath, { recursive: true, force: true });
+		} catch {
+			// why: directory may not exist if mission never started; ignore
+		}
+		clearWidget();
+		pi.setSessionName("");
+		pi.appendEntry(SESSION_CACHE_KEY, null);
+		if (latestCtx) {
+			latestCtx.ui.notify("Mission reset.", "info");
+		}
+	}
+
+	function activateMissionMode(): void {
+		missionModeActive = true;
+		let state = loadState(basePath);
+		if (state) {
+			if (state.status === "paused" && state.resumeTargetState) {
+				try {
+					state = transitionState(state, state.resumeTargetState);
+					saveState(basePath, state);
+				} catch {
+					// why: best-effort resume — if transition fails, show paused state
+				}
+			}
+			const plan = loadPlan(basePath);
+			updateWidget(state, plan ?? undefined);
+		}
+	}
+
+	function deactivateMissionMode(): void {
+		const state = loadState(basePath);
+		if (state) {
+			const activeStatuses = new Set(["planning", "draft_review", "approved", "executing", "validating"]);
+			if (activeStatuses.has(state.status)) {
+				try {
+					const newState = transitionState(state, "paused");
+					saveState(basePath, newState);
+				} catch {
+					// why: best-effort pause
+				}
+			}
+		}
+		clearWidget();
+		missionModeActive = false;
+	}
+
 	// Register all slash commands.
-	registerCommands(pi, { basePath, updateWidget, clearWidget });
+	registerCommands(pi, {
+		basePath,
+		updateWidget,
+		clearWidget,
+		isMissionModeActive: () => missionModeActive,
+		setMissionModeActive: (active: boolean) => {
+			missionModeActive = active;
+		},
+		onActivate: activateMissionMode,
+		onDeactivate: deactivateMissionMode,
+	});
+
+	function startNewMission(description: string): void {
+		const now = nowISO();
+		const newState: MissionState = {
+			missionId: generateId(),
+			status: "planning",
+			progressLog: [{ timestamp: now, type: "mission_started", detail: "Mission started" }],
+			startedAt: now,
+			totalFeaturesCompleted: 0,
+			totalFeaturesFailed: 0,
+			totalFeaturesSkipped: 0,
+			totalFixFeaturesCreated: 0,
+		};
+		saveState(basePath, newState);
+		missionModeActive = true;
+		updateWidget(newState);
+		pi.setSessionName(description);
+		pi.sendUserMessage(`New mission: ${description}`);
+	}
 
 	// Register Ctrl+Shift+M shortcut to open Mission Control overlay.
 	pi.registerShortcut("ctrl+shift+m", {
 		description: "Open Mission Control overlay",
 		handler: async (ctx) => {
+			if (!missionModeActive) {
+				ctx.ui.notify("Mission mode is not active. Run /mission-mode to activate.", "info");
+				return;
+			}
 			const deps = {
 				basePath,
+				projectPath: projectDir,
 				loadState,
 				loadPlan,
 				loadConfig,
 				sendUserMessage: (content: string) => pi.sendUserMessage(content),
 				getInput: (title: string, placeholder?: string) => ctx.ui.input(title, placeholder),
+				confirm: (title: string, message: string) => ctx.ui.confirm(title, message),
 				notify: (message: string, type?: "info" | "warning" | "error") => ctx.ui.notify(message, type),
 				updateWidget,
 				availableModels: ctx.modelRegistry.getAll().map((m) => m.id),
-				openFile: (_path: string) => {},
+				openFile: (filePath: string) => {
+					exec(`open "${filePath}"`);
+				},
 				setModel: async (modelId: string) => {
 					const model = ctx.modelRegistry.getAll().find((m) => m.id === modelId);
 					if (model) await pi.setModel(model);
 				},
+				resetMission,
+				loadRegistry,
+				startNewMission,
 			};
-			await ctx.ui.custom<void>((tui, theme, _kb, done) => new MissionControlComponent(tui, done, deps, theme), {
-				overlay: true,
-				overlayOptions: {
-					maxHeight: "95%",
-					anchor: "center",
+			const result = await ctx.ui.custom<string | undefined>(
+				(tui, theme, _kb, done) => new MissionControlComponent(tui, done, deps, theme),
+				{
+					overlay: true,
+					overlayOptions: {
+						maxHeight: "95%",
+						anchor: "center",
+					},
 				},
-			});
+			);
+			if (result === "new_mission") {
+				const description = await ctx.ui.input("New Mission", "Describe your mission goal...");
+				if (description?.trim()) {
+					startNewMission(description.trim());
+				}
+			}
 		},
 	});
 }

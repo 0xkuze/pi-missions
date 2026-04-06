@@ -11,6 +11,7 @@ export function renderPlanHistoryView(
 	width: number,
 	style: FrameStyle | undefined,
 	height: number,
+	scrollOffset = 0,
 ): string[] {
 	const mf = style?.mutedFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);
@@ -21,7 +22,7 @@ export function renderPlanHistoryView(
 	if (mutations.length === 0) {
 		return [
 			titleBar("Plan History", width, style),
-			...panel("Mutations", [mf("(no history yet)")], width, panelHeight, 0, style),
+			...panel("Mutations", [mf("(no history yet)")], width, panelHeight, scrollOffset, style),
 			...footerBar("Esc: close", width, style),
 		];
 	}
@@ -39,7 +40,7 @@ export function renderPlanHistoryView(
 
 	return [
 		titleBar("Plan History", width, style),
-		...panel("Mutations", lines, width, panelHeight, 0, style),
+		...panel("Mutations", lines, width, panelHeight, scrollOffset, style),
 		...footerBar("Esc: close", width, style),
 	];
 }

@@ -193,17 +193,6 @@ async function invokeTool(
 	return tool.execute("call-id", params) as Promise<{ content: Array<{ type: string; text: string }> }>;
 }
 
-async function invokeCommand(
-	commands: Map<string, { handler: (args: string, ctx: ExtensionContext) => Promise<void> }>,
-	name: string,
-	args: string,
-	ctx: ExtensionContext,
-): Promise<void> {
-	const cmd = commands.get(name);
-	if (!cmd) throw new Error(`Command '${name}' not registered`);
-	await cmd.handler(args, ctx);
-}
-
 // ---------------------------------------------------------------------------
 // Setup / teardown
 // ---------------------------------------------------------------------------
@@ -277,28 +266,6 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 		expect(plan?.description).toBe("Build auth system");
 		expect(plan?.planVersion).toBe(1);
 		expect(plan?.createdAt).toBeDefined();
-	});
-
-	it("/mission-approve transitions draft_review to approved and appends plan-approved mutation", async () => {
-		const { commands, appendedEntries } = registerExtension(tmpDir);
-		const ctx = buildMockCtx();
-
-		const draftState = makeState("draft_review");
-		saveState(basePath, draftState);
-		const plan = makePlan();
-		savePlan(basePath, plan);
-
-		await invokeCommand(commands, "mission-approve", "", ctx);
-
-		const state = loadState(basePath);
-		expect(state?.status).toBe("approved");
-
-		const savedPlan = loadPlan(basePath);
-		expect(savedPlan?.approvedAt).toBeDefined();
-
-		// Appended entry should include the updated state
-		const cacheEntries = appendedEntries.filter((e) => e.type === "mission-state-cache");
-		expect(cacheEntries.length).toBeGreaterThan(0);
 	});
 
 	it("spawn_worker transitions from approved to executing and updates counters on success", async () => {
@@ -458,154 +425,8 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 	});
 });
 
-// ---------------------------------------------------------------------------
-// VAL-CROSS-003 / VAL-STATE-015: Pause/resume round-trips
-// ---------------------------------------------------------------------------
-
-describe("VAL-CROSS-003 / VAL-STATE-015: pause/resume round-trips", () => {
-	const pausableStates: Array<[string, MissionState["status"]]> = [
-		["planning", "planning"],
-		["draft_review", "draft_review"],
-		["executing", "executing"],
-		["validating", "validating"],
-	];
-
-	for (const [label, status] of pausableStates) {
-		it(`pause from ${label} stores resumeTargetState`, async () => {
-			const { commands } = registerExtension(tmpDir);
-			const ctx = buildMockCtx();
-			const state = makeState(status);
-			saveState(basePath, state);
-
-			await invokeCommand(commands, "mission-pause", "", ctx);
-
-			const saved = loadState(basePath);
-			expect(saved?.status).toBe("paused");
-			expect(saved?.resumeTargetState).toBe(status as "planning" | "draft_review" | "executing" | "validating");
-		});
-
-		it(`resume from paused restores ${label} state`, async () => {
-			const { commands } = registerExtension(tmpDir);
-			const ctx = buildMockCtx();
-
-			const pausedState = makeState("paused", {
-				resumeTargetState: status as "planning" | "draft_review" | "executing" | "validating",
-			});
-			saveState(basePath, pausedState);
-
-			await invokeCommand(commands, "mission-resume", "", ctx);
-
-			const saved = loadState(basePath);
-			expect(saved?.status).toBe(status);
-			expect(saved?.resumeTargetState).toBeUndefined();
-		});
-
-		it(`pause+resume round-trip from ${label} preserves tracking fields`, async () => {
-			const { commands } = registerExtension(tmpDir);
-			const ctx = buildMockCtx();
-
-			const state = makeState(status, {
-				currentMilestoneId: "m1",
-				currentFeatureId: "f1",
-				totalFeaturesCompleted: 3,
-				totalFeaturesFailed: 1,
-				totalFeaturesSkipped: 2,
-			});
-			saveState(basePath, state);
-
-			await invokeCommand(commands, "mission-pause", "", ctx);
-			await invokeCommand(commands, "mission-resume", "", ctx);
-
-			const saved = loadState(basePath);
-			expect(saved?.status).toBe(status);
-			expect(saved?.currentMilestoneId).toBe("m1");
-			expect(saved?.currentFeatureId).toBe("f1");
-			expect(saved?.totalFeaturesCompleted).toBe(3);
-			expect(saved?.totalFeaturesFailed).toBe(1);
-			expect(saved?.totalFeaturesSkipped).toBe(2);
-		});
-	}
-
-	it("pause appends pause event and resume appends resume event", async () => {
-		const { commands } = registerExtension(tmpDir);
-		const ctx = buildMockCtx();
-		const state = makeState("executing");
-		saveState(basePath, state);
-
-		await invokeCommand(commands, "mission-pause", "", ctx);
-		await invokeCommand(commands, "mission-resume", "", ctx);
-
-		const saved = loadState(basePath);
-		const types = saved?.progressLog.map((e) => e.type) ?? [];
-		expect(types).toContain("pause");
-		expect(types).toContain("resume");
-	});
-
-	it("pause from non-pausable state (idle/terminal) returns error", async () => {
-		const { commands } = registerExtension(tmpDir);
-		const notifyCalls: string[] = [];
-		const ctx = buildMockCtx();
-		(ctx as { notifyCalls: string[] }).notifyCalls = notifyCalls;
-		ctx.ui.notify = (msg: string) => notifyCalls.push(msg);
-
-		const completedState = makeState("completed", { completedAt: nowISO() });
-		saveState(basePath, completedState);
-
-		await invokeCommand(commands, "mission-pause", "", ctx);
-
-		expect(
-			notifyCalls.some((m) => m.toLowerCase().includes("not allowed") || m.toLowerCase().includes("error")),
-		).toBe(true);
-	});
-
-	it("resume when not paused returns error", async () => {
-		const { commands } = registerExtension(tmpDir);
-		const notifyCalls: string[] = [];
-		const ctx = buildMockCtx();
-		ctx.ui.notify = (msg: string) => notifyCalls.push(msg);
-
-		const executingState = makeState("executing");
-		saveState(basePath, executingState);
-
-		await invokeCommand(commands, "mission-resume", "", ctx);
-
-		expect(
-			notifyCalls.some((m) => m.toLowerCase().includes("not allowed") || m.toLowerCase().includes("error")),
-		).toBe(true);
-	});
-
-	it("pause persists to filesystem and session cache — VAL-STATE-015", async () => {
-		const { commands, appendedEntries } = registerExtension(tmpDir);
-		const ctx = buildMockCtx();
-		const state = makeState("executing");
-		saveState(basePath, state);
-
-		await invokeCommand(commands, "mission-pause", "", ctx);
-
-		const saved = loadState(basePath);
-		expect(saved?.status).toBe("paused");
-		expect(saved?.resumeTargetState).toBe("executing");
-
-		const cacheEntries = appendedEntries.filter((e) => e.type === "mission-state-cache");
-		expect(cacheEntries.length).toBeGreaterThan(0);
-	});
-
-	it("resume restores state and clears resumeTargetState — VAL-STATE-015", async () => {
-		const { commands, appendedEntries } = registerExtension(tmpDir);
-		const ctx = buildMockCtx();
-		const pausedState = makeState("paused", { resumeTargetState: "executing" });
-		saveState(basePath, pausedState);
-
-		await invokeCommand(commands, "mission-resume", "", ctx);
-
-		const saved = loadState(basePath);
-		expect(saved?.status).toBe("executing");
-		expect(saved?.resumeTargetState).toBeUndefined();
-
-		const cacheEntries = appendedEntries.filter((e) => e.type === "mission-state-cache");
-		expect(cacheEntries.length).toBeGreaterThan(0);
-	});
-});
+// VAL-CROSS-003 / VAL-STATE-015: Pause/resume is now handled via Mission Control overlay.
+// See mission-control.test.ts for those tests.
 
 // ---------------------------------------------------------------------------
 // VAL-CROSS-002 / VAL-STATE-013 / VAL-STATE-014 / VAL-STATE-017 / VAL-STATE-018:
@@ -957,81 +778,21 @@ describe("VAL-CROSS-009 / VAL-STATE-011: session entry cache", () => {
 
 		const ctx = buildMockCtx();
 		const { handlers, appendedEntries } = registerExtension(tmpDir);
+		// session_start auto-activates mission mode when state exists on filesystem
+		handlers.get("session_start")!({ type: "session_start" }, ctx);
+		const preCompactCount = appendedEntries.filter((e) => e.type === "mission-state-cache").length;
 		handlers.get("session_compact")!({ type: "session_compact" }, ctx);
 
 		const cacheEntries = appendedEntries.filter((e) => e.type === "mission-state-cache");
-		expect(cacheEntries.length).toBeGreaterThan(0);
-		expect((cacheEntries[0].data as MissionState).status).toBe("executing");
+		expect(cacheEntries.length).toBeGreaterThan(preCompactCount);
+		const lastEntry = cacheEntries[cacheEntries.length - 1];
+		expect((lastEntry.data as MissionState).status).toBe("executing");
 	});
 });
 
 // ---------------------------------------------------------------------------
-// VAL-CROSS-012: /mission-reset
-// ---------------------------------------------------------------------------
-
-describe("VAL-CROSS-012: /mission-reset clears state, UI, cache, prevents stale restore", () => {
-	it("removes .pi/missions/ directory", async () => {
-		const { commands, appendedEntries } = registerExtension(tmpDir);
-		const ctx = buildMockCtx();
-
-		const state = makeState("executing");
-		saveState(basePath, state);
-		expect(existsSync(basePath)).toBe(true);
-
-		await invokeCommand(commands, "mission-reset", "", ctx);
-
-		expect(existsSync(basePath)).toBe(false);
-		void appendedEntries;
-	});
-
-	it("appends null sentinel to prevent stale cache restoration", async () => {
-		const { commands, appendedEntries } = registerExtension(tmpDir);
-		const ctx = buildMockCtx();
-		const state = makeState("executing");
-		saveState(basePath, state);
-
-		await invokeCommand(commands, "mission-reset", "", ctx);
-
-		const sentinelEntries = appendedEntries.filter((e) => e.type === "mission-state-cache" && e.data === null);
-		expect(sentinelEntries.length).toBeGreaterThan(0);
-	});
-
-	it("after reset, session_start with only old cache entries does NOT restore state", () => {
-		const oldCacheEntry = makeCacheEntry(makeState("executing"));
-		const nullSentinel = makeCacheEntry(null);
-
-		const ctx = buildMockCtx([oldCacheEntry, nullSentinel]);
-		const { handlers } = registerExtension(tmpDir);
-		handlers.get("session_start")!({ type: "session_start" }, ctx);
-
-		const state = loadState(basePath);
-		expect(state).toBeNull();
-	});
-
-	it("clears session name on reset", async () => {
-		const { commands, sessionNames } = registerExtension(tmpDir);
-		const ctx = buildMockCtx();
-		const state = makeState("executing");
-		saveState(basePath, state);
-
-		await invokeCommand(commands, "mission-reset", "", ctx);
-
-		expect(sessionNames).toContain("");
-	});
-
-	it("aborts reset when user declines confirmation", async () => {
-		const { commands } = registerExtension(tmpDir);
-		const ctx = buildMockCtx();
-		ctx.ui.confirm = async () => false;
-
-		const state = makeState("executing");
-		saveState(basePath, state);
-
-		await invokeCommand(commands, "mission-reset", "", ctx);
-
-		expect(existsSync(basePath)).toBe(true);
-	});
-});
+// VAL-CROSS-012: Reset is now handled via Mission Control overlay (X key).
+// See mission-control.test.ts for those tests.
 
 // ---------------------------------------------------------------------------
 // VAL-CROSS-013 / VAL-CROSS-005: Worker attempt status transitions

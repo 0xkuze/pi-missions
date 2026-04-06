@@ -577,7 +577,7 @@ describe("integration: mission control overlay navigation", () => {
 
 		it("unknown keys return noop", () => {
 			const state = makeState("executing");
-			for (const key of ["x", "z", "q", "1", "2"]) {
+			for (const key of ["z", "q", "1", "2"]) {
 				const action = handleKeyboardAction(key, state);
 				expect(action.kind).toBe("noop");
 			}

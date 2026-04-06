@@ -2,33 +2,42 @@ import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { Question, QuestionAnswer } from "../tools/ask-questions.js";
 import type { FrameStyle } from "./frame.js";
-import { footerBar, panel, themeFrameStyle, titleBar } from "./frame.js";
-
-const NO_SELECTION = -2;
-const CUSTOM_SELECTION = -1;
+import { applyBg, footerBar, panel, themeFrameStyle, titleBar, wrapText } from "./frame.js";
 
 export interface QuestionsState {
 	activeTab: number;
-	selectedOption: number[];
+	selectedOptions: Set<number>[];
 	customText: string[];
 	editingCustom: boolean;
 	highlightedIndex: number;
 }
 
 export function createInitialState(questionCount: number): QuestionsState {
+	const selectedOptions: Set<number>[] = [];
+	for (let i = 0; i < questionCount; i++) {
+		selectedOptions.push(new Set());
+	}
 	return {
 		activeTab: 0,
-		selectedOption: new Array(questionCount).fill(NO_SELECTION) as number[],
+		selectedOptions,
 		customText: new Array(questionCount).fill("") as string[],
 		editingCustom: false,
 		highlightedIndex: 0,
 	};
 }
 
+function hasAnswer(state: QuestionsState, tabIndex: number): boolean {
+	const selected = state.selectedOptions[tabIndex];
+	if (selected && selected.size > 0) return true;
+	if (state.customText[tabIndex]?.trim()) return true;
+	return false;
+}
+
 export function renderTabBar(
 	questions: Question[],
 	activeTab: number,
-	selectedOption: number[],
+	state: QuestionsState,
+	_contentWidth: number,
 	style?: FrameStyle,
 ): string {
 	const af = style?.accentFn ?? ((t: string) => t);
@@ -39,16 +48,51 @@ export function renderTabBar(
 	const tabs: string[] = [];
 	for (let i = 0; i < questions.length; i++) {
 		const label = `Q${i + 1}`;
-		const hasAnswer = selectedOption[i] !== NO_SELECTION;
+		const answered = hasAnswer(state, i);
 		if (i === activeTab) {
 			tabs.push(bf(af(`[${label}]`)));
-		} else if (hasAnswer) {
+		} else if (answered) {
 			tabs.push(sf(`[${label}]`));
 		} else {
 			tabs.push(mf(`[${label}]`));
 		}
 	}
-	return ` ${tabs.join("  ")}`;
+	return tabs.join("  ");
+}
+
+function renderOptionLines(q: Question, state: QuestionsState, contentWidth: number, style?: FrameStyle): string[] {
+	const af = style?.accentFn ?? ((t: string) => t);
+	const mf = style?.mutedFn ?? ((t: string) => t);
+	const tf = style?.textFn ?? ((t: string) => t);
+	const lines: string[] = [];
+	const maxOptionWidth = contentWidth - 4;
+
+	for (let i = 0; i < q.options.length; i++) {
+		const selected = state.selectedOptions[state.activeTab];
+		const isSelected = selected?.has(i) ?? false;
+		const isHighlighted = state.highlightedIndex === i;
+		const checkbox = isSelected ? "\u25a0" : "\u25a1";
+		const recommended = q.recommended === i ? " (recommended)" : "";
+
+		const pointer = isHighlighted ? af("\u25b8") : " ";
+		const rawText = `${q.options[i]}${recommended}`;
+		const wrapped = wrapText(rawText, maxOptionWidth);
+
+		for (let wi = 0; wi < wrapped.length; wi++) {
+			const wl = wrapped[wi];
+			if (wi === 0) {
+				const styledCb = isSelected ? af(checkbox) : isHighlighted ? tf(checkbox) : mf(checkbox);
+				const styledText = isSelected || isHighlighted ? af(wl) : tf(wl);
+				lines.push(`${pointer} ${styledCb} ${styledText}`);
+			} else {
+				const indent = "     ";
+				const styledText = isSelected || isHighlighted ? af(wl) : tf(wl);
+				lines.push(`${indent}${styledText}`);
+			}
+		}
+	}
+
+	return lines;
 }
 
 export function renderQuestionsOverlay(
@@ -58,66 +102,67 @@ export function renderQuestionsOverlay(
 	height: number,
 	style?: FrameStyle,
 ): string[] {
+	const contentWidth = width - 4;
 	const af = style?.accentFn ?? ((t: string) => t);
 	const mf = style?.mutedFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);
-
-	const output: string[] = [];
-
-	output.push(titleBar("Questions", width, style));
-	output.push(renderTabBar(questions, state.activeTab, state.selectedOption, style));
-	output.push("");
+	const bf = style?.boldFn ?? ((t: string) => t);
+	const bgFn = style?.bgFn;
 
 	const q = questions[state.activeTab];
-	if (!q) return output;
+	if (!q) return [];
 
 	const lines: string[] = [];
-	lines.push(tf(q.question));
+
+	const tabBar = renderTabBar(questions, state.activeTab, state, contentWidth, style);
+	lines.push(tabBar);
 	lines.push("");
 
-	for (let i = 0; i < q.options.length; i++) {
-		const isSelected = state.selectedOption[state.activeTab] === i;
-		const isHighlighted = state.highlightedIndex === i;
-		const icon = isSelected ? "●" : "○";
-		const recommended = q.recommended === i ? mf(" (recommended)") : "";
-		const optionText = `${icon} ${q.options[i]}${recommended}`;
-		if (isHighlighted) {
-			lines.push(af(optionText));
-		} else if (isSelected) {
-			lines.push(af(optionText));
-		} else {
-			lines.push(tf(optionText));
-		}
+	const wrappedQuestion = wrapText(q.question, contentWidth);
+	for (const wl of wrappedQuestion) {
+		lines.push(bf(tf(wl)));
 	}
+	lines.push("");
+
+	lines.push(...renderOptionLines(q, state, contentWidth, style));
 
 	lines.push("");
-	const isCustomSelected = state.selectedOption[state.activeTab] === CUSTOM_SELECTION;
 	const isCustomHighlighted = state.highlightedIndex === q.options.length;
-	const customIcon = isCustomSelected ? "●" : "○";
-	let customLabel: string;
+	const isCustomActive = state.customText[state.activeTab]?.trim().length > 0;
+	const customCheckbox = isCustomActive ? "\u25a0" : "\u25a1";
+	const customPointer = isCustomHighlighted ? af("\u25b8") : " ";
+
 	if (state.editingCustom) {
-		customLabel = `${customIcon} Your own answer: ${state.customText[state.activeTab]}▎`;
-	} else if (state.customText[state.activeTab]) {
-		customLabel = `${customIcon} Your own answer: ${state.customText[state.activeTab]}`;
+		const cursor = state.customText[state.activeTab] || "";
+		lines.push(`${customPointer} ${af(customCheckbox)} ${af("Custom:")} ${tf(cursor)}${af("\u2588")}`);
+	} else if (isCustomActive) {
+		const wrappedCustom = wrapText(state.customText[state.activeTab], contentWidth - 12);
+		for (let ci = 0; ci < wrappedCustom.length; ci++) {
+			if (ci === 0) {
+				lines.push(`${customPointer} ${af(customCheckbox)} ${af("Custom:")} ${tf(wrappedCustom[ci])}`);
+			} else {
+				lines.push(`              ${tf(wrappedCustom[ci])}`);
+			}
+		}
 	} else {
-		customLabel = `${customIcon} Your own answer`;
+		const label = isCustomHighlighted ? af("Custom answer") : tf("Custom answer");
+		lines.push(`${customPointer} ${isCustomHighlighted ? tf(customCheckbox) : mf(customCheckbox)} ${label}`);
 	}
 
-	if (isCustomHighlighted || isCustomSelected) {
-		lines.push(af(customLabel));
-	} else {
-		lines.push(tf(customLabel));
-	}
+	const footerHeight = 3;
+	const titleHeight = 1;
+	const panelHeight = Math.max(5, height - footerHeight - titleHeight);
 
-	const panelHeight = Math.max(5, height - 7);
-	output.push(...panel("Question", lines, width, panelHeight, 0, style));
+	const titleLine = titleBar("Questions", width, style);
+	const panelLines = panel("", lines, width, panelHeight, 0, style);
 
 	const footer = state.editingCustom
-		? "Type: enter text  Enter: confirm  Esc: cancel editing"
-		: "Tab: Next Q  Shift+Tab: Prev Q  Up/Down: Navigate  Enter: Select  Esc: Cancel";
-	output.push(...footerBar(footer, width, style));
+		? "Enter: confirm text   Esc: cancel"
+		: "Space: toggle   Enter: confirm   Tab: next Q   Esc: cancel";
+	const footerLines = footerBar(footer, width, style);
 
-	return output;
+	const styledTitle = bgFn ? applyBg(titleLine, width, bgFn) : titleLine;
+	return [styledTitle, ...panelLines, ...footerLines];
 }
 
 export type QuestionsOverlayAction =
@@ -127,26 +172,40 @@ export type QuestionsOverlayAction =
 
 function buildAnswers(questions: Question[], state: QuestionsState): QuestionAnswer[] {
 	return questions.map((q, i) => {
-		const sel = state.selectedOption[i];
-		if (sel === CUSTOM_SELECTION) {
-			return { question: q.question, answer: state.customText[i], isCustom: true };
+		const selected = state.selectedOptions[i];
+		const customText = state.customText[i]?.trim() ?? "";
+		const parts: string[] = [];
+
+		if (selected) {
+			for (const idx of selected) {
+				if (q.options[idx]) parts.push(q.options[idx]);
+			}
 		}
-		return { question: q.question, answer: q.options[sel] ?? "", isCustom: false };
+		if (customText) parts.push(customText);
+
+		if (parts.length === 0) {
+			return { question: q.question, answer: "(skipped)", isCustom: false };
+		}
+		return {
+			question: q.question,
+			answer: parts.join("; "),
+			isCustom: customText.length > 0,
+		};
 	});
 }
 
 function allAnswered(state: QuestionsState): boolean {
-	return state.selectedOption.every((sel, i) => {
-		if (sel === NO_SELECTION) return false;
-		if (sel === CUSTOM_SELECTION && !state.customText[i].trim()) return false;
-		return true;
+	return state.selectedOptions.every((sel, i) => {
+		if (sel.size > 0) return true;
+		if (state.customText[i]?.trim()) return true;
+		return false;
 	});
 }
 
 function advanceToNext(questions: Question[], state: QuestionsState): void {
 	for (let i = 1; i <= questions.length; i++) {
 		const idx = (state.activeTab + i) % questions.length;
-		if (state.selectedOption[idx] === NO_SELECTION) {
+		if (!hasAnswer(state, idx)) {
 			state.activeTab = idx;
 			state.highlightedIndex = 0;
 			return;
@@ -162,8 +221,7 @@ export function handleQuestionsKey(data: string, questions: Question[], state: Q
 		}
 		if (matchesKey(data, "return")) {
 			state.editingCustom = false;
-			if (state.customText[state.activeTab].trim()) {
-				state.selectedOption[state.activeTab] = CUSTOM_SELECTION;
+			if (state.customText[state.activeTab]?.trim()) {
 				if (allAnswered(state)) {
 					return { kind: "done", answers: buildAnswers(questions, state) };
 				}
@@ -182,6 +240,10 @@ export function handleQuestionsKey(data: string, questions: Question[], state: Q
 			return { kind: "noop" };
 		}
 		return { kind: "noop" };
+	}
+
+	if (matchesKey(data, "escape")) {
+		return { kind: "cancel" };
 	}
 
 	if (data === "\t") {
@@ -212,31 +274,44 @@ export function handleQuestionsKey(data: string, questions: Question[], state: Q
 	if (!q) return { kind: "noop" };
 	const maxIndex = q.options.length;
 
-	if (matchesKey(data, "up")) {
+	if (matchesKey(data, "up") || matchesKey(data, "k")) {
 		state.highlightedIndex = Math.max(0, state.highlightedIndex - 1);
 		return { kind: "noop" };
 	}
 
-	if (matchesKey(data, "down")) {
+	if (matchesKey(data, "down") || matchesKey(data, "j")) {
 		state.highlightedIndex = Math.min(maxIndex, state.highlightedIndex + 1);
 		return { kind: "noop" };
 	}
 
-	if (matchesKey(data, "return")) {
+	if (data === " ") {
 		if (state.highlightedIndex < q.options.length) {
-			state.selectedOption[state.activeTab] = state.highlightedIndex;
-			if (allAnswered(state)) {
-				return { kind: "done", answers: buildAnswers(questions, state) };
+			const selected = state.selectedOptions[state.activeTab]!;
+			if (selected.has(state.highlightedIndex)) {
+				selected.delete(state.highlightedIndex);
+			} else {
+				selected.add(state.highlightedIndex);
 			}
-			advanceToNext(questions, state);
 		} else {
 			state.editingCustom = true;
 		}
 		return { kind: "noop" };
 	}
 
-	if (matchesKey(data, "escape")) {
-		return { kind: "cancel" };
+	if (matchesKey(data, "return")) {
+		const selected = state.selectedOptions[state.activeTab]!;
+		if (state.highlightedIndex === q.options.length) {
+			state.editingCustom = true;
+			return { kind: "noop" };
+		}
+		if (selected.size === 0) {
+			selected.add(state.highlightedIndex);
+		}
+		if (allAnswered(state)) {
+			return { kind: "done", answers: buildAnswers(questions, state) };
+		}
+		advanceToNext(questions, state);
+		return { kind: "noop" };
 	}
 
 	return { kind: "noop" };

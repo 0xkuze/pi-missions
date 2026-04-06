@@ -63,7 +63,7 @@ describe("renderQuestionsOverlay", () => {
 		it("shows custom answer option", () => {
 			const lines = renderQuestionsOverlay(makeQuestions(), makeState(), 80, 40);
 			const text = lines.join(" ");
-			expect(text).toContain("Your own answer");
+			expect(text).toContain("Custom answer");
 		});
 
 		it("shows footer with shortcuts", () => {
@@ -72,6 +72,7 @@ describe("renderQuestionsOverlay", () => {
 			expect(text).toContain("Tab");
 			expect(text).toContain("Enter");
 			expect(text).toContain("Esc");
+			expect(text).toContain("Space");
 		});
 
 		it("shows editing footer when editing custom", () => {
@@ -80,21 +81,27 @@ describe("renderQuestionsOverlay", () => {
 			state.highlightedIndex = 3;
 			const lines = renderQuestionsOverlay(makeQuestions(), state, 80, 40);
 			const text = lines.join(" ");
-			expect(text).toContain("Type");
+			expect(text).toContain("confirm text");
 		});
 
-		it("shows radio buttons", () => {
+		it("shows checkboxes", () => {
 			const lines = renderQuestionsOverlay(makeQuestions(), makeState(), 80, 40);
 			const text = lines.join(" ");
-			expect(text).toContain("\u25cb");
+			expect(text).toContain("\u25a1");
 		});
 
-		it("shows filled radio for selected option", () => {
+		it("shows filled checkbox for selected option", () => {
 			const state = makeState();
-			state.selectedOption[0] = 1;
+			state.selectedOptions[0].add(1);
 			const lines = renderQuestionsOverlay(makeQuestions(), state, 80, 40);
 			const text = lines.join(" ");
-			expect(text).toContain("\u25cf");
+			expect(text).toContain("\u25a0");
+		});
+
+		it("uses panel with bordered structure", () => {
+			const lines = renderQuestionsOverlay(makeQuestions(), makeState(), 80, 40);
+			const text = lines.join("\n");
+			expect(text).toContain("\u2502");
 		});
 	});
 
@@ -116,7 +123,7 @@ describe("renderQuestionsOverlay", () => {
 			state.highlightedIndex = 3;
 			const lines = renderQuestionsOverlay(makeQuestions(), state, 80, 40);
 			const text = lines.join(" ");
-			expect(text).toContain("\u258e");
+			expect(text).toContain("\u2588");
 		});
 
 		it("shows custom text content", () => {
@@ -132,8 +139,8 @@ describe("renderQuestionsOverlay", () => {
 describe("renderTabBar", () => {
 	it("shows tab labels", () => {
 		const qs = makeQuestions();
-		const selectedOption = [-2, -2, -2];
-		const result = renderTabBar(qs, 0, selectedOption);
+		const state = makeState();
+		const result = renderTabBar(qs, 0, state, 76);
 		expect(result).toContain("Q1");
 		expect(result).toContain("Q2");
 		expect(result).toContain("Q3");
@@ -141,8 +148,8 @@ describe("renderTabBar", () => {
 
 	it("uses brackets around labels", () => {
 		const qs = makeQuestions(2);
-		const selectedOption = [-2, -2];
-		const result = renderTabBar(qs, 0, selectedOption);
+		const state = makeState(2);
+		const result = renderTabBar(qs, 0, state, 76);
 		expect(result).toContain("[Q1]");
 		expect(result).toContain("[Q2]");
 	});
@@ -151,17 +158,17 @@ describe("renderTabBar", () => {
 describe("createInitialState", () => {
 	it("creates state with correct number of questions", () => {
 		const state = createInitialState(4);
-		expect(state.selectedOption).toHaveLength(4);
+		expect(state.selectedOptions).toHaveLength(4);
 		expect(state.customText).toHaveLength(4);
 		expect(state.activeTab).toBe(0);
 		expect(state.editingCustom).toBe(false);
 		expect(state.highlightedIndex).toBe(0);
 	});
 
-	it("initializes all options to no selection", () => {
+	it("initializes all options to empty sets", () => {
 		const state = createInitialState(3);
-		for (const sel of state.selectedOption) {
-			expect(sel).toBe(-2);
+		for (const sel of state.selectedOptions) {
+			expect(sel.size).toBe(0);
 		}
 	});
 
@@ -282,33 +289,6 @@ describe("handleQuestionsKey", () => {
 			expect(state.activeTab).toBe(2);
 		});
 
-		it("Right arrow advances tab", () => {
-			const state = makeState();
-			handleQuestionsKey("\x1B[C", makeQuestions(), state);
-			expect(state.activeTab).toBe(1);
-		});
-
-		it("Right arrow does not go past last tab", () => {
-			const state = makeState();
-			state.activeTab = 2;
-			handleQuestionsKey("\x1B[C", makeQuestions(), state);
-			expect(state.activeTab).toBe(2);
-		});
-
-		it("Left arrow goes to previous tab", () => {
-			const state = makeState();
-			state.activeTab = 2;
-			handleQuestionsKey("\x1B[D", makeQuestions(), state);
-			expect(state.activeTab).toBe(1);
-		});
-
-		it("Left arrow does not go below 0", () => {
-			const state = makeState();
-			state.activeTab = 0;
-			handleQuestionsKey("\x1B[D", makeQuestions(), state);
-			expect(state.activeTab).toBe(0);
-		});
-
 		it("tab navigation resets highlighted index", () => {
 			const state = makeState();
 			state.highlightedIndex = 2;
@@ -347,12 +327,61 @@ describe("handleQuestionsKey", () => {
 		});
 	});
 
-	describe("option selection", () => {
-		it("Enter selects pre-defined option", () => {
+	describe("multi-select with Space", () => {
+		it("Space toggles an option on", () => {
+			const state = makeState();
+			state.highlightedIndex = 1;
+			handleQuestionsKey(" ", makeQuestions(), state);
+			expect(state.selectedOptions[0].has(1)).toBe(true);
+		});
+
+		it("Space toggles an option off", () => {
+			const state = makeState();
+			state.selectedOptions[0].add(1);
+			state.highlightedIndex = 1;
+			handleQuestionsKey(" ", makeQuestions(), state);
+			expect(state.selectedOptions[0].has(1)).toBe(false);
+		});
+
+		it("Space can select multiple options", () => {
+			const state = makeState();
+			state.highlightedIndex = 0;
+			handleQuestionsKey(" ", makeQuestions(), state);
+			state.highlightedIndex = 2;
+			handleQuestionsKey(" ", makeQuestions(), state);
+			expect(state.selectedOptions[0].has(0)).toBe(true);
+			expect(state.selectedOptions[0].has(2)).toBe(true);
+			expect(state.selectedOptions[0].size).toBe(2);
+		});
+
+		it("Space on custom option starts editing", () => {
+			const qs = makeQuestions();
+			const state = makeState();
+			state.highlightedIndex = qs[0].options.length;
+			handleQuestionsKey(" ", qs, state);
+			expect(state.editingCustom).toBe(true);
+		});
+	});
+
+	describe("Enter behavior", () => {
+		it("Enter selects highlighted if nothing selected and advances", () => {
 			const state = makeState();
 			state.highlightedIndex = 1;
 			handleQuestionsKey("\r", makeQuestions(), state);
-			expect(state.selectedOption[0]).toBe(1);
+			expect(state.selectedOptions[0].has(1)).toBe(true);
+			expect(state.activeTab).toBe(1);
+		});
+
+		it("Enter advances without changing selection when options already selected", () => {
+			const state = makeState();
+			state.selectedOptions[0].add(0);
+			state.selectedOptions[0].add(2);
+			state.highlightedIndex = 1;
+			handleQuestionsKey("\r", makeQuestions(), state);
+			expect(state.selectedOptions[0].has(0)).toBe(true);
+			expect(state.selectedOptions[0].has(2)).toBe(true);
+			expect(state.selectedOptions[0].has(1)).toBe(false);
+			expect(state.activeTab).toBe(1);
 		});
 
 		it("Enter on custom option starts editing", () => {
@@ -363,19 +392,34 @@ describe("handleQuestionsKey", () => {
 			expect(state.editingCustom).toBe(true);
 		});
 
-		it("selecting an option auto-advances to next unanswered question", () => {
-			const state = makeState();
-			state.highlightedIndex = 0;
-			handleQuestionsKey("\r", makeQuestions(), state);
-			expect(state.activeTab).toBe(1);
+		it("Enter completes when all questions answered", () => {
+			const qs = makeQuestions(2);
+			const state = createInitialState(2);
+			state.selectedOptions[0].add(0);
+			state.activeTab = 1;
+			state.highlightedIndex = 1;
+			const action = handleQuestionsKey("\r", qs, state);
+			expect(action.kind).toBe("done");
+			if (action.kind === "done") {
+				expect(action.answers).toHaveLength(2);
+				expect(action.answers[0].answer).toBe("Option A0");
+				expect(action.answers[1].answer).toBe("Option B1");
+			}
 		});
 
-		it("does not auto-advance when all questions answered", () => {
+		it("done answers include multiple selections joined by semicolon", () => {
 			const qs = makeQuestions(1);
 			const state = createInitialState(1);
+			state.selectedOptions[0].add(0);
+			state.selectedOptions[0].add(2);
 			state.highlightedIndex = 0;
 			const action = handleQuestionsKey("\r", qs, state);
 			expect(action.kind).toBe("done");
+			if (action.kind === "done") {
+				expect(action.answers[0].answer).toContain("Option A0");
+				expect(action.answers[0].answer).toContain("Option C0");
+				expect(action.answers[0].answer).toContain(";");
+			}
 		});
 	});
 
@@ -402,51 +446,33 @@ describe("handleQuestionsKey", () => {
 			expect(state.editingCustom).toBe(false);
 		});
 
-		it("Enter confirms custom answer and selects it", () => {
+		it("Enter confirms custom text and advances", () => {
 			const state = makeState();
 			state.editingCustom = true;
 			state.customText[0] = "My answer";
 			handleQuestionsKey("\r", makeQuestions(), state);
 			expect(state.editingCustom).toBe(false);
-			expect(state.selectedOption[0]).toBe(-1);
+			expect(state.activeTab).toBe(1);
 		});
 
-		it("Enter on empty custom does not select", () => {
+		it("Enter on empty custom does not advance", () => {
 			const state = makeState();
 			state.editingCustom = true;
 			state.customText[0] = "";
 			handleQuestionsKey("\r", makeQuestions(), state);
 			expect(state.editingCustom).toBe(false);
-			expect(state.selectedOption[0]).toBe(-2);
+			expect(state.activeTab).toBe(0);
 		});
 
-		it("Enter on whitespace-only custom does not select", () => {
+		it("Enter on whitespace-only custom does not advance", () => {
 			const state = makeState();
 			state.editingCustom = true;
 			state.customText[0] = "   ";
 			handleQuestionsKey("\r", makeQuestions(), state);
-			expect(state.selectedOption[0]).toBe(-2);
-		});
-	});
-
-	describe("completion", () => {
-		it("returns done when all questions are answered", () => {
-			const qs = makeQuestions(2);
-			const state = createInitialState(2);
-			state.selectedOption[0] = 0;
-			state.activeTab = 1;
-			state.highlightedIndex = 1;
-			const action = handleQuestionsKey("\r", qs, state);
-			expect(action.kind).toBe("done");
-			if (action.kind === "done") {
-				expect(action.answers).toHaveLength(2);
-				expect(action.answers[0].answer).toBe("Option A0");
-				expect(action.answers[0].isCustom).toBe(false);
-				expect(action.answers[1].answer).toBe("Option B1");
-			}
+			expect(state.activeTab).toBe(0);
 		});
 
-		it("returns done with custom answers", () => {
+		it("done includes custom text in answer", () => {
 			const qs = makeQuestions(1);
 			const state = createInitialState(1);
 			state.editingCustom = true;

@@ -4,7 +4,7 @@ import { resolveModel } from "../config.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
 import { formatDuration } from "../utils.js";
 import type { FrameStyle } from "./frame.js";
-import { footerBar, panel, section, titleBar } from "./frame.js";
+import { footerBar, panel, section, titleBar, wrapText } from "./frame.js";
 
 export type ReportViewAction = { kind: "close" } | { kind: "open_report" } | { kind: "noop" };
 
@@ -48,6 +48,7 @@ export function renderReportView(
 	width: number,
 	style: FrameStyle | undefined,
 	height: number,
+	scrollOffset = 0,
 ): string[] {
 	const contentWidth = width - 4;
 	const tf = style?.textFn ?? ((t: string) => t);
@@ -57,7 +58,11 @@ export function renderReportView(
 	const ef = style?.errorFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
-	lines.push(bf(tf(`Goal: ${plan.description}`)));
+	const goalPrefix = "Goal: ";
+	const wrappedGoal = wrapText(`${goalPrefix}${plan.description}`, contentWidth);
+	for (const wl of wrappedGoal) {
+		lines.push(bf(tf(wl)));
+	}
 	lines.push("");
 
 	const durationMs = computeDurationMs(state);
@@ -88,7 +93,7 @@ export function renderReportView(
 	const panelHeight = Math.max(5, height - 7);
 	return [
 		titleBar("Mission Complete", width, style),
-		...panel("Summary", lines, width, panelHeight, 0, style),
+		...panel("Summary", lines, width, panelHeight, scrollOffset, style),
 		...footerBar("O: open report   Esc: close", width, style),
 	];
 }

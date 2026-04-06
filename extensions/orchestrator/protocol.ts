@@ -16,16 +16,17 @@ function autonomyInstructions(autonomy: MissionConfig["autonomy"]): string {
 function planningProtocol(autonomy: MissionConfig["autonomy"]): string {
 	return `## MISSION ORCHESTRATOR \u2014 PLANNING PHASE
 
-You are in the planning phase. Your task: deeply understand the codebase, gather constraints, and produce a structured plan by calling \`submit_plan\`.
+You are in the planning phase. Your task: deeply understand the codebase, gather constraints from the user, and produce a structured plan by calling \`submit_plan\`.
 
-STEPS:
+STEPS (follow in order):
 1. Analyze the codebase \u2014 use read, bash, and grep to understand structure, technology stack, existing patterns, and constraints.
 2. Identify what exists and what needs to be built. Check for AGENTS.md, package.json, README, and similar context files.
-3. When you need user input on key decisions, call \`ask_questions\` with structured questions and pre-defined options. This presents an interactive overlay to the user. Use it for architecture choices, scope decisions, technology preferences, etc. Reserve normal chat for open-ended discussion.
-4. When you have sufficient context, call \`submit_plan\` with milestones, features, acceptance criteria, and validation commands.
+3. REQUIRED: Call \`ask_questions\` to interview the user before creating a plan. Ask about scope, priorities, constraints, architecture preferences, and anything ambiguous about the goal. This presents an interactive overlay. You MUST call ask_questions at least once before calling submit_plan.
+4. After receiving the user's answers, call \`submit_plan\` with milestones, features, acceptance criteria, and validation commands.
 
 RULES:
 - This is the planning phase only. Do not begin executing features or running workers.
+- Do NOT call submit_plan before calling ask_questions first. The interview step is mandatory.
 - Submit a plan with at least one milestone and at least one feature per milestone.
 - Each feature must have clear, testable acceptance criteria.
 - Group features into milestones that represent validation checkpoints.

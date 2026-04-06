@@ -17,6 +17,7 @@ export function renderBlockedView(
 	width: number,
 	style: FrameStyle | undefined,
 	height: number,
+	scrollOffset = 0,
 ): string[] {
 	const contentWidth = width - 4;
 	const ef = style?.errorFn ?? ((t: string) => t);
@@ -52,7 +53,7 @@ export function renderBlockedView(
 	const panelHeight = Math.max(5, height - 7);
 	return [
 		titleBar("Mission Blocked", width, style),
-		...panel("Details", lines, width, panelHeight, 0, style),
+		...panel("Details", lines, width, panelHeight, scrollOffset, style),
 		...footerBar("R: retry   S: skip   Esc: back to chat", width, style),
 	];
 }

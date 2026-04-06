@@ -2,7 +2,15 @@ import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../types.js";
 import type { FrameStyle } from "./frame.js";
-import { footerBar, panel, styledFeatureIcon, styledFeatureName, themeFrameStyle, titleBar } from "./frame.js";
+import {
+	footerBar,
+	panel,
+	styledFeatureIcon,
+	styledFeatureName,
+	themeFrameStyle,
+	titleBar,
+	wrapText,
+} from "./frame.js";
 
 export type PlanOverlayAction = { kind: "close" } | { kind: "scroll"; delta: number } | { kind: "noop" };
 
@@ -33,7 +41,9 @@ export function renderPlanOverlay(
 ): string[] {
 	const tf = style?.textFn ?? ((t: string) => t);
 	const mf = style?.mutedFn ?? ((t: string) => t);
-	const lines: string[] = [tf(plan.description), ""];
+	const contentWidth = width - 4;
+	const wrappedDesc = wrapText(plan.description, contentWidth);
+	const lines: string[] = [...wrappedDesc.map((wl) => tf(wl)), ""];
 
 	for (const milestone of plan.milestones) {
 		const mIcon = styledMilestoneIcon(milestone.status, style);

@@ -33,6 +33,7 @@ export function renderValidationView(
 	width: number,
 	style: FrameStyle | undefined,
 	height: number,
+	scrollOffset = 0,
 ): string[] {
 	const af = style?.accentFn ?? ((t: string) => t);
 	const tf = style?.textFn ?? ((t: string) => t);
@@ -66,7 +67,7 @@ export function renderValidationView(
 	const panelHeight = Math.max(5, height - 7);
 	return [
 		titleBar("Milestone Validation", width, style),
-		...panel("Commands", lines, width, panelHeight, 0, style),
+		...panel("Commands", lines, width, panelHeight, scrollOffset, style),
 		...footerBar("Esc: close", width, style),
 	];
 }

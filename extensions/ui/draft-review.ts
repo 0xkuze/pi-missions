@@ -2,7 +2,7 @@ import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
 import { matchesKey } from "@mariozechner/pi-tui";
 import type { MissionPlan } from "../types.js";
 import type { FrameStyle } from "./frame.js";
-import { footerBar, panel, section, themeFrameStyle, titleBar } from "./frame.js";
+import { footerBar, panel, section, themeFrameStyle, titleBar, wrapText } from "./frame.js";
 
 export type DraftReviewAction =
 	| { kind: "approve" }
@@ -54,7 +54,10 @@ export function renderDraftReview(
 	const mf = style?.mutedFn ?? ((t: string) => t);
 	const lines: string[] = [];
 
-	lines.push(bf(tf(`Mission: ${plan.description}`)));
+	const wrappedMission = wrapText(`Mission: ${plan.description}`, contentWidth);
+	for (const wl of wrappedMission) {
+		lines.push(bf(tf(wl)));
+	}
 	lines.push("");
 
 	for (const milestone of plan.milestones) {
