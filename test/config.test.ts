@@ -3,6 +3,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	DEFAULT_WORKER_MODEL,
+	clearValidationCommandCache,
 	getDefaultConfig,
 	loadMissionConfig,
 	resolveModel,
@@ -34,7 +35,10 @@ function makeMilestone(overrides: Partial<Milestone> = {}): Milestone {
 	return _sm({ validationCommands: overrides.validationCommands, ...overrides });
 }
 
-beforeEach(() => mkdirSync(TMP_BASE, { recursive: true }));
+beforeEach(() => {
+	mkdirSync(TMP_BASE, { recursive: true });
+	clearValidationCommandCache();
+});
 afterEach(() => rmSync(TMP_BASE, { recursive: true, force: true }));
 
 describe("getDefaultConfig", () => {
@@ -293,5 +297,57 @@ describe("resolveModel", () => {
 		expect(resolveModel("orchestrator", config, plan)).toBe("config-orch");
 		expect(resolveModel("worker", config, plan)).toBe("config-worker");
 		expect(resolveModel("validator", config, plan)).toBe("config-val");
+	});
+});
+
+describe("validation command caching", () => {
+	it("returns cached commands for same inputs", () => {
+		const projectDir = makeProjectDir();
+		const config: MissionConfig = { validation: { commands: ["npm run test"] } };
+		const first = resolveValidationCommands(config, null, null, projectDir);
+		const second = resolveValidationCommands(config, null, null, projectDir);
+		expect(first).toEqual(second);
+		expect(first).toBe(second);
+	});
+
+	it("returns fresh commands when inputs change", () => {
+		const projectDir = makeProjectDir();
+		const config1: MissionConfig = { validation: { commands: ["npm run test"] } };
+		const config2: MissionConfig = { validation: { commands: ["npm run lint"] } };
+		const first = resolveValidationCommands(config1, null, null, projectDir);
+		const second = resolveValidationCommands(config2, null, null, projectDir);
+		expect(first).not.toEqual(second);
+		expect(first).toContain("npm run test");
+		expect(second).toContain("npm run lint");
+	});
+
+	it("clearValidationCommandCache forces re-resolution", () => {
+		const projectDir = makeProjectDir();
+		const config: MissionConfig = { validation: { commands: ["npm run test"] } };
+		const first = resolveValidationCommands(config, null, null, projectDir);
+		clearValidationCommandCache();
+		const second = resolveValidationCommands(config, null, null, projectDir);
+		expect(first).toEqual(second);
+		expect(first).not.toBe(second);
+	});
+
+	it("cache key includes milestone commands", () => {
+		const projectDir = makeProjectDir();
+		const config: MissionConfig = {};
+		const milestone1 = makeMilestone({ validationCommands: ["cargo test"] });
+		const milestone2 = makeMilestone({ validationCommands: ["cargo build"] });
+		const first = resolveValidationCommands(config, null, milestone1, projectDir);
+		const second = resolveValidationCommands(config, null, milestone2, projectDir);
+		expect(first).not.toEqual(second);
+	});
+
+	it("cache key includes plan commands", () => {
+		const projectDir = makeProjectDir();
+		const config: MissionConfig = {};
+		const plan1 = makePlan({ validationCommands: ["npm run test"] });
+		const plan2 = makePlan({ validationCommands: ["npm run build"] });
+		const first = resolveValidationCommands(config, plan1, null, projectDir);
+		const second = resolveValidationCommands(config, plan2, null, projectDir);
+		expect(first).not.toEqual(second);
 	});
 });

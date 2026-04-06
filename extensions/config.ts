@@ -58,22 +58,48 @@ function sortCommandsByCanonicalOrder(commands: string[]): string[] {
 	return ordered;
 }
 
+let validationCommandCache: { key: string; commands: string[] } | null = null;
+
+function validationCacheKey(
+	config: MissionConfig,
+	plan: MissionPlan | null,
+	milestone: Milestone | null,
+	projectDir: string,
+): string {
+	const configCmds = config.validation?.commands?.join(",") ?? "";
+	const milestoneCmds = milestone?.validationCommands?.join(",") ?? "";
+	const planCmds = plan?.validationCommands?.join(",") ?? "";
+	return `${configCmds}|${milestoneCmds}|${planCmds}|${projectDir}`;
+}
+
 export function resolveValidationCommands(
 	config: MissionConfig,
 	plan: MissionPlan | null,
 	milestone: Milestone | null,
 	projectDir: string,
 ): string[] {
+	const key = validationCacheKey(config, plan, milestone, projectDir);
+	if (validationCommandCache && validationCommandCache.key === key) {
+		return validationCommandCache.commands;
+	}
+
+	let result: string[];
 	if (config.validation?.commands && config.validation.commands.length > 0) {
-		return sortCommandsByCanonicalOrder(config.validation.commands);
+		result = sortCommandsByCanonicalOrder(config.validation.commands);
+	} else if (milestone?.validationCommands && milestone.validationCommands.length > 0) {
+		result = sortCommandsByCanonicalOrder(milestone.validationCommands);
+	} else if (plan?.validationCommands && plan.validationCommands.length > 0) {
+		result = sortCommandsByCanonicalOrder(plan.validationCommands);
+	} else {
+		result = sortCommandsByCanonicalOrder(autoDetectCommands(projectDir));
 	}
-	if (milestone?.validationCommands && milestone.validationCommands.length > 0) {
-		return sortCommandsByCanonicalOrder(milestone.validationCommands);
-	}
-	if (plan?.validationCommands && plan.validationCommands.length > 0) {
-		return sortCommandsByCanonicalOrder(plan.validationCommands);
-	}
-	return sortCommandsByCanonicalOrder(autoDetectCommands(projectDir));
+
+	validationCommandCache = { key, commands: result };
+	return result;
+}
+
+export function clearValidationCommandCache(): void {
+	validationCommandCache = null;
 }
 
 function autoDetectCommands(projectDir: string): string[] {

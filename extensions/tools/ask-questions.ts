@@ -68,6 +68,20 @@ export function registerAskQuestionsTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const answers = await deps.showQuestions(params.questions);
 
+			const allSkipped = answers.every((a) => a.answer === "(skipped)");
+
+			if (allSkipped) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: "User declined to answer questions (overlay was closed without responding). Consider proceeding with reasonable defaults or rephrasing your questions.",
+						},
+					],
+					details: {},
+				};
+			}
+
 			const formatted = answers
 				.map((a, i) => `Q${i + 1}: ${a.question}\nA: ${a.answer}${a.isCustom ? " (custom)" : ""}`)
 				.join("\n\n");

@@ -169,6 +169,43 @@ describe("registerAskQuestionsTool", () => {
 		});
 	});
 
+	describe("declined handling", () => {
+		it("returns declined message when all answers are skipped", async () => {
+			const questions = makeQuestions(2);
+			const showQuestions = () =>
+				Promise.resolve(
+					questions.map((q) => ({ question: q.question, answer: "(skipped)", isCustom: false })),
+				);
+			const result = await callTool(tmpDir, { questions }, makePlanningState(), showQuestions);
+			const text = result.content[0].text;
+			expect(text).toContain("declined");
+			expect(text).not.toContain("Q1:");
+		});
+
+		it("returns normal formatted answers when some are answered", async () => {
+			const questions = makeQuestions(2);
+			const showQuestions = () =>
+				Promise.resolve([
+					{ question: questions[0].question, answer: "Real answer", isCustom: false },
+					{ question: questions[1].question, answer: "(skipped)", isCustom: false },
+				]);
+			const result = await callTool(tmpDir, { questions }, makePlanningState(), showQuestions);
+			const text = result.content[0].text;
+			expect(text).toContain("User answers");
+			expect(text).toContain("Q1:");
+			expect(text).toContain("Real answer");
+		});
+
+		it("returns normal formatted answers when none are skipped", async () => {
+			const questions = makeQuestions(2);
+			const result = await callTool(tmpDir, { questions }, makePlanningState());
+			const text = result.content[0].text;
+			expect(text).toContain("User answers");
+			expect(text).toContain("Q1:");
+			expect(text).toContain("Q2:");
+		});
+	});
+
 	describe("showQuestions integration", () => {
 		it("passes questions to showQuestions callback", async () => {
 			const questions = makeQuestions(2);

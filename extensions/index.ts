@@ -5,6 +5,7 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import { Container, Text } from "@mariozechner/pi-tui";
 import { registerCommands } from "./commands.js";
 import { captureGitSnapshot, isGitAvailable } from "./git.js";
+import { handleMissionInput } from "./input-handler.js";
 import { buildOrchestratorProtocol, clearProtocolCache } from "./orchestrator/protocol.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
 import { invalidateCaches, loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
@@ -425,6 +426,11 @@ export default function (pi: ExtensionAPI): void {
 		if (state !== null) {
 			pi.appendEntry(SESSION_CACHE_KEY, state);
 		}
+	});
+
+	pi.on("input", (event, _ctx) => {
+		const state = loadState(basePath);
+		return handleMissionInput(event.text, missionModeActive, state);
 	});
 
 	function showDraftReview(plan: MissionPlan): void {
