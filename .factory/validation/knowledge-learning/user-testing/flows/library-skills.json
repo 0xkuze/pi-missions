@@ -1,0 +1,193 @@
+{
+  "groupId": "library-skills",
+  "testedAt": "2026-04-07T00:00:00.000Z",
+  "isolation": {
+    "workingDirectory": "/Users/cristian/tmp/pi-missions",
+    "testFiles": [
+      "test/state/library.test.ts",
+      "test/tools/update-library.test.ts",
+      "test/orchestrator/worker-prompt.test.ts"
+    ]
+  },
+  "toolsUsed": ["bun test"],
+  "assertions": [
+    {
+      "id": "VAL-LIBRARY-001",
+      "title": "Library directory creation on mission init",
+      "status": "pass",
+      "evidence": "test/state/library.test.ts: 'initLibrary > creates library directory' — verifies existsSync(join(basePath, 'library')) returns true after initLibrary(). Passes.",
+      "testFile": "test/state/library.test.ts",
+      "tests": ["initLibrary > creates library directory", "initLibrary > is idempotent — does not throw when directory already exists"]
+    },
+    {
+      "id": "VAL-LIBRARY-002",
+      "title": "Default topic files created with H1 headers",
+      "status": "pass",
+      "evidence": "test/state/library.test.ts: 'initLibrary > creates all default topic files with H1 headers' — checks all 5 default topics (architecture, environment, pitfalls, conventions, research) exist and start with correct '# TopicName' header. Also 'is idempotent — does not overwrite existing files'. All pass.",
+      "testFile": "test/state/library.test.ts",
+      "tests": ["initLibrary > creates all default topic files with H1 headers", "initLibrary > is idempotent — does not overwrite existing files"]
+    },
+    {
+      "id": "VAL-LIBRARY-003",
+      "title": "Read function returns file content, null for non-existent",
+      "status": "pass",
+      "evidence": "test/state/library.test.ts: 'readLibraryTopic > returns file content for existing topic' — writes known content, calls readLibraryTopic, asserts exact match. 'readLibraryTopic > returns null for non-existent topic' — asserts null return. Both pass.",
+      "testFile": "test/state/library.test.ts",
+      "tests": ["readLibraryTopic > returns file content for existing topic", "readLibraryTopic > returns null for non-existent topic"]
+    },
+    {
+      "id": "VAL-LIBRARY-004",
+      "title": "Write function replaces file content",
+      "status": "pass",
+      "evidence": "test/state/library.test.ts: 'writeLibraryTopic > replaces entire file content' — writes old content, calls writeLibraryTopic with new content, verifies new content present and old absent. 'writeLibraryTopic > creates file for non-existent topic' — verifies file creation for new topic. Both pass.",
+      "testFile": "test/state/library.test.ts",
+      "tests": ["writeLibraryTopic > replaces entire file content", "writeLibraryTopic > creates file for non-existent topic"]
+    },
+    {
+      "id": "VAL-LIBRARY-005",
+      "title": "Append function adds with double newline separator",
+      "status": "pass",
+      "evidence": "test/state/library.test.ts: 'appendLibraryTopic > appends entry with double newline separator' — writes initial content, appends, verifies '\\n\\n' separator. 'appendLibraryTopic > appends to header-only file (empty body)' — verifies header + '\\n\\n' + entry. 'appendLibraryTopic > appends multiple entries sequentially' — verifies chained appends. All pass.",
+      "testFile": "test/state/library.test.ts",
+      "tests": ["appendLibraryTopic > appends entry with double newline separator", "appendLibraryTopic > appends to header-only file (empty body)", "appendLibraryTopic > appends multiple entries sequentially"]
+    },
+    {
+      "id": "VAL-LIBRARY-006",
+      "title": "Worker context includes relevant library content",
+      "status": "pass",
+      "evidence": "test/orchestrator/worker-prompt.test.ts: 'generateWorkerContext with library injection > includes pitfalls content under Known Pitfalls heading (VAL-CROSS-003)', 'includes conventions content under Project Conventions heading (VAL-CROSS-004)', 'includes both pitfalls and conventions when both have content (VAL-LIBRARY-006)', 'empty header-only pitfalls file produces no injection (VAL-LIBRARY-006)', 'empty header-only conventions file produces no injection (VAL-LIBRARY-006)'. All pass.",
+      "testFile": "test/orchestrator/worker-prompt.test.ts",
+      "tests": [
+        "generateWorkerContext with library injection > includes pitfalls content under Known Pitfalls heading (VAL-CROSS-003)",
+        "generateWorkerContext with library injection > includes conventions content under Project Conventions heading (VAL-CROSS-004)",
+        "generateWorkerContext with library injection > includes both pitfalls and conventions when both have content (VAL-LIBRARY-006)",
+        "generateWorkerContext with library injection > empty header-only pitfalls file produces no injection (VAL-LIBRARY-006)",
+        "generateWorkerContext with library injection > empty header-only conventions file produces no injection (VAL-LIBRARY-006)"
+      ]
+    },
+    {
+      "id": "VAL-LIBRARY-007",
+      "title": "Library content persists across sessions",
+      "status": "pass",
+      "evidence": "test/state/library.test.ts: 'library content persistence > content persists across simulated sessions' — writes to pitfalls.md via writeLibraryTopic, then reads back via readLibraryTopic, asserts exact content match. Passes.",
+      "testFile": "test/state/library.test.ts",
+      "tests": ["library content persistence > content persists across simulated sessions"]
+    },
+    {
+      "id": "VAL-LIBRARY-008",
+      "title": "Library files are valid markdown",
+      "status": "pass",
+      "evidence": "test/state/library.test.ts: 'library files are valid markdown > default topic files contain valid UTF-8 with H1 header' — checks no null bytes and correct H1 headers for all default topics. 'written content produces valid markdown' — verifies after writeLibraryTopic. 'appended content produces valid markdown' — verifies after appendLibraryTopic. All pass.",
+      "testFile": "test/state/library.test.ts",
+      "tests": [
+        "library files are valid markdown > default topic files contain valid UTF-8 with H1 header",
+        "library files are valid markdown > written content produces valid markdown",
+        "library files are valid markdown > appended content produces valid markdown"
+      ]
+    },
+    {
+      "id": "VAL-SKILLS-001",
+      "title": "Skills directory created on init",
+      "status": "pass",
+      "evidence": "test/tools/update-library.test.ts: 'skills directory creation > creates .pi/missions/skills/ directory during mission init' — calls initLibrary, asserts existsSync(join(basePath, 'skills')). 'is idempotent — existing skills directory is preserved' — creates file in skills dir, re-runs init, asserts file preserved. Both pass.",
+      "testFile": "test/tools/update-library.test.ts",
+      "tests": ["skills directory creation > creates .pi/missions/skills/ directory during mission init", "skills directory creation > is idempotent — existing skills directory is preserved"]
+    },
+    {
+      "id": "VAL-SKILLS-002",
+      "title": "update_library tool validates input",
+      "status": "pass",
+      "evidence": "test/tools/update-library.test.ts: 'update_library tool input validation > rejects empty topic' — asserts error for empty topic. 'rejects empty content' — asserts error for empty content. 'rejects path traversal in topic name' — asserts error for '../etc/passwd'. 'rejects topic with slashes' — asserts error for 'foo/bar'. 'accepts valid known topic name' — asserts success for 'pitfalls'. 'accepts valid custom topic name' — asserts success for 'custom-learning'. All pass.",
+      "testFile": "test/tools/update-library.test.ts",
+      "tests": [
+        "update_library tool input validation > rejects empty topic",
+        "update_library tool input validation > rejects empty content",
+        "update_library tool input validation > rejects path traversal in topic name",
+        "update_library tool input validation > rejects topic with slashes",
+        "update_library tool input validation > accepts valid known topic name",
+        "update_library tool input validation > accepts valid custom topic name"
+      ]
+    },
+    {
+      "id": "VAL-SKILLS-003",
+      "title": "Orchestrator persists learnings from discoveredIssues",
+      "status": "pass",
+      "evidence": "test/tools/update-library.test.ts: 'update_library tool appends content to library topic > appends content to existing topic file' — calls update_library with topic 'pitfalls' and content, reads file back, asserts content present. 'preserves existing content when appending' — verifies both old and new content coexist. Combined with the tool integration, this demonstrates the learning persistence mechanism. All pass.",
+      "testFile": "test/tools/update-library.test.ts",
+      "tests": [
+        "update_library tool appends content to library topic > appends content to existing topic file",
+        "update_library tool appends content to library topic > preserves existing content when appending",
+        "update_library tool appends content to library topic > creates topic file if it does not exist"
+      ]
+    },
+    {
+      "id": "VAL-SKILLS-004",
+      "title": "Workers receive accumulated pitfalls in context",
+      "status": "pass",
+      "evidence": "test/orchestrator/worker-prompt.test.ts: 'generateWorkerContext with library injection > accumulated pitfalls from multiple workers appear in context (VAL-SKILLS-004)' — writes multiple pitfall entries to pitfalls.md, generates worker context, asserts all entries present. Also 'includes pitfalls content under Known Pitfalls heading (VAL-CROSS-003)'. Both pass.",
+      "testFile": "test/orchestrator/worker-prompt.test.ts",
+      "tests": [
+        "generateWorkerContext with library injection > accumulated pitfalls from multiple workers appear in context (VAL-SKILLS-004)",
+        "generateWorkerContext with library injection > includes pitfalls content under Known Pitfalls heading (VAL-CROSS-003)"
+      ]
+    },
+    {
+      "id": "VAL-SKILLS-005",
+      "title": "Skills stored as .md in .pi/missions/skills/",
+      "status": "pass",
+      "evidence": "test/tools/update-library.test.ts: 'skills stored as markdown > skill files are stored as .md files in skills directory' — creates a skill file, asserts existsSync and content contains markdown header. 'skill file contains valid markdown with header' — verifies starts with '# ' and no null bytes. Both pass.",
+      "testFile": "test/tools/update-library.test.ts",
+      "tests": [
+        "skills stored as markdown > skill files are stored as .md files in skills directory",
+        "skills stored as markdown > skill file contains valid markdown with header"
+      ]
+    },
+    {
+      "id": "VAL-SAFETY-001",
+      "title": "Library topic name rejects path traversal",
+      "status": "pass",
+      "evidence": "test/state/library.test.ts: 'topic name validation' suite with 11 tests — rejects '../../../etc/passwd', 'foo/bar', 'foo\\bar', 'my topic' (spaces), 'topic!@#' (special chars). Validates on readLibraryTopic, writeLibraryTopic, appendLibraryTopic. Accepts alphanumeric and hyphenated names. All 11 pass. Additionally test/tools/update-library.test.ts: 'rejects path traversal in topic name' and 'rejects topic with slashes' verify the same via the tool. All pass.",
+      "testFile": "test/state/library.test.ts",
+      "tests": [
+        "topic name validation > rejects path traversal with ..",
+        "topic name validation > rejects path traversal with slash",
+        "topic name validation > rejects path traversal with backslash",
+        "topic name validation > rejects topic name with spaces",
+        "topic name validation > rejects topic name with special characters",
+        "topic name validation > accepts alphanumeric topic names",
+        "topic name validation > accepts hyphenated topic names",
+        "topic name validation > validates topic name on readLibraryTopic",
+        "topic name validation > validates topic name on writeLibraryTopic",
+        "topic name validation > validates topic name on appendLibraryTopic"
+      ]
+    },
+    {
+      "id": "VAL-SCALE-001",
+      "title": "Library content truncated when large",
+      "status": "pass",
+      "evidence": "test/state/library.test.ts: 'readLibraryTopic > truncates content exceeding 2000 characters with marker' — writes 2001+ char content, reads back, asserts shorter than original and ends with '...truncated'. 'does not truncate content at exactly 2000 characters' and 'reads content exactly at 2000 chars without truncation' verify boundary. test/orchestrator/worker-prompt.test.ts: 'truncated library content included in context (VAL-SCALE-001)' — writes 2500+ char pitfall, generates worker context, asserts '...truncated' marker present and total size bounded. All pass.",
+      "testFile": "test/state/library.test.ts, test/orchestrator/worker-prompt.test.ts",
+      "tests": [
+        "readLibraryTopic > truncates content exceeding 2000 characters with marker",
+        "readLibraryTopic > does not truncate content at exactly 2000 characters",
+        "readLibraryTopic > reads content exactly at 2000 chars without truncation",
+        "generateWorkerContext with library injection > truncated library content included in context (VAL-SCALE-001)"
+      ]
+    },
+    {
+      "id": "VAL-TOOLREG-001",
+      "title": "update_library tool registered via registerTool",
+      "status": "pass",
+      "evidence": "test/tools/update-library.test.ts: 'update_library tool registration > registers update_library tool via registerTool' — calls registerUpdateLibraryTool, retrieves tool via mockPi.getRegisteredTool('update_library'), asserts defined and name matches. 'has correct TypeBox parameter schema with topic and content' — validates schema accepts/rejects correct/incorrect inputs via Value.Check. 'is only available when mission is active (not idle)' — creates active state, loads it, verifies status is not idle. All pass.",
+      "testFile": "test/tools/update-library.test.ts",
+      "tests": [
+        "update_library tool registration > registers update_library tool via registerTool",
+        "update_library tool registration > has correct TypeBox parameter schema with topic and content",
+        "update_library tool registration > is only available when mission is active (not idle)"
+      ]
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 16 assertions: 16 passed, 0 failed, 0 blocked. All 116 tests across 3 test files passed with 0 failures (212 expect() calls). Run completed in 96ms."
+}
