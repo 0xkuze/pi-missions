@@ -5,7 +5,7 @@ import { loadConfig } from "./state/manager.js";
 import type { Milestone, MissionConfig, MissionPlan, ModelAssignment, PromptingMode } from "./types.js";
 
 export const DEFAULT_ORCHESTRATOR_MODEL = "opus-4.6";
-export const DEFAULT_WORKER_MODEL = "opencode/glm-5";
+export const DEFAULT_WORKER_MODEL = "opencode-go/glm-5";
 export const DEFAULT_VALIDATOR_MODEL = "openaicodex/gpt-5.4";
 
 const DEFAULT_CONFIG: Required<MissionConfig> = {

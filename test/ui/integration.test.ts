@@ -621,13 +621,15 @@ describe("integration: model switching view", () => {
 			expect(text).not.toContain("claude-sonnet-4");
 		});
 
-		it("shows default placeholder when no model configured", () => {
+		it("shows default model names when no explicit model configured", () => {
 			const config: MissionConfig = {};
 			const plan = makePlan({ modelAssignment: {} });
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
-			expect(text).toMatch(/default|session|none|unassigned/i);
+			expect(text).toContain("opus-4.6");
+			expect(text).toContain("opencode-go/glm-5");
+			expect(text).toContain("openaicodex/gpt-5.4");
 		});
 	});
 

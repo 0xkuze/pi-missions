@@ -437,7 +437,7 @@ describe("registerSpawnWorkerTool", () => {
 			const feature = localMakeFeature();
 			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
-			registerTool(mockSpawnFn, { availableModels: ["opencode/glm-5"] });
+			registerTool(mockSpawnFn, { availableModels: ["opencode-go/glm-5"] });
 			const result = await executeFn!("id", { featureId: "feat-1" });
 			expect(result.content[0].text).not.toContain("Error");
 		});
@@ -550,7 +550,7 @@ describe("registerSpawnWorkerTool", () => {
 			await executeFn!("id", { featureId: "feat-1" });
 			expect(capturedArgs).toContain("--model");
 			const modelIdx = capturedArgs!.indexOf("--model");
-			expect(capturedArgs![modelIdx + 1]).toBe("opencode/glm-5");
+			expect(capturedArgs![modelIdx + 1]).toBe("opencode-go/glm-5");
 		});
 	});
 
@@ -1130,7 +1130,7 @@ describe("registerSpawnWorkerTool", () => {
 	});
 
 	describe("default worker model", () => {
-		it("worker uses default model 'opencode/glm-5' when no model configured", async () => {
+		it("worker uses default model 'opencode-go/glm-5' when no model configured", async () => {
 			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
 			const feature = localMakeFeature();
@@ -1140,7 +1140,7 @@ describe("registerSpawnWorkerTool", () => {
 			await executeFn!("id", { featureId: "feat-1" });
 			expect(capturedArgs).toContain("--model");
 			const modelIdx = capturedArgs!.indexOf("--model");
-			expect(capturedArgs![modelIdx + 1]).toBe("opencode/glm-5");
+			expect(capturedArgs![modelIdx + 1]).toBe("opencode-go/glm-5");
 		});
 
 		it("explicit model config overrides the default", async () => {
