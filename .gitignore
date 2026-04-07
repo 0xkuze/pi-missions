@@ -1,5 +1,5 @@
 node_modules/
 dist/
 .pi/missions/
-.factory/
+
 pi-session-*.html

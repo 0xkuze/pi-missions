@@ -1,0 +1,7 @@
+commands:
+  install: bun install
+  test: bun test
+  typecheck: npx tsc --noEmit
+  lint: npx @biomejs/biome check extensions/
+  lint-fix: npx @biomejs/biome check --write extensions/
+  check: bun test && npx tsc --noEmit && npx @biomejs/biome check extensions/
