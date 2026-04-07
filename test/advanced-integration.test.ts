@@ -133,7 +133,26 @@ async function invokeTool(
 	return tool.execute("call-id", params);
 }
 
+function makeReportResultLine(): string {
+	return JSON.stringify({
+		type: "tool_execution_end",
+		toolName: "report_result",
+		args: {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: [],
+			testsAdded: [],
+			discoveredIssues: [],
+		},
+		result: { content: [{ type: "text", text: "Report submitted." }] },
+		isError: false,
+	});
+}
+
 function makeMockSpawnFn(exitCode: number, output: string): (cmd: string, args: string[], opts: object) => object {
+	const finalOutput = exitCode === 0 && output
+		? [makeReportResultLine(), output].join("\n")
+		: output;
 	return (_cmd, _args, _opts) => {
 		const stdoutHandlers: Array<(data: Buffer) => void> = [];
 		const closeHandlers: Array<(code: number | null, sig: string | null) => void> = [];
@@ -149,8 +168,8 @@ function makeMockSpawnFn(exitCode: number, output: string): (cmd: string, args: 
 			},
 		};
 		setImmediate(() => {
-			if (output) {
-				for (const hdl of stdoutHandlers) hdl(Buffer.from(output));
+			if (finalOutput) {
+				for (const hdl of stdoutHandlers) hdl(Buffer.from(finalOutput));
 			}
 			for (const hdl of closeHandlers) hdl(exitCode, null);
 		});

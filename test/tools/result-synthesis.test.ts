@@ -34,10 +34,32 @@ function makeStdout(lines: string[]): string {
 	return lines.join("\n");
 }
 
+const MINIMAL_HANDOFF_DATA = {
+	whatWasImplemented: "Implemented feature",
+	whatWasLeftUndone: "",
+	commandsRun: [] as Array<{ command: string; exitCode: number; observation: string }>,
+	testsAdded: [] as Array<{ file: string; cases: string[] }>,
+	discoveredIssues: [] as Array<{ severity: string; description: string }>,
+};
+
+function makeReportResultEnd(handoffData: Record<string, unknown>): string {
+	return JSON.stringify({
+		type: "tool_execution_end",
+		toolName: "report_result",
+		args: handoffData,
+		result: { content: [{ type: "text", text: "Report submitted successfully." }] },
+		isError: false,
+	});
+}
+
+function withReportResult(lines: string[]): string[] {
+	return [...lines.slice(0, -1), makeReportResultEnd(MINIMAL_HANDOFF_DATA), lines[lines.length - 1]];
+}
+
 describe("synthesizeWorkerResult", () => {
 	describe("VAL-WORKER-006: status determination", () => {
 		it("returns success when exit code 0, no fatal tool errors, and valid output", () => {
-			const stdout = makeStdout([makeMessageEnd("assistant", "Task completed successfully.")]);
+			const stdout = makeStdout(withReportResult([makeMessageEnd("assistant", "Task completed successfully.")]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
@@ -81,21 +103,21 @@ describe("synthesizeWorkerResult", () => {
 		});
 
 		it("bash tool errors are non-fatal — worker can recover from failed commands", () => {
-			const stdout = makeStdout([
+			const stdout = makeStdout(withReportResult([
 				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 1 }, true),
 				makeToolExecutionEnd("edit", { path: "/fix.ts", edits: [] }),
 				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
 				makeMessageEnd("assistant", "Fixed the tests."),
-			]);
+			]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
 
 		it("bash tool error as only tool event is still non-fatal with exit code 0", () => {
-			const stdout = makeStdout([
+			const stdout = makeStdout(withReportResult([
 				makeToolExecutionEnd("bash", { command: "rm -rf /" }, { exitCode: 1 }, true),
 				makeMessageEnd("assistant", "Task done."),
-			]);
+			]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
@@ -111,55 +133,55 @@ describe("synthesizeWorkerResult", () => {
 		});
 
 		it("treats commit_changes tool errors as non-fatal", () => {
-			const stdout = makeStdout([
+			const stdout = makeStdout(withReportResult([
 				makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
 				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
 				makeToolExecutionEnd("commit_changes", { message: "feat: add feature" }, {}, true),
 				makeMessageEnd("assistant", "Feature implemented, commit failed."),
-			]);
+			]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 			expect(result.error).toBeUndefined();
 		});
 
 		it("read ENOENT errors are non-fatal — worker can adapt when file missing", () => {
-			const stdout = makeStdout([
+			const stdout = makeStdout(withReportResult([
 				makeToolExecutionEnd("read", { path: "/src/fizzbuzz.ts" }, {}, true),
 				makeToolExecutionEnd("read", { path: "/src/index.ts" }, {}),
 				makeToolExecutionEnd("write", { path: "/src/fizzbuzz.test.ts" }, {}),
 				makeMessageEnd("assistant", "Tests written and passing."),
-			]);
+			]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 			expect(result.error).toBeUndefined();
 		});
 
 		it("read error as last tool event is still non-fatal", () => {
-			const stdout = makeStdout([
+			const stdout = makeStdout(withReportResult([
 				makeToolExecutionEnd("read", { path: "/missing.ts" }, {}, true),
 				makeMessageEnd("assistant", "File not found, adapted."),
-			]);
+			]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
 
 		it("grep and find errors are non-fatal", () => {
-			const stdout = makeStdout([
+			const stdout = makeStdout(withReportResult([
 				makeToolExecutionEnd("grep", { pattern: "foo" }, {}, true),
 				makeToolExecutionEnd("find", { glob: "*.ts" }, {}, true),
 				makeToolExecutionEnd("write", { path: "/src/out.ts" }, {}),
 				makeMessageEnd("assistant", "Done."),
-			]);
+			]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
 
 		it("treats git_commit tool errors as non-fatal", () => {
-			const stdout = makeStdout([
+			const stdout = makeStdout(withReportResult([
 				makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
 				makeToolExecutionEnd("git_commit", { message: "feat: add feature" }, {}, true),
 				makeMessageEnd("assistant", "Feature implemented, git commit failed."),
-			]);
+			]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 			expect(result.error).toBeUndefined();
@@ -175,16 +197,16 @@ describe("synthesizeWorkerResult", () => {
 		});
 
 		it("non-error tool calls do not trigger failure", () => {
-			const stdout = makeStdout([
+			const stdout = makeStdout(withReportResult([
 				makeToolExecutionEnd("bash", { command: "echo hi" }, { exitCode: 0 }, false),
 				makeMessageEnd("assistant", "Done."),
-			]);
+			]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
 
 		it("stderr alone does not affect status determination", () => {
-			const stdout = makeStdout([makeMessageEnd("assistant", "Done.")]);
+			const stdout = makeStdout(withReportResult([makeMessageEnd("assistant", "Done.")]));
 			const result = synthesizeWorkerResult(stdout, "some stderr output", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
@@ -207,7 +229,7 @@ describe("synthesizeWorkerResult", () => {
 		});
 
 		it("does not include stderr in summary when worker succeeds", () => {
-			const stdout = makeStdout([makeMessageEnd("assistant", "All done.")]);
+			const stdout = makeStdout(withReportResult([makeMessageEnd("assistant", "All done.")]));
 			const result = synthesizeWorkerResult(stdout, "some warning output", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 			expect(result.summary).not.toContain("some warning output");
@@ -230,7 +252,8 @@ describe("synthesizeWorkerResult", () => {
 		});
 
 		it("skips empty lines without crashing", () => {
-			const stdout = `\n\n${makeMessageEnd("assistant", "Done.")}\n\n`;
+			const reportResult = makeReportResultEnd(MINIMAL_HANDOFF_DATA);
+			const stdout = `\n\n${reportResult}\n${makeMessageEnd("assistant", "Done.")}\n\n`;
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 			expect(result.summary).toBe("Done.");
@@ -251,7 +274,7 @@ describe("synthesizeWorkerResult", () => {
 				timestamp: new Date().toISOString(),
 				cwd: "/project",
 			});
-			const stdout = makeStdout([header, makeMessageEnd("assistant", "Done.")]);
+			const stdout = makeStdout([header, makeReportResultEnd(MINIMAL_HANDOFF_DATA), makeMessageEnd("assistant", "Done.")]);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
@@ -643,6 +666,7 @@ describe("synthesizeWorkerResult", () => {
 			const stdout = makeStdout([
 				makeToolExecutionEnd("write", { path: "/a.ts" }),
 				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
+				makeReportResultEnd(MINIMAL_HANDOFF_DATA),
 				makeMessageEnd("assistant", "Everything done."),
 			]);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
@@ -710,6 +734,7 @@ describe("synthesizeWorkerResult", () => {
 				makeToolExecutionEnd("write", { path: "/project/src/index.ts", content: "code" }),
 				makeToolExecutionEnd("edit", { path: "/project/src/utils.ts", edits: [] }),
 				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
+				makeReportResultEnd(MINIMAL_HANDOFF_DATA),
 				makeMessageEnd("assistant", "Implementation complete. Added index.ts and updated utils.ts.", usage),
 			]);
 			const result = synthesizeWorkerResult(stdout, "some stderr", 0, null, Date.now() - 5000);
@@ -743,6 +768,7 @@ describe("synthesizeWorkerResult", () => {
 				"{ broken json",
 				makeToolExecutionEnd("bash", { command: "echo test" }, { exitCode: 0 }),
 				"not json at all",
+				makeReportResultEnd(MINIMAL_HANDOFF_DATA),
 				makeMessageEnd("assistant", "Done despite noise."),
 			]);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
@@ -773,13 +799,13 @@ describe("synthesizeWorkerResult", () => {
 		it("returns success when exit code 0 and structured summary says tests passed", () => {
 			const summaryText =
 				"Done.\n- Files changed: src/index.ts\n- Tests: passed\n- Lint: clean\n- Remaining issues: none";
-			const stdout = makeStdout([makeMessageEnd("assistant", summaryText)]);
+			const stdout = makeStdout([makeReportResultEnd(MINIMAL_HANDOFF_DATA), makeMessageEnd("assistant", summaryText)]);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
 
 		it("returns success when no structured summary in output", () => {
-			const stdout = makeStdout([makeMessageEnd("assistant", "Task completed successfully.")]);
+			const stdout = makeStdout(withReportResult([makeMessageEnd("assistant", "Task completed successfully.")]));
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
@@ -835,5 +861,259 @@ describe("parseStructuredSummary", () => {
 		const result = parseStructuredSummary(text);
 		expect(result.testsStatus).toBe("passed");
 		expect(result.lintStatus).toBe("clean");
+	});
+});
+
+function makeLegacySuccessStdout(): string {
+	return makeStdout([
+		makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
+		makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
+		makeMessageEnd("assistant", "Feature implemented."),
+	]);
+}
+
+describe("VAL-HANDOFF-002: result synthesis extracts data from report_result tool_execution_end event", () => {
+	it("extracts handoff when report_result event present in stdout", () => {
+		const handoffData = {
+			whatWasImplemented: "Added retry logic to the API client",
+			whatWasLeftUndone: "Error logging for retry failures",
+			commandsRun: [{ command: "bun test", exitCode: 0, observation: "all pass" }],
+			testsAdded: [{ file: "retry.test.ts", cases: ["retries 3 times"] }],
+			discoveredIssues: [],
+		};
+		const stdout = makeStdout([
+			makeToolExecutionEnd("write", { path: "/project/src/retry.ts" }),
+			makeReportResultEnd(handoffData),
+			makeMessageEnd("assistant", "Implementation complete."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.handoff).toBeDefined();
+		expect(result.handoff?.whatWasImplemented).toBe("Added retry logic to the API client");
+	});
+});
+
+describe("VAL-HANDOFF-003: worker marked as failed if report_result not called (strict mode)", () => {
+	it("returns failure when no report_result event in stdout (strict mode, default)", () => {
+		const stdout = makeStdout([
+			makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
+			makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
+			makeMessageEnd("assistant", "Feature implemented."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("failure");
+		expect(result.error?.message).toMatch(/report_result|handoff/i);
+	});
+
+	it("returns failure with descriptive error about missing handoff", () => {
+		const stdout = makeLegacySuccessStdout();
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("failure");
+		expect(result.error?.message).toContain("report_result");
+	});
+});
+
+describe("VAL-HANDOFF-004: worker result includes structured handoff fields from report_result", () => {
+	it("preserves all handoff sub-fields exactly as provided", () => {
+		const handoffData = {
+			whatWasImplemented: "Added retry logic",
+			whatWasLeftUndone: "Error logging",
+			commandsRun: [{ command: "bun test", exitCode: 0, observation: "all pass" }],
+			testsAdded: [{ file: "retry.test.ts", cases: ["retries 3 times"] }],
+			discoveredIssues: [] as Array<{ severity: string; description: string }>,
+		};
+		const stdout = makeStdout([
+			makeToolExecutionEnd("write", { path: "/project/src/retry.ts" }),
+			makeReportResultEnd(handoffData),
+			makeMessageEnd("assistant", "Done."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.handoff).toBeDefined();
+		expect(result.handoff?.whatWasImplemented).toBe("Added retry logic");
+		expect(result.handoff?.whatWasLeftUndone).toBe("Error logging");
+		expect(result.handoff?.commandsRun).toEqual([{ command: "bun test", exitCode: 0, observation: "all pass" }]);
+		expect(result.handoff?.testsAdded).toEqual([{ file: "retry.test.ts", cases: ["retries 3 times"] }]);
+		expect(result.handoff?.discoveredIssues).toEqual([]);
+	});
+});
+
+describe("VAL-HANDOFF-005: discoveredIssues extracted with severity levels", () => {
+	it("preserves discoveredIssues with mixed severity and optional suggestedFix", () => {
+		const handoffData = {
+			whatWasImplemented: "Implemented cache layer",
+			whatWasLeftUndone: "",
+			commandsRun: [] as Array<{ command: string; exitCode: number; observation: string }>,
+			testsAdded: [] as Array<{ file: string; cases: string[] }>,
+			discoveredIssues: [
+				{ severity: "high", description: "Race condition in cache", suggestedFix: "Add mutex" },
+				{ severity: "low", description: "Minor typo in log" },
+			],
+		};
+		const stdout = makeStdout([
+			makeReportResultEnd(handoffData),
+			makeMessageEnd("assistant", "Done."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.handoff?.discoveredIssues).toHaveLength(2);
+		expect(result.handoff?.discoveredIssues[0].severity).toBe("high");
+		expect(result.handoff?.discoveredIssues[0].description).toBe("Race condition in cache");
+		expect(result.handoff?.discoveredIssues[0].suggestedFix).toBe("Add mutex");
+		expect(result.handoff?.discoveredIssues[1].severity).toBe("low");
+		expect(result.handoff?.discoveredIssues[1].description).toBe("Minor typo in log");
+		expect(result.handoff?.discoveredIssues[1].suggestedFix).toBeUndefined();
+	});
+});
+
+describe("VAL-HANDOFF-006: commandsRun includes exit codes and observations", () => {
+	it("preserves command text, exitCode, and observation per entry", () => {
+		const handoffData = {
+			whatWasImplemented: "Built feature",
+			whatWasLeftUndone: "",
+			commandsRun: [
+				{ command: "bun test", exitCode: 0, observation: "47 tests pass" },
+				{ command: "bun run lint", exitCode: 1, observation: "2 lint errors in utils.ts" },
+			],
+			testsAdded: [] as Array<{ file: string; cases: string[] }>,
+			discoveredIssues: [] as Array<{ severity: string; description: string }>,
+		};
+		const stdout = makeStdout([
+			makeReportResultEnd(handoffData),
+			makeMessageEnd("assistant", "Done."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.handoff?.commandsRun).toHaveLength(2);
+		expect(result.handoff?.commandsRun[0]).toEqual({ command: "bun test", exitCode: 0, observation: "47 tests pass" });
+		expect(result.handoff?.commandsRun[1]).toEqual({ command: "bun run lint", exitCode: 1, observation: "2 lint errors in utils.ts" });
+	});
+});
+
+describe("VAL-HANDOFF-007: testsAdded includes file paths and case names", () => {
+	it("preserves file paths and case name arrays", () => {
+		const handoffData = {
+			whatWasImplemented: "Added tests",
+			whatWasLeftUndone: "",
+			commandsRun: [] as Array<{ command: string; exitCode: number; observation: string }>,
+			testsAdded: [
+				{ file: "state.test.ts", cases: ["saves state", "loads state"] },
+				{ file: "utils.test.ts", cases: ["formats date"] },
+			],
+			discoveredIssues: [] as Array<{ severity: string; description: string }>,
+		};
+		const stdout = makeStdout([
+			makeReportResultEnd(handoffData),
+			makeMessageEnd("assistant", "Done."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.handoff?.testsAdded).toHaveLength(2);
+		expect(result.handoff?.testsAdded[0]).toEqual({ file: "state.test.ts", cases: ["saves state", "loads state"] });
+		expect(result.handoff?.testsAdded[1]).toEqual({ file: "utils.test.ts", cases: ["formats date"] });
+	});
+});
+
+describe("VAL-HANDOFF-008: backward compatibility — legacy workers without report_result", () => {
+	it("legacy mode returns success with warning in notes when report_result missing", () => {
+		const stdout = makeLegacySuccessStdout();
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100, { legacyMode: true });
+		expect(result.status).toBe("success");
+		expect(result.notes).toBeDefined();
+		expect(result.notes?.some((n) => n.includes("report_result") || n.includes("handoff"))).toBe(true);
+	});
+
+	it("strict mode (default) returns failure when report_result missing", () => {
+		const stdout = makeLegacySuccessStdout();
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("failure");
+		expect(result.error?.message).toMatch(/report_result|handoff/i);
+	});
+
+	it("legacy mode does not crash with empty stdout", () => {
+		const result = synthesizeWorkerResult("", "", 0, null, Date.now() - 100, { legacyMode: true });
+		expect(result).toBeDefined();
+	});
+});
+
+describe("malformed report_result data handling", () => {
+	it("returns failure with descriptive error when report_result args is not an object", () => {
+		const stdout = makeStdout([
+			JSON.stringify({
+				type: "tool_execution_end",
+				toolName: "report_result",
+				args: "not an object",
+				result: { content: [{ type: "text", text: "done" }] },
+				isError: false,
+			}),
+			makeMessageEnd("assistant", "Done."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("failure");
+		expect(result.error?.message).toMatch(/report_result|handoff/i);
+	});
+
+	it("returns failure when report_result args is missing required fields", () => {
+		const stdout = makeStdout([
+			makeReportResultEnd({ whatWasImplemented: "partial data" }),
+			makeMessageEnd("assistant", "Done."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("failure");
+		expect(result.error?.message).toMatch(/report_result|handoff/i);
+	});
+
+	it("returns failure when report_result args is null", () => {
+		const stdout = makeStdout([
+			JSON.stringify({
+				type: "tool_execution_end",
+				toolName: "report_result",
+				args: null,
+				result: { content: [{ type: "text", text: "done" }] },
+				isError: false,
+			}),
+			makeMessageEnd("assistant", "Done."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("failure");
+		expect(result.error?.message).toMatch(/report_result|handoff/i);
+	});
+});
+
+describe("existing synthesis behavior preserved with handoff", () => {
+	it("filesChanged and commandsRun still extracted alongside handoff", () => {
+		const handoffData = {
+			whatWasImplemented: "Added feature",
+			whatWasLeftUndone: "",
+			commandsRun: [{ command: "bun test", exitCode: 0, observation: "all pass" }],
+			testsAdded: [{ file: "feat.test.ts", cases: ["works"] }],
+			discoveredIssues: [] as Array<{ severity: string; description: string }>,
+		};
+		const stdout = makeStdout([
+			makeToolExecutionEnd("write", { path: "/project/src/feat.ts" }),
+			makeToolExecutionEnd("bash", { command: "bun test" }, { exitCode: 0 }),
+			makeReportResultEnd(handoffData),
+			makeMessageEnd("assistant", "Done."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.handoff).toBeDefined();
+		expect(result.filesChanged).toContain("/project/src/feat.ts");
+		expect(result.commandsRun).toHaveLength(1);
+		expect(result.commandsRun[0].command).toBe("bun test");
+	});
+
+	it("metrics still populated when handoff present", () => {
+		const usage = { totalTokens: 2000, cost: { input: 0.005, output: 0.01, cacheRead: 0, cacheWrite: 0 } };
+		const handoffData = {
+			whatWasImplemented: "Feature",
+			whatWasLeftUndone: "",
+			commandsRun: [] as Array<{ command: string; exitCode: number; observation: string }>,
+			testsAdded: [] as Array<{ file: string; cases: string[] }>,
+			discoveredIssues: [] as Array<{ severity: string; description: string }>,
+		};
+		const stdout = makeStdout([
+			makeReportResultEnd(handoffData),
+			makeMessageEnd("assistant", "Done.", usage),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 500);
+		expect(result.metrics.tokensUsed).toBe(2000);
+		expect(result.metrics.durationMs).toBeGreaterThan(0);
 	});
 });

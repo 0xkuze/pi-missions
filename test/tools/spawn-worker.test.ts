@@ -13,6 +13,22 @@ function makeMessageEndLine(role: string, text: string): string {
 	});
 }
 
+function makeReportResultLine(): string {
+	return JSON.stringify({
+		type: "tool_execution_end",
+		toolName: "report_result",
+		args: {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: [],
+			testsAdded: [],
+			discoveredIssues: [],
+		},
+		result: { content: [{ type: "text", text: "Report submitted." }] },
+		isError: false,
+	});
+}
+
 interface MockSpawnOptions {
 	stdoutLines?: string[];
 	stderr?: string;
@@ -23,6 +39,10 @@ interface MockSpawnOptions {
 
 function makeMockSpawn(opts: MockSpawnOptions = {}) {
 	const { stdoutLines = [], stderr = "", exitCode = 0, signal = null, error } = opts;
+
+	const finalLines = exitCode === 0 && stdoutLines.length > 0
+		? [...stdoutLines.slice(0, -1), makeReportResultLine(), stdoutLines[stdoutLines.length - 1]]
+		: stdoutLines;
 
 	return (_command: string, _args: string[], _options: object) => {
 		const stdoutHandlers: Array<(data: Buffer) => void> = [];
@@ -64,7 +84,7 @@ function makeMockSpawn(opts: MockSpawnOptions = {}) {
 			if (stderr) {
 				for (const h of stderrHandlers) h(Buffer.from(stderr));
 			}
-			const joinedStdout = stdoutLines.join("\n");
+			const joinedStdout = finalLines.join("\n");
 			if (joinedStdout) {
 				for (const h of stdoutHandlers) h(Buffer.from(joinedStdout));
 			}
@@ -77,6 +97,10 @@ function makeMockSpawn(opts: MockSpawnOptions = {}) {
 
 function makeMockSpawnDelayed(delayMs: number, opts: MockSpawnOptions = {}) {
 	const { stdoutLines = [], stderr = "", exitCode = 0, signal = null, error } = opts;
+
+	const finalLines = exitCode === 0 && stdoutLines.length > 0
+		? [...stdoutLines.slice(0, -1), makeReportResultLine(), stdoutLines[stdoutLines.length - 1]]
+		: stdoutLines;
 
 	return (_command: string, _args: string[], _options: object) => {
 		const stdoutHandlers: Array<(data: Buffer) => void> = [];
@@ -119,7 +143,7 @@ function makeMockSpawnDelayed(delayMs: number, opts: MockSpawnOptions = {}) {
 			if (stderr) {
 				for (const h of stderrHandlers) h(Buffer.from(stderr));
 			}
-			const joinedStdout = stdoutLines.join("\n");
+			const joinedStdout = finalLines.join("\n");
 			if (joinedStdout) {
 				for (const h of stdoutHandlers) h(Buffer.from(joinedStdout));
 			}

@@ -1,4 +1,4 @@
-import type { WorkerResult } from "../types.js";
+import type { WorkerHandoff, WorkerResult } from "../types.js";
 
 export type TestsStatus = "passed" | "failed" | "not_run" | "unknown";
 export type LintStatus = "clean" | "issues" | "not_run" | "unknown";
@@ -6,6 +6,10 @@ export type LintStatus = "clean" | "issues" | "not_run" | "unknown";
 export interface StructuredSummary {
 	testsStatus: TestsStatus;
 	lintStatus: LintStatus;
+}
+
+export interface SynthesisOptions {
+	legacyMode?: boolean;
 }
 
 type ParsedEvent = Record<string, unknown>;
@@ -236,12 +240,60 @@ function appendStderrToSummary(summary: string, stderr: string): string {
 	return `${summary}\n\n--- Worker stderr ---\n${truncated}`;
 }
 
+function extractHandoffArgs(events: ParsedEvent[]): Record<string, unknown> | null {
+	for (const event of events) {
+		if (event.type !== "tool_execution_end") continue;
+		if (event.toolName !== "report_result") continue;
+		const args = event.args;
+		if (args !== null && args !== undefined && typeof args === "object" && !Array.isArray(args)) {
+			return args as Record<string, unknown>;
+		}
+		return null;
+	}
+	return null;
+}
+
+function validateHandoff(args: Record<string, unknown>): WorkerHandoff | null {
+	if (typeof args.whatWasImplemented !== "string") return null;
+	if (typeof args.whatWasLeftUndone !== "string") return null;
+	if (!Array.isArray(args.commandsRun)) return null;
+	if (!Array.isArray(args.testsAdded)) return null;
+	if (!Array.isArray(args.discoveredIssues)) return null;
+
+	const validSeverities = new Set(["low", "medium", "high"]);
+	for (const cmd of args.commandsRun as Array<Record<string, unknown>>) {
+		if (typeof cmd.command !== "string" || typeof cmd.exitCode !== "number" || typeof cmd.observation !== "string") {
+			return null;
+		}
+	}
+	for (const test of args.testsAdded as Array<Record<string, unknown>>) {
+		if (typeof test.file !== "string" || !Array.isArray(test.cases)) return null;
+		for (const c of test.cases as unknown[]) {
+			if (typeof c !== "string") return null;
+		}
+	}
+	for (const issue of args.discoveredIssues as Array<Record<string, unknown>>) {
+		if (typeof issue.severity !== "string" || !validSeverities.has(issue.severity)) return null;
+		if (typeof issue.description !== "string") return null;
+		if (issue.suggestedFix !== undefined && typeof issue.suggestedFix !== "string") return null;
+	}
+
+	return {
+		whatWasImplemented: args.whatWasImplemented,
+		whatWasLeftUndone: args.whatWasLeftUndone,
+		commandsRun: args.commandsRun as WorkerHandoff["commandsRun"],
+		testsAdded: args.testsAdded as WorkerHandoff["testsAdded"],
+		discoveredIssues: args.discoveredIssues as WorkerHandoff["discoveredIssues"],
+	};
+}
+
 export function synthesizeWorkerResult(
 	stdout: string,
 	stderr: string,
 	exitCode: number | null,
 	signal: string | null,
 	startTime: number,
+	options?: SynthesisOptions,
 ): WorkerResult {
 	const durationMs = Math.max(1, Date.now() - startTime);
 
@@ -279,6 +331,8 @@ export function synthesizeWorkerResult(
 	const summary = extractSummary(events) || "Worker completed without producing a summary";
 	const fatalToolError = hasFatalToolError(events);
 	const tokenMetrics = extractMetrics(events);
+	const handoffArgs = extractHandoffArgs(events);
+	const hasReportResult = handoffArgs !== null;
 
 	if (exitCode !== 0) {
 		return {
@@ -323,11 +377,51 @@ export function synthesizeWorkerResult(
 		};
 	}
 
+	if (!hasReportResult) {
+		if (options?.legacyMode) {
+			return {
+				status: "success",
+				summary,
+				filesChanged,
+				commandsRun,
+				notes: ["Worker did not call report_result — structured handoff is missing"],
+				metrics: { durationMs, ...tokenMetrics },
+			};
+		}
+		return {
+			status: "failure",
+			summary,
+			filesChanged,
+			commandsRun,
+			error: {
+				kind: "validation",
+				message: "Worker did not call report_result — structured handoff is missing",
+			},
+			metrics: { durationMs, ...tokenMetrics },
+		};
+	}
+
+	const handoff = validateHandoff(handoffArgs);
+	if (!handoff) {
+		return {
+			status: "failure",
+			summary,
+			filesChanged,
+			commandsRun,
+			error: {
+				kind: "validation",
+				message: "Worker called report_result with malformed or incomplete data — structured handoff is invalid",
+			},
+			metrics: { durationMs, ...tokenMetrics },
+		};
+	}
+
 	return {
 		status: "success",
 		summary,
 		filesChanged,
 		commandsRun,
+		handoff,
 		metrics: { durationMs, ...tokenMetrics },
 	};
 }

@@ -25,6 +25,22 @@ function makeMilestone(id: string, features: Feature[], status: Milestone["statu
 	return _sm({ id, name: `Milestone ${id}`, features, status });
 }
 
+function makeReportResultLine(): string {
+	return JSON.stringify({
+		type: "tool_execution_end",
+		toolName: "report_result",
+		args: {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: [],
+			testsAdded: [],
+			discoveredIssues: [],
+		},
+		result: { content: [{ type: "text", text: "Report submitted." }] },
+		isError: false,
+	});
+}
+
 function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
 	return _sp({
 		milestones: [
@@ -269,10 +285,10 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 	});
 
 	it("spawn_worker transitions from approved to executing and updates counters on success", async () => {
-		const successOutput = JSON.stringify({
+		const successOutput = [makeReportResultLine(), JSON.stringify({
 			type: "message_end",
 			message: { role: "assistant", content: [{ type: "text", text: "Feature complete." }] },
-		});
+		})].join("\n");
 
 		const mockSpawn = (_cmd: string, _args: string[], _opts: object) => {
 			const stdoutHandlers: Array<(data: Buffer) => void> = [];
@@ -827,10 +843,10 @@ describe("VAL-CROSS-013 / VAL-CROSS-005: worker attempt status transitions", () 
 	}
 
 	it("successful attempt has status success, exit code 0, completedAt, durationMs > 0", async () => {
-		const output = JSON.stringify({
+		const output = [makeReportResultLine(), JSON.stringify({
 			type: "message_end",
 			message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
-		});
+		})].join("\n");
 		const { registerSpawnWorkerTool } = await import("../extensions/tools/spawn-worker.js");
 		const mockPi = buildMockPi();
 		registerSpawnWorkerTool(mockPi.pi, {
