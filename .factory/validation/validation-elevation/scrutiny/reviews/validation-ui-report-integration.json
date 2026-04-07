@@ -1,0 +1,46 @@
+{
+  "featureId": "validation-ui-report-integration",
+  "reviewedAt": "2026-04-07T18:05:00.000Z",
+  "commitId": "5256103",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "fail",
+  "codeReview": {
+    "summary": "The feature adds correct rendering functions for assertion pass/fail, scrutiny findings, widget assertion counts, and report assertion/evidence sections. All pure-logic functions are well-implemented. However, none of the three new capabilities (assertions in validation view, assertion counts in widget, validation info in report) are actually wired up at their call sites. The new parameters are optional and silently unused in Mission Control integration, widget rendering, and report generation. Tests only exercise the pure functions directly and don't catch the missing integration.",
+    "issues": [
+      {
+        "file": "extensions/ui/mission-control.ts",
+        "line": 1003,
+        "severity": "blocking",
+        "description": "renderValidationView() is called without the new 'assertions' and 'scrutinyReport' parameters. The validation view in Mission Control will never show assertion results or scrutiny findings, contradicting the feature description: 'Update Mission Control validation view to show per-assertion pass/fail' and 'Update Mission Control to show scrutiny findings'."
+      },
+      {
+        "file": "extensions/index.ts",
+        "line": 400,
+        "severity": "blocking",
+        "description": "The updateWidget() wrapper in index.ts does not accept or forward assertionInfo to the underlying renderMissionWidget/buildWidgetLines calls. Although widget.ts correctly supports WidgetAssertionInfo, no call site in the actual application passes it, making the widget assertion counts feature dead code in practice."
+      },
+      {
+        "file": "extensions/tools/complete.ts",
+        "line": 131,
+        "severity": "blocking",
+        "description": "generateReport() is called without the new 'validationInfo' parameter. The report will never include the 'Validation Assertions' or 'Evidence' sections, contradicting: 'Update report.ts generateReport() to include Validation Assertions section'."
+      },
+      {
+        "file": "test/evidence-preservation.test.ts",
+        "line": 10,
+        "severity": "non_blocking",
+        "description": "The evidence preservation test is trivially true: it calls transitionState() which is a pure function that only modifies in-memory state and never touches the filesystem. The test proves that a state transition function doesn't delete files, which it was never capable of doing. A more meaningful test would verify that the actual abort flow (including any cleanup hooks) preserves evidence in the runtime directory."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The pattern of adding optional parameters to pure rendering/generation functions without wiring them at call sites creates a testing blind spot. Tests pass because they call the pure functions directly, but the integration is incomplete. This has happened across three integration points (mission-control.ts, index.ts, complete.ts) in a single feature.",
+      "evidence": "mission-control.ts:1003 calls renderValidationView with 7 args (missing assertions, scrutinyReport); index.ts:400 updateWidget has no assertionInfo param; complete.ts:131 calls generateReport with 3 args (missing validationInfo)"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "The feature correctly implements all pure rendering/generation logic for assertion display, widget counts, report sections, and scrutiny findings. Code quality is good — functions are well-structured, follow project conventions, and handle edge cases (empty arrays, undefined). However, the feature has three blocking integration gaps: (1) Mission Control doesn't pass assertions or scrutiny data to the validation view, (2) the widget update path doesn't forward assertion info, and (3) the report generation call site doesn't pass validation info. All new functionality is effectively dead code in the actual application. Tests only cover the pure functions and miss the integration gaps entirely."
+}

@@ -1,0 +1,81 @@
+{
+	"milestone": "validation-elevation",
+	"round": 1,
+	"status": "fail",
+	"validatorsRun": {
+		"test": { "passed": true, "command": "bun test", "exitCode": 0 },
+		"typecheck": { "passed": true, "command": "npx tsc --noEmit", "exitCode": 0 },
+		"lint": { "passed": true, "command": "npx @biomejs/biome check extensions/", "exitCode": 0 }
+	},
+	"reviewsSummary": {
+		"total": 6,
+		"passed": 4,
+		"failed": 1,
+		"passedWithBlockingIssues": 1,
+		"failedFeatures": ["validation-ui-report-integration", "milestone-scrutiny"]
+	},
+	"blockingIssues": [
+		{
+			"featureId": "validation-ui-report-integration",
+			"severity": "blocking",
+			"description": "renderValidationView() in mission-control.ts (line 1003) is called without the new 'assertions' and 'scrutinyReport' optional parameters. The validation view in Mission Control never shows assertion results or scrutiny findings. All new rendering functionality is effectively dead code."
+		},
+		{
+			"featureId": "validation-ui-report-integration",
+			"severity": "blocking",
+			"description": "updateWidget() in index.ts (line 400) does not accept or forward assertionInfo to renderMissionWidget/buildWidgetLines. Widget assertion counts feature is dead code."
+		},
+		{
+			"featureId": "validation-ui-report-integration",
+			"severity": "blocking",
+			"description": "generateReport() in complete.ts (line 131) is called without the new 'validationInfo' parameter. The report will never include 'Validation Assertions' or 'Evidence' sections."
+		},
+		{
+			"featureId": "milestone-scrutiny",
+			"severity": "blocking",
+			"description": "Timeout handler in spawnScrutinyProcess (run-scrutiny.ts line 322) sets killed=true but never calls proc.kill(), leaving orphaned child processes on timeout. The ProcLike interface is missing kill/killed properties that spawn-worker.ts includes."
+		}
+	],
+	"appliedUpdates": [],
+	"suggestedGuidanceUpdates": [
+		{
+			"target": "AGENTS.md",
+			"suggestion": "Add convention: When adding optional parameters to pure rendering/generation functions, integration tests MUST verify the call sites actually pass the new parameters. Testing only the pure function in isolation misses dead-code integration gaps.",
+			"evidence": "Feature validation-ui-report-integration added correct pure functions (renderValidationView, buildWidgetLines, generateReport) with new optional params but none of the three call sites (mission-control.ts, index.ts, complete.ts) were updated to pass them. Tests only exercised the pure functions directly.",
+			"isSystemic": true
+		},
+		{
+			"target": "AGENTS.md",
+			"suggestion": "Add convention: When spawning child processes with timeouts, the timeout handler MUST call proc.kill() to prevent orphaned processes. Reference spawn-worker.ts SIGTERM+SIGKILL pattern as the canonical approach.",
+			"evidence": "Feature milestone-scrutiny's spawnScrutinyProcess sets killed=true on timeout but never calls proc.kill(). spawn-worker.ts correctly does proc.kill('SIGTERM') with a SIGKILL fallback.",
+			"isSystemic": false
+		}
+	],
+	"rejectedObservations": [
+		{
+			"observation": "architecture.md lists 11 registered tools but run_scrutiny is now the 12th tool",
+			"reason": "library content is advisory and stale tool count is low-risk; orchestrator can update if desired but not blocking"
+		},
+		{
+			"observation": "architecture.md doesn't document the new contract integration behavior for run_validation",
+			"reason": "same as above — library documentation staleness is non-blocking advisory"
+		},
+		{
+			"observation": "ExecFn type is defined in run-validation.ts and imported by contract-runner.ts creating circular-ish import",
+			"reason": "structural typing makes this work fine; cross-tool type location convention is a nice-to-have refactor, not blocking"
+		},
+		{
+			"observation": "renderValidationView has 9 positional parameters — approaching threshold for options object",
+			"reason": "non-blocking refactoring suggestion; function works correctly as-is"
+		},
+		{
+			"observation": "AssertionResultData contains a consistent typo (Asserion vs Assertion)",
+			"reason": "consistent throughout codebase (types.ts, report.ts, validation-view.ts, widget.ts, tests); renaming would be a cross-cutting refactor, not blocking"
+		},
+		{
+			"observation": "Pattern of adding optional parameters to pure functions without wiring call sites creates testing blind spot",
+			"reason": "captured as suggestedGuidanceUpdates recommendation to AGENTS.md instead"
+		}
+	],
+	"previousRound": null
+}

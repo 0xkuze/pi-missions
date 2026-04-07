@@ -1,0 +1,46 @@
+{
+  "featureId": "milestone-scrutiny",
+  "reviewedAt": "2026-04-07T17:15:00.000Z",
+  "commitId": "6f68311",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The run_scrutiny tool implementation is solid and well-structured. It correctly spawns a reviewer pi process, generates a scrutiny-skill.md with comprehensive context (changed files, acceptance criteria, contract assertions, library topics, worker results), parses NDJSON output into structured reports, writes evidence artifacts, handles timeout/malformed/empty output, and updates the orchestrator protocol. The tool registration, parameter validation, and precondition checks (state must be 'executing', milestone must exist) follow established patterns. Tests are thorough with 25 tool tests and 5 protocol tests covering all 16 fulfilled assertions. One blocking issue found: the timeout handler does not kill the spawned child process, leaving it orphaned.",
+    "issues": [
+      {
+        "file": "extensions/tools/run-scrutiny.ts",
+        "line": 322,
+        "severity": "blocking",
+        "description": "Timeout handler does not kill the spawned child process. When the timeout fires, it sets `killed = true` and resolves the promise, but never calls `proc.kill()`. This leaves the reviewer pi process running as an orphan consuming resources. Compare with spawn-worker.ts which properly calls `proc.kill('SIGTERM')` with a SIGKILL fallback. The ProcLike interface is also missing `kill` and `killed` properties that spawn-worker.ts includes."
+      },
+      {
+        "file": "extensions/tools/run-scrutiny.ts",
+        "line": 247,
+        "severity": "non_blocking",
+        "description": "Redundant ternary in parseScrutinyOutput: `issues.length === 0 ? 'clean' : 'clean'` — both branches return the same value. While functionally harmless (status indicates parse success, not issue presence), it's dead code that should be simplified to just `'clean'`."
+      },
+      {
+        "file": "extensions/tools/run-scrutiny.ts",
+        "line": 82,
+        "severity": "non_blocking",
+        "description": "buildContractSection redundantly re-loads the plan from disk (`loadPlan(basePath)`) to find the milestone, even though the calling code in generateScrutinySkill already has the Milestone object. The function could accept the Milestone directly instead of milestoneId + basePath, avoiding unnecessary disk I/O."
+      },
+      {
+        "file": "extensions/tools/run-scrutiny.ts",
+        "line": 206,
+        "severity": "non_blocking",
+        "description": "Empty `catch {}` in parseScrutinyOutput lacks a `why` comment. Per AGENTS.md, the only exception to 'zero comments' is a `why` comment for non-obvious decisions. The sibling catch at line 135 (loadWorkerResults) correctly includes a `why` comment. This catch should have one too, explaining that non-JSON NDJSON lines are expected and skipped."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "architecture.md lists 11 registered tools but run_scrutiny is now the 12th tool. The tool list is stale.",
+      "evidence": ".factory/library/architecture.md line '## Tools (11 registered)' — should be 12 and include run_scrutiny."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Implementation passes review with one blocking issue: the timeout handler in spawnScrutinyProcess does not actually kill the child process, leaving orphaned pi reviewer processes on timeout. The ProcLike interface lacks kill/killed properties that spawn-worker.ts includes. Three non-blocking issues noted: redundant ternary, unnecessary disk I/O in buildContractSection, and a missing why-comment on an empty catch. The architecture.md tool count is stale (lists 11, now 12). Overall the implementation is clean, well-tested, and follows established patterns."
+}
