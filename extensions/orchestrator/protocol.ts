@@ -43,6 +43,7 @@ If scope is large, propose milestones incrementally and get user feedback before
 
 Only call \`submit_plan\` when you are confident every feature has clear, testable acceptance criteria.
 Group features into milestones that represent validation checkpoints.
+Do NOT create setup-only milestones (project init, config). Include setup as the first feature of the first implementation milestone.
 The plan is the most important part of the mission. A bad plan produces bad results. Spend time getting it right.
 
 ${autonomyInstructions(autonomy)}`;
@@ -68,7 +69,7 @@ function approvedProtocol(plan: MissionPlan | undefined): string {
 MISSION: ${description}
 SCOPE: ${totalMilestones} milestones, ${totalFeatures} features
 
-Start now: call \`update_mission_state\` (start_milestone), then \`spawn_worker\` for the first feature.
+Plan approved. Call \`spawn_worker\` for the first feature now.
 On worker failure, use \`create_fix_feature\` instead of debugging yourself.`;
 }
 
@@ -103,7 +104,7 @@ function gitWarnings(state: MissionState): string {
 	const warnings: string[] = [];
 	if (!state.gitSnapshot.autoCommitEnabled) {
 		warnings.push(
-			"WARNING: Dirty repo detected \u2014 auto-commit is disabled. Call commit_changes only when appropriate.",
+			"WARNING: Dirty repo detected \u2014 auto-commit is disabled.",
 		);
 	}
 	if (warnings.length === 0) return "";
@@ -125,18 +126,24 @@ You are a project manager, not an implementer. Never read implementation files, 
 During EXECUTION: do NOT use \`edit\` or \`write\`. All code changes MUST go through workers via \`spawn_worker\`.
 NEVER read files under \`.pi/missions/\`. Your mission tools provide all state awareness you need.
 On failure: call create_fix_feature, then spawn_worker for the fix. Do not debug yourself.
-Call spawn_worker for the next pending feature. After all milestone features complete, call run_validation.
+Git commits happen automatically after successful workers.
+Workers are SEQUENTIAL. Call spawn_worker for ONE feature, wait for the result, then call spawn_worker for the next. Never call spawn_worker more than once per turn.
+Milestones auto-complete when all features finish. After a milestone auto-completes, call run_validation for that milestone.
+Skip run_validation for setup-only milestones (no source code yet — typecheck and tests will fail trivially).
 When ALL features across ALL milestones are done (no pending/active features remain), call complete_mission immediately with a summary.
 Communicate progress concisely after each feature completes: what was done, what is next.
 Match the user's configured output style. No emoji, no filler, no pleasantries unless the user's style uses them.
+CODE REVIEW: For complex features that touch many files or introduce architecture, use create_fix_feature to add a review feature AFTER the implementation feature completes. The review feature worker reads the changed files and checks: code reusability, simplicity, no comments in code, proper error handling, follows AGENTS.md conventions, minimal and performant. Only for substantial changes — skip for trivial features.
 
 INTERVENTION PATTERNS:
 - Feature fails twice \u2192 create a targeted fix feature addressing the specific failure.
 - Feature exhausts retries (3x) \u2192 mark blocked, inform user clearly what went wrong and why.
-- Validation fails \u2192 analyze the failing output, create targeted fix features, re-validate after fixes.
+- Validation fails \u2192 analyze the failing output, create targeted fix features, re-validate after fixes. NEVER call complete_mission after a validation failure without fixing and re-validating first.
 - User sends a redirect message \u2192 pause current plan, acknowledge the new direction, re-plan if scope changed.
-- All features done but validation still fails \u2192 do NOT mark mission complete. Fix first.
+- All features done but validation still fails \u2192 do NOT mark mission complete. Fix first. Create fix features for every failing check.
 - If blocked and unsure \u2192 ask the user. Do not spin.
+
+CRITICAL: Do NOT call complete_mission if run_validation returned any failing checks. You MUST create fix features and re-validate until all checks pass.
 
 ${autonomyInstructions(autonomy)}`;
 }
@@ -171,8 +178,11 @@ function cavemanExecuting(state: MissionState, plan: MissionPlan | undefined): s
 
 ${progress}${warnings}
 
-You boss. No touch code. spawn_worker do work. Worker fail? create_fix_feature then spawn_worker again.
-All features done? run_validation. All milestones done? complete_mission. Go.`;
+You boss. No touch code. spawn_worker do work. ONE worker at a time. Wait result before next spawn.
+Worker fail? create_fix_feature then spawn_worker again.
+Big feature done? create_fix_feature for code review — worker reads changed files, checks quality, simplicity, no comments, error handling, AGENTS.md rules. Skip review for trivial features.
+All features done? run_validation. Validation fail? create_fix_feature, spawn_worker, run_validation again. NEVER complete_mission with failing checks.
+All milestones done AND validation pass? complete_mission. Go.`;
 }
 
 function cavemanDraftReview(): string {
@@ -181,7 +191,7 @@ function cavemanDraftReview(): string {
 
 function cavemanApproved(plan: MissionPlan | undefined): string {
 	const total = plan?.milestones.flatMap((m) => m.features).length ?? 0;
-	return `## CAVEMAN \u2014 APPROVED\n\n${total} features ready. Start: update_mission_state(start_milestone), then spawn_worker. Go.`;
+	return `## CAVEMAN \u2014 APPROVED\n\n${total} features ready. Start: spawn_worker. Milestones auto-managed. Go.`;
 }
 
 function cavemanValidating(): string {

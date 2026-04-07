@@ -1,11 +1,13 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { resolveModel } from "../config.js";
+import { getChangedFiles, isGitAvailable, stageAndCommit } from "../git.js";
 import {
+	type CompletedFeatureSummary,
 	generateWorkerContext,
 	generateWorkerPrompt,
 	generateWorkerSkill,
@@ -14,7 +16,7 @@ import {
 import { loadConfig, loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
 import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionPlan, MissionState, WorkerAttempt, WorkerResult } from "../types.js";
-import { nowISO } from "../utils.js";
+import { getPiInvocation, nowISO } from "../utils.js";
 import { removePidFile, writePidFile } from "../worker-pid.js";
 import { synthesizeWorkerResult } from "./result-synthesis.js";
 import { runValidator } from "./validate-worker.js";
@@ -39,10 +41,14 @@ interface Deps {
 	basePath: string;
 	projectDir: string;
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
+	refreshWidget?: (state: MissionState, plan?: MissionPlan) => void;
 	getThinkingLevel?: () => ThinkingLevel;
 	setThinkingLevel?: (level: ThinkingLevel) => void;
 	availableModels?: string[] | (() => string[]);
 	_spawnOverride?: SpawnFn;
+	_isGitAvailableOverride?: (cwd: string) => boolean;
+	_getChangedFilesOverride?: (cwd: string, baseCommit?: string) => string[];
+	_stageAndCommitOverride?: (cwd: string, files: string[], message: string) => string;
 }
 
 const TERMINAL_FEATURE_STATUSES = new Set(["blocked", "skipped", "done"]);
@@ -88,6 +94,72 @@ function findNextPending(plan: MissionPlan, currentFeatureId: string): Feature |
 	return null;
 }
 
+function collectCompletedFeatures(plan: MissionPlan, excludeFeatureId: string): CompletedFeatureSummary[] {
+	const completed: CompletedFeatureSummary[] = [];
+	for (const milestone of plan.milestones) {
+		for (const f of milestone.features) {
+			if (f.id !== excludeFeatureId && f.status === "done") {
+				completed.push({ name: f.name, description: f.description, relevantFiles: f.relevantFiles });
+			}
+		}
+	}
+	return completed;
+}
+
+function findMilestoneForFeature(plan: MissionPlan, featureId: string): MissionPlan["milestones"][number] | null {
+	for (const milestone of plan.milestones) {
+		if (milestone.features.some((f) => f.id === featureId)) return milestone;
+	}
+	return null;
+}
+
+const RESOLVED_FEATURE_STATUSES = new Set(["done", "skipped", "failed", "blocked"]);
+
+function autoStartMilestone(plan: MissionPlan, state: MissionState, featureId: string): { plan: MissionPlan; state: MissionState } {
+	const milestone = findMilestoneForFeature(plan, featureId);
+	if (!milestone || milestone.status !== "pending") return { plan, state };
+	const now = nowISO();
+	return {
+		plan: {
+			...plan,
+			milestones: plan.milestones.map((m) =>
+				m.id === milestone.id ? { ...m, status: "active" as const, startedAt: now } : m,
+			),
+		},
+		state: {
+			...state,
+			currentMilestoneId: milestone.id,
+			progressLog: [
+				...state.progressLog,
+				{ timestamp: now, type: "milestone_start" as const, detail: `Milestone '${milestone.name}' started` },
+			],
+		},
+	};
+}
+
+function autoCompleteMilestone(plan: MissionPlan, state: MissionState, featureId: string): { plan: MissionPlan; state: MissionState } {
+	const milestone = findMilestoneForFeature(plan, featureId);
+	if (!milestone || milestone.status !== "active") return { plan, state };
+	const allResolved = milestone.features.every((f) => RESOLVED_FEATURE_STATUSES.has(f.status));
+	if (!allResolved) return { plan, state };
+	const now = nowISO();
+	return {
+		plan: {
+			...plan,
+			milestones: plan.milestones.map((m) =>
+				m.id === milestone.id ? { ...m, status: "done" as const, completedAt: now } : m,
+			),
+		},
+		state: {
+			...state,
+			progressLog: [
+				...state.progressLog,
+				{ timestamp: now, type: "milestone_complete" as const, detail: `Milestone '${milestone.name}' completed` },
+			],
+		},
+	};
+}
+
 const RESOLVED_DEP_STATUSES = new Set(["done", "skipped", "failed"]);
 
 function checkDependencies(feature: Feature, allFeatures: Map<string, Feature>): string | null {
@@ -98,19 +170,6 @@ function checkDependencies(feature: Feature, allFeatures: Map<string, Feature>):
 		}
 	}
 	return null;
-}
-
-function getPiInvocation(args: string[]): { command: string; commandArgs: string[] } {
-	const currentScript = process.argv[1];
-	if (currentScript && existsSync(currentScript)) {
-		return { command: process.execPath, commandArgs: [currentScript, ...args] };
-	}
-	const execName = basename(process.execPath).toLowerCase();
-	const isGenericRuntime = /^(node|bun)(\.exe)?$/.test(execName);
-	if (!isGenericRuntime) {
-		return { command: process.execPath, commandArgs: args };
-	}
-	return { command: "pi", commandArgs: args };
 }
 
 function buildWorkerArgs(
@@ -443,9 +502,10 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			const runtimeDir = join(deps.basePath, "runtime", feature.id, String(attemptNumber));
 
 			const agentsMd = readAgentsMd(deps.projectDir);
+			const completedFeatures = collectCompletedFeatures(plan, feature.id);
 			const skill = generateWorkerSkill(feature, agentsMd, config.promptingMode);
 			const prompt = generateWorkerPrompt(feature, params.additionalContext);
-			const context = generateWorkerContext(agentsMd);
+			const context = generateWorkerContext(agentsMd, completedFeatures);
 			writeWorkerFiles(deps.basePath, feature.id, attemptNumber, { skill, prompt, context });
 
 			const skillPath = join(runtimeDir, "worker-skill.md");
@@ -460,6 +520,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			}
 
 			let updatedPlan = setFeatureActive(plan, feature.id);
+			({ plan: updatedPlan, state: activeState } = autoStartMilestone(updatedPlan, activeState, feature.id));
 			activeState = {
 				...activeState,
 				currentFeatureId: feature.id,
@@ -479,10 +540,11 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				`Spawning worker: ${feature.name} (${activeState.totalFeaturesCompleted + 1}/${allFeatures.size})`,
 			);
 
+			const refreshFn = deps.refreshWidget ?? deps.updateWidget;
 			const widgetInterval = setInterval(() => {
 				const currentState = loadState(deps.basePath);
 				const currentPlan = loadPlan(deps.basePath);
-				if (currentState) deps.updateWidget(currentState, currentPlan ?? undefined);
+				if (currentState) refreshFn(currentState, currentPlan ?? undefined);
 			}, 2000);
 
 			const timeoutMs = config.workerTimeoutMs ?? DEFAULT_WORKER_TIMEOUT_MS;
@@ -597,7 +659,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			const result = synthesizeWorkerResult(
+			let result = synthesizeWorkerResult(
 				procResult.stdout,
 				procResult.stderr,
 				procResult.exitCode,
@@ -630,92 +692,26 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 
 			writeRunArtifacts(runtimeDir, procResult.stdout, procResult.stderr, result, metadata);
 
-			let finalResult = result;
-
-			// Validator step: after worker success, run LLM review against acceptance criteria.
-			// On FIX verdict: re-spawn worker once with feedback, then accept.
-			// On REJECT verdict: treat as failure with feedback for orchestrator.
 			if (result.status === "success") {
-				const validatorVerdict = await runValidator(feature, result, {
+				const validatorResult = await runValidator(feature, result, {
 					basePath: deps.basePath,
 					projectDir: deps.projectDir,
-					spawnFn,
+					spawnFn: spawnFn as SpawnFn,
 					plan: updatedPlan,
 					config,
 					signal: signal ?? undefined,
 				});
-
-				if (validatorVerdict.verdict === "fix") {
-					// Re-spawn worker with validator feedback for one retry
-					const retryAttemptNumber = attemptNumber + 1;
-					const retryRuntimeDir = join(deps.basePath, "runtime", feature.id, String(retryAttemptNumber));
-					const retrySkill = generateWorkerSkill(feature, agentsMd, config.promptingMode);
-					const retryPrompt = generateWorkerPrompt(
-						feature,
-						`Validator feedback (fix these issues):\n${validatorVerdict.feedback}`,
-					);
-					const retryContext = generateWorkerContext(agentsMd);
-					writeWorkerFiles(deps.basePath, feature.id, retryAttemptNumber, {
-						skill: retrySkill,
-						prompt: retryPrompt,
-						context: retryContext,
-					});
-					const retrySkillPath = join(retryRuntimeDir, "worker-skill.md");
-					const retryContextPath = join(retryRuntimeDir, "worker-context.md");
-					const retryArgs = buildWorkerArgs(retrySkillPath, retryContextPath, retryPrompt, workerModel);
-					const { command: retryCmd, commandArgs: retryCmdArgs } = getPiInvocation(retryArgs);
-
-					activeState = {
-						...activeState,
-						progressLog: [
-							...activeState.progressLog,
-							{
-								timestamp: nowISO(),
-								type: "worker_spawn" as const,
-								detail: `Validator said FIX for '${feature.name}' — re-spawning worker with feedback`,
-							},
-						],
-					};
-					saveState(deps.basePath, activeState);
-					deps.updateWidget(activeState, updatedPlan);
-
-					const retryProcResult = await spawnWorkerProcess(spawnFn, retryCmd, retryCmdArgs, deps.projectDir, {
-						signal: signal ?? undefined,
-						timeoutMs,
-						runtimeDir: retryRuntimeDir,
-					});
-
-					const retryResult = synthesizeWorkerResult(
-						retryProcResult.stdout,
-						retryProcResult.stderr,
-						retryProcResult.exitCode,
-						retryProcResult.signal,
-						startTime,
-					);
-
-					writeRunArtifacts(retryRuntimeDir, retryProcResult.stdout, retryProcResult.stderr, retryResult, {
-						...metadata,
-						attemptNumber: retryAttemptNumber,
-						validatorFeedback: validatorVerdict.feedback,
-					});
-
-					finalResult = retryResult.status === "success" ? retryResult : result;
-				} else if (validatorVerdict.verdict === "reject") {
-					// Architectural issue — return as failure with validator feedback
-					finalResult = {
+				if (validatorResult.verdict !== "pass") {
+					result = {
 						...result,
 						status: "failure",
-						summary: `${result.summary}\n\nValidator REJECTED: ${validatorVerdict.feedback}`,
-						error: {
-							kind: "validation",
-							message: `Validator rejected: ${validatorVerdict.feedback}`,
-						},
+						summary: `${result.summary}\n\nValidator: ${validatorResult.feedback}`,
+						error: { kind: "validation", message: `Validator: ${validatorResult.verdict}`, details: validatorResult.feedback },
 					};
 				}
-				// verdict === "pass" → finalResult stays as original success
 			}
 
-			if (finalResult.status === "success") {
+			if (result.status === "success") {
 				updatedPlan = updateFeatureSuccess(updatedPlan, feature.id, attempt);
 				activeState = {
 					...activeState,
@@ -747,22 +743,60 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
+			if (result.status === "success") {
+				const snapshot = activeState.gitSnapshot;
+				const autoCommit = snapshot?.autoCommitEnabled ?? false;
+				const gitCheck = deps._isGitAvailableOverride ?? isGitAvailable;
+				if (autoCommit && gitCheck(deps.projectDir)) {
+					const getChanged = deps._getChangedFilesOverride ?? getChangedFiles;
+					const doCommit = deps._stageAndCommitOverride ?? stageAndCommit;
+					const changedFiles = getChanged(deps.projectDir, snapshot?.headCommit);
+					if (changedFiles.length > 0) {
+						const isFix = feature.fixOrigin !== undefined;
+						const msg = isFix ? `mission: fix ${feature.name}` : `mission: ${feature.name}`;
+						try {
+							const sha = doCommit(deps.projectDir, changedFiles, msg);
+							activeState = {
+								...activeState,
+								gitSnapshot: { ...snapshot!, headCommit: sha },
+								progressLog: [
+									...activeState.progressLog,
+									{
+										timestamp: nowISO(),
+										type: "commit_created" as const,
+										detail: `Auto-committed ${changedFiles.length} file(s) for '${feature.name}': ${sha}`,
+									},
+								],
+							};
+						} catch {
+							// why: auto-commit is best-effort — don't fail the feature if git commit fails
+						}
+					}
+				}
+			}
+
+			({ plan: updatedPlan, state: activeState } = autoCompleteMilestone(updatedPlan, activeState, feature.id));
+
 			saveState(deps.basePath, activeState);
 			savePlan(deps.basePath, updatedPlan);
 			deps.updateWidget(activeState, updatedPlan);
 
-			const statusText = finalResult.status === "success" ? "succeeded" : `failed (attempt ${attemptNumber})`;
+			const statusText = result.status === "success" ? "succeeded" : `failed (attempt ${attemptNumber})`;
 			const nextPending = findNextPending(updatedPlan, feature.id);
 			const progressDone = activeState.totalFeaturesCompleted + activeState.totalFeaturesSkipped;
-			const completionHint = nextPending
-				? `Next: ${nextPending.name}.`
-				: "ALL FEATURES DONE. Call complete_mission now with a summary of what was accomplished.";
-			const validatorNote = finalResult !== result ? "\n(Includes validator review step)" : "";
+			let completionHint: string;
+			if (result.status !== "success") {
+				completionHint = nextPending ? `Next: ${nextPending.name}.` : "No pending features remain.";
+			} else {
+				completionHint = nextPending
+					? `Next: ${nextPending.name}.`
+					: "ALL FEATURES DONE. Call complete_mission now with a summary of what was accomplished.";
+			}
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${finalResult.summary}${validatorNote}`,
+						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${result.summary}`,
 					},
 				],
 				details: {},

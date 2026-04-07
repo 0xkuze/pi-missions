@@ -299,6 +299,13 @@ describe("buildOrchestratorProtocol", () => {
 			const result = verboseProtocol(makeState({ status: "approved" }), plan) as string;
 			expect(result.length).toBeLessThan(1500);
 		});
+
+		it("does not instruct calling start_milestone", () => {
+			const plan = makeProtocolPlan();
+			const result = verboseProtocol(makeState({ status: "approved" }), plan) as string;
+			expect(result).not.toContain("call `start_milestone`");
+			expect(result).not.toContain("call start_milestone");
+		});
 	});
 
 	describe("executing state (VAL-PROTO-003)", () => {
@@ -351,9 +358,9 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result).toContain("auth-endpoint");
 		});
 
-		it("is under 400 tokens (char count < 2000)", () => {
+		it("is under 600 tokens (char count < 3000)", () => {
 			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
-			expect(result.length).toBeLessThan(2000);
+			expect(result.length).toBeLessThan(3000);
 			expect(result.length).toBeGreaterThan(200);
 		});
 

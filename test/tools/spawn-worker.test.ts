@@ -1238,6 +1238,107 @@ describe("registerSpawnWorkerTool", () => {
 		});
 	});
 
+	describe("optional validator after success", () => {
+		it("runs validator when validator model is configured and returns PASS", async () => {
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { models: { validator: "test-model" } });
+
+			const validatorSpawn = makeMockSpawn({
+				stdoutLines: [makeMessageEndLine("assistant", "VERDICT: PASS\nFEEDBACK: All good.")],
+				exitCode: 0,
+			});
+			let validatorCalled = false;
+			const combinedSpawn = (cmd: string, args: string[], opts: object) => {
+				if (args.some((a: string) => a.includes("validator-skill"))) {
+					validatorCalled = true;
+					return validatorSpawn(cmd, args, opts);
+				}
+				return mockSpawnFn(cmd, args, opts);
+			};
+
+			const pi = makePiMock();
+			registerSpawnWorkerTool(pi, {
+				basePath: testDir,
+				projectDir: testDir,
+				updateWidget: () => {},
+				_spawnOverride: combinedSpawn as any,
+			});
+
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(validatorCalled).toBe(true);
+			expect(result.content[0].text).toContain("succeeded");
+		});
+
+		it("skips validator (still succeeds) when no validator model configured", async () => {
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("succeeded");
+		});
+
+		it("marks feature as failed when validator returns FIX", async () => {
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { models: { validator: "test-model" } });
+
+			const validatorSpawn = makeMockSpawn({
+				stdoutLines: [makeMessageEndLine("assistant", "VERDICT: FIX\nFEEDBACK: Missing test script in package.json")],
+				exitCode: 0,
+			});
+			const combinedSpawn = (cmd: string, args: string[], opts: object) => {
+				if (args.some((a: string) => a.includes("validator-skill"))) {
+					return validatorSpawn(cmd, args, opts);
+				}
+				return mockSpawnFn(cmd, args, opts);
+			};
+
+			const pi = makePiMock();
+			registerSpawnWorkerTool(pi, {
+				basePath: testDir,
+				projectDir: testDir,
+				updateWidget: () => {},
+				_spawnOverride: combinedSpawn as any,
+			});
+
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("failed");
+			expect(result.content[0].text).toContain("Missing test script");
+		});
+	});
+
+	describe("progress hint on failure", () => {
+		it("does not say ALL FEATURES DONE when worker failed", async () => {
+			const failSpawn = makeMockSpawn({ stdoutLines: [], exitCode: 1 });
+			const state = localMakeState({ status: "executing" });
+			saveState(testDir, state);
+			const feat1 = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
+			const plan = localMakePlan([localMakeMilestone([feat1])]);
+			savePlan(testDir, plan);
+			registerTool(failSpawn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("failed");
+			expect(result.content[0].text).not.toContain("ALL FEATURES DONE");
+		});
+	});
+
 	describe("setWorkingMessage during execution (Point 22)", () => {
 		it("calls setWorkingMessage before spawning", async () => {
 			const state = localMakeState({ status: "approved" });
@@ -1311,6 +1412,173 @@ describe("registerSpawnWorkerTool", () => {
 
 			await executeFn!("id", { featureId: "feat-1" }, undefined, onUpdate);
 			expect(updates.length).toBeGreaterThanOrEqual(0);
+		});
+	});
+
+	describe("auto-milestone management", () => {
+		it("auto-starts a pending milestone when spawning its first feature", async () => {
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "pending" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing" });
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan, loadState } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const savedState = loadState(testDir)!;
+			expect(savedPlan.milestones[0].status).toBe("done");
+			expect(savedState.currentMilestoneId).toBe("milestone-1");
+		});
+
+		it("does not re-start an already active milestone", async () => {
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active", startedAt: "2025-01-01T00:00:00Z" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			expect(savedPlan.milestones[0].startedAt).toBe("2025-01-01T00:00:00Z");
+		});
+
+		it("auto-completes milestone when last feature finishes successfully", async () => {
+			const doneFeature = localMakeFeature({ id: "feat-done", name: "Done", status: "done" });
+			const activeFeature = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
+			const milestone = localMakeMilestone([doneFeature, activeFeature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			expect(savedPlan.milestones[0].status).toBe("done");
+			expect(savedPlan.milestones[0].completedAt).toBeTruthy();
+		});
+
+		it("auto-commits on success when autoCommitEnabled", async () => {
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({
+				status: "executing",
+				currentMilestoneId: "milestone-1",
+				gitSnapshot: { headCommit: "abc123", dirtyFiles: [], autoCommitEnabled: true },
+			});
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+
+			let commitCalled = false;
+			const pi = makePiMock();
+			registerSpawnWorkerTool(pi, {
+				basePath: testDir,
+				projectDir: testDir,
+				updateWidget: () => {},
+				_spawnOverride: mockSpawnFn as any,
+				_isGitAvailableOverride: () => true,
+				_getChangedFilesOverride: () => ["src/index.ts"],
+				_stageAndCommitOverride: () => {
+					commitCalled = true;
+					return "deadbeef1234567890123456789012345678dead";
+				},
+			});
+
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(commitCalled).toBe(true);
+		});
+
+		it("does not auto-commit when gitSnapshot is undefined", async () => {
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+
+			let commitCalled = false;
+			const pi = makePiMock();
+			registerSpawnWorkerTool(pi, {
+				basePath: testDir,
+				projectDir: testDir,
+				updateWidget: () => {},
+				_spawnOverride: mockSpawnFn as any,
+				_isGitAvailableOverride: () => true,
+				_getChangedFilesOverride: () => ["src/index.ts"],
+				_stageAndCommitOverride: () => {
+					commitCalled = true;
+					return "deadbeef";
+				},
+			});
+
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(commitCalled).toBe(false);
+		});
+
+		it("does not auto-commit when autoCommitEnabled is false", async () => {
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({
+				status: "executing",
+				currentMilestoneId: "milestone-1",
+				gitSnapshot: { headCommit: "abc123", dirtyFiles: ["dirty.ts"], autoCommitEnabled: false },
+			});
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+
+			let commitCalled = false;
+			const pi = makePiMock();
+			registerSpawnWorkerTool(pi, {
+				basePath: testDir,
+				projectDir: testDir,
+				updateWidget: () => {},
+				_spawnOverride: mockSpawnFn as any,
+				_isGitAvailableOverride: () => true,
+				_getChangedFilesOverride: () => ["src/index.ts"],
+				_stageAndCommitOverride: () => {
+					commitCalled = true;
+					return "deadbeef";
+				},
+			});
+
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(commitCalled).toBe(false);
+		});
+
+		it("does not auto-complete milestone when pending features remain", async () => {
+			const activeFeature = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
+			const pendingFeature = localMakeFeature({ id: "feat-2", name: "Feature Two", status: "pending" });
+			const milestone = localMakeMilestone([activeFeature, pendingFeature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			expect(savedPlan.milestones[0].status).toBe("active");
 		});
 	});
 });
