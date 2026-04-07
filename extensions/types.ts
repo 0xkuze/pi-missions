@@ -242,6 +242,18 @@ export interface WorkerResult {
 	};
 }
 
+export interface AssertionResultData {
+	assertionId: string;
+	status: "pass" | "fail" | "error";
+	exitCode: number | null;
+	stdout: string;
+	stderr: string;
+	timedOut: boolean;
+	durationMs: number;
+	timestamp: string;
+	command: string;
+}
+
 export interface ValidationResult {
 	status: "pass" | "fail";
 	milestoneId: string;
@@ -256,6 +268,7 @@ export interface ValidationResult {
 	}>;
 	summary: string;
 	failingChecks: string[];
+	assertions?: AssertionResultData[];
 }
 
 export interface SubmitPlanParams {
@@ -622,6 +635,18 @@ export const WorkerResultSchema = Type.Object({
 	}),
 });
 
+const AssertionResultDataSchema = Type.Object({
+	assertionId: Type.String(),
+	status: Type.Union([Type.Literal("pass"), Type.Literal("fail"), Type.Literal("error")]),
+	exitCode: Type.Union([Type.Number(), Type.Null()]),
+	stdout: Type.String(),
+	stderr: Type.String(),
+	timedOut: Type.Boolean(),
+	durationMs: Type.Number(),
+	timestamp: Type.String(),
+	command: Type.String(),
+});
+
 export const ValidationResultSchema = Type.Object({
 	status: Type.Union([Type.Literal("pass"), Type.Literal("fail")]),
 	milestoneId: Type.String(),
@@ -638,4 +663,5 @@ export const ValidationResultSchema = Type.Object({
 	),
 	summary: Type.String(),
 	failingChecks: Type.Array(Type.String()),
+	assertions: Type.Optional(Type.Array(AssertionResultDataSchema)),
 });
