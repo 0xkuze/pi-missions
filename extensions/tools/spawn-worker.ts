@@ -40,6 +40,7 @@ interface Deps {
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
 	getThinkingLevel?: () => ThinkingLevel;
 	setThinkingLevel?: (level: ThinkingLevel) => void;
+	availableModels?: string[] | (() => string[]);
 	_spawnOverride?: SpawnFn;
 }
 
@@ -86,11 +87,13 @@ function findNextPending(plan: MissionPlan, currentFeatureId: string): Feature |
 	return null;
 }
 
+const RESOLVED_DEP_STATUSES = new Set(["done", "skipped", "failed"]);
+
 function checkDependencies(feature: Feature, allFeatures: Map<string, Feature>): string | null {
 	for (const depId of feature.dependencies) {
 		const dep = allFeatures.get(depId);
-		if (!dep || dep.status !== "done") {
-			return `Dependency '${depId}' is not done (status: '${dep?.status ?? "unknown"}')`;
+		if (!dep || !RESOLVED_DEP_STATUSES.has(dep.status)) {
+			return `Dependency '${depId}' is not resolved (status: '${dep?.status ?? "unknown"}')`;
 		}
 	}
 	return null;
@@ -418,6 +421,23 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			const config = loadConfig(deps.basePath);
 			const maxRetries = config.maxRetries ?? 3;
 			const workerModel = resolveModel("worker", config, plan, feature.estimatedComplexity);
+
+			const availableModels =
+				typeof deps.availableModels === "function" ? deps.availableModels() : deps.availableModels;
+			if (workerModel && availableModels && availableModels.length > 0) {
+				if (!availableModels.includes(workerModel)) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error: worker model '${workerModel}' is not available (no API key or provider not configured). Available models: ${availableModels.slice(0, 5).join(", ")}${availableModels.length > 5 ? "..." : ""}. Change the worker model in Mission Control (Ctrl+Shift+M) or configure the provider.`,
+							},
+						],
+						details: {},
+					};
+				}
+			}
+
 			const attemptNumber = feature.attempts.length + 1;
 			const runtimeDir = join(deps.basePath, "runtime", feature.id, String(attemptNumber));
 

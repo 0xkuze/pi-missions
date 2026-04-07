@@ -17,7 +17,12 @@ import {
 } from "../helpers/index.js";
 
 function makeExecutingState(overrides: Partial<MissionState> = {}) {
-	return makeState({ status: "executing", startedAt: new Date(Date.now() - 60_000).toISOString(), ...overrides });
+	return makeState({
+		status: "executing",
+		startedAt: new Date(Date.now() - 60_000).toISOString(),
+		totalFeaturesCompleted: 1,
+		...overrides,
+	});
 }
 
 function makeCompletePlan(overrides: Partial<MissionPlan> = {}) {
@@ -360,6 +365,61 @@ describe("registerCompleteMissionTool", () => {
 			});
 			const result = await callTool(tmpDir, { summary: "done" }, state, plan);
 			expect(result.content[0].text).toContain("2");
+		});
+	});
+
+	describe("rejects completion when no features completed by workers", () => {
+		it("returns error when totalFeaturesCompleted is 0 and plan has features", async () => {
+			const state = makeExecutingState({ totalFeaturesCompleted: 0 });
+			const plan = makeCompletePlan({
+				milestones: [
+					makeMilestone({
+						features: [
+							makeFeature({ id: "f1", status: "active" }),
+							makeFeature({ id: "f2", status: "pending" }),
+						],
+					}),
+				],
+			});
+			const result = await callTool(tmpDir, { summary: "done" }, state, plan);
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("no features");
+		});
+
+		it("does not transition to completed when 0 features completed", async () => {
+			const state = makeExecutingState({ totalFeaturesCompleted: 0 });
+			const plan = makeCompletePlan({
+				milestones: [makeMilestone({ features: [makeFeature({ status: "active" })] })],
+			});
+			await callTool(tmpDir, { summary: "done" }, state, plan);
+			const savedState = loadState(tmpDir)!;
+			expect(savedState.status).toBe("executing");
+		});
+
+		it("allows completion when totalFeaturesCompleted > 0", async () => {
+			const state = makeExecutingState({ totalFeaturesCompleted: 1 });
+			const plan = makeCompletePlan({
+				milestones: [makeMilestone({ features: [makeFeature({ status: "done" })] })],
+			});
+			const result = await callTool(tmpDir, { summary: "done" }, state, plan);
+			expect(result.content[0].text).toContain("completed");
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("allows completion when some features are skipped but some completed", async () => {
+			const state = makeExecutingState({ totalFeaturesCompleted: 1, totalFeaturesSkipped: 2 });
+			const plan = makeCompletePlan();
+			const result = await callTool(tmpDir, { summary: "done" }, state, plan);
+			expect(result.content[0].text).toContain("completed");
+		});
+
+		it("allows completion when all features are skipped (no work needed)", async () => {
+			const state = makeExecutingState({ totalFeaturesCompleted: 0, totalFeaturesSkipped: 3 });
+			const plan = makeCompletePlan({
+				milestones: [makeMilestone({ features: [makeFeature({ status: "skipped" })] })],
+			});
+			const result = await callTool(tmpDir, { summary: "all skipped" }, state, plan);
+			expect(result.content[0].text).toContain("completed");
 		});
 	});
 

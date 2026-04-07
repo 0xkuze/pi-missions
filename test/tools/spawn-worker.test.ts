@@ -221,6 +221,7 @@ function registerTool(
 		noAgentsMd?: boolean;
 		getThinkingLevel?: () => ThinkingLevel;
 		setThinkingLevel?: (level: ThinkingLevel) => void;
+		availableModels?: string[];
 	} = {},
 ): void {
 	const projectDir = extraOpts.projectDir ?? testDir;
@@ -238,6 +239,7 @@ function registerTool(
 		updateWidget: () => {},
 		getThinkingLevel: extraOpts.getThinkingLevel,
 		setThinkingLevel: extraOpts.setThinkingLevel,
+		availableModels: extraOpts.availableModels,
 		_spawnOverride: (command, args, opts) => {
 			capturedCommand = command;
 			capturedArgs = args;
@@ -362,6 +364,94 @@ describe("registerSpawnWorkerTool", () => {
 			const result = await executeFn!("id", { featureId: "feat-1" });
 			expect(result.content[0].text).not.toContain("Error");
 		});
+
+		it("treats skipped dependency as resolved", async () => {
+			const state = localMakeState({ status: "executing" });
+			saveState(testDir, state);
+			const dep = localMakeFeature({ id: "dep-1", status: "skipped" });
+			const feature = localMakeFeature({ id: "feat-1", dependencies: ["dep-1"] });
+			const plan = localMakePlan([localMakeMilestone([dep, feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("treats failed dependency as resolved", async () => {
+			const state = localMakeState({ status: "executing" });
+			saveState(testDir, state);
+			const dep = localMakeFeature({ id: "dep-1", status: "failed" });
+			const feature = localMakeFeature({ id: "feat-1", dependencies: ["dep-1"] });
+			const plan = localMakePlan([localMakeMilestone([dep, feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("still blocks on pending dependency", async () => {
+			const state = localMakeState({ status: "executing" });
+			saveState(testDir, state);
+			const dep = localMakeFeature({ id: "dep-1", status: "pending" });
+			const feature = localMakeFeature({ id: "feat-1", dependencies: ["dep-1"] });
+			const plan = localMakePlan([localMakeMilestone([dep, feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Error");
+		});
+
+		it("still blocks on active dependency", async () => {
+			const state = localMakeState({ status: "executing" });
+			saveState(testDir, state);
+			const dep = localMakeFeature({ id: "dep-1", status: "active" });
+			const feature = localMakeFeature({ id: "feat-1", dependencies: ["dep-1"] });
+			const plan = localMakePlan([localMakeMilestone([dep, feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Error");
+		});
+	});
+
+	describe("worker model validation", () => {
+		it("returns error when worker model is not in available models", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			// Save config with a model that won't be "available"
+			const { saveConfig } = await import("../../extensions/state/manager.js");
+			saveConfig(testDir, { models: { worker: "nonexistent/model" } });
+			registerTool(mockSpawnFn, { availableModels: ["anthropic/claude", "openai/gpt-4"] });
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("nonexistent/model");
+			expect(capturedCommand).toBeNull();
+		});
+
+		it("proceeds when worker model is in available models", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn, { availableModels: ["opencode/glm-5"] });
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("skips validation when no available models list provided", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).not.toContain("Error");
+		});
 	});
 
 	describe("VAL-TOOL-007: transitions approved -> executing on first spawn_worker call", () => {
@@ -446,7 +536,7 @@ describe("registerSpawnWorkerTool", () => {
 			await executeFn!("id", { featureId: "feat-1" });
 			expect(capturedArgs).toContain("--model");
 			const modelIdx = capturedArgs!.indexOf("--model");
-			expect(capturedArgs![modelIdx + 1]).toBe("claude-sonnet-4-20250514");
+			expect(capturedArgs![modelIdx + 1]).toBe("opencode/glm-5");
 		});
 	});
 
@@ -1026,7 +1116,7 @@ describe("registerSpawnWorkerTool", () => {
 	});
 
 	describe("default worker model", () => {
-		it("worker uses default model 'claude-sonnet-4-20250514' when no model configured", async () => {
+		it("worker uses default model 'opencode/glm-5' when no model configured", async () => {
 			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
 			const feature = localMakeFeature();
@@ -1036,7 +1126,7 @@ describe("registerSpawnWorkerTool", () => {
 			await executeFn!("id", { featureId: "feat-1" });
 			expect(capturedArgs).toContain("--model");
 			const modelIdx = capturedArgs!.indexOf("--model");
-			expect(capturedArgs![modelIdx + 1]).toBe("claude-sonnet-4-20250514");
+			expect(capturedArgs![modelIdx + 1]).toBe("opencode/glm-5");
 		});
 
 		it("explicit model config overrides the default", async () => {

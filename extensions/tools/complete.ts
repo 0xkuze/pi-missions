@@ -98,6 +98,21 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 
 			const plan = loadPlan(deps.basePath);
 
+			const hasAnyFeatures = plan ? plan.milestones.some((m) => m.features.length > 0) : false;
+			const allSkipped =
+				state.totalFeaturesCompleted === 0 && state.totalFeaturesSkipped > 0 && !hasPendingWork(plan!);
+			if (hasAnyFeatures && state.totalFeaturesCompleted === 0 && !allSkipped) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: "Error: cannot complete mission — no features have been completed by workers. Fix failing features or skip them before completing.",
+						},
+					],
+					details: {},
+				};
+			}
+
 			const warnings: string[] = [];
 			if (plan && hasPendingWork(plan)) {
 				const pendingCount = countPendingFeatures(plan);

@@ -392,6 +392,45 @@ describe("extension entry point (index.ts)", () => {
 			expect(activeTools).toContain("edit");
 			expect(activeTools).toContain("write");
 		});
+
+		it("restricts edit/write when state transitions to executing mid-session via updateWidget", async () => {
+			const planningState = _ss({ status: "planning" });
+			saveState(basePath, planningState);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			activeTools.push("edit", "write", "read", "bash");
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			expect(activeTools).toContain("edit");
+			expect(activeTools).toContain("write");
+			// Now simulate a state transition to executing by saving state and
+			// calling the before_agent_start handler which re-reads state
+			const executingState = _ss({ status: "executing" });
+			saveState(basePath, executingState);
+			// Trigger before_agent_start which should apply tool restrictions
+			const event = { type: "before_agent_start", prompt: "", systemPrompt: "base" };
+			handlers.get("before_agent_start")!(event, ctx);
+			expect(activeTools).not.toContain("edit");
+			expect(activeTools).not.toContain("write");
+			expect(activeTools).toContain("read");
+			expect(activeTools).toContain("bash");
+		});
+
+		it("restores edit/write when state transitions from executing to paused", async () => {
+			const executingState = _ss({ status: "executing" });
+			saveState(basePath, executingState);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			activeTools.push("edit", "write", "read", "bash");
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			expect(activeTools).not.toContain("edit");
+			// Now simulate transition to planning
+			const planningState = _ss({ status: "planning" });
+			saveState(basePath, planningState);
+			const event = { type: "before_agent_start", prompt: "", systemPrompt: "base" };
+			handlers.get("before_agent_start")!(event, ctx);
+			expect(activeTools).toContain("edit");
+			expect(activeTools).toContain("write");
+		});
 	});
 
 	describe("session_start handler u2014 VAL-STATE-011", () => {

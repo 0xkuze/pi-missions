@@ -512,6 +512,12 @@ export default function (pi: ExtensionAPI): void {
 		const state = loadState(basePath);
 		if (!state) return undefined;
 
+		if (RESTRICTED_STATUSES.has(state.status)) {
+			restrictOrchestratorTools();
+		} else {
+			restoreOrchestratorTools();
+		}
+
 		const plan = loadPlan(basePath);
 		const config = loadConfig(basePath);
 		const isHighUsage = lastContextPercent !== null && lastContextPercent > 70;
@@ -638,6 +644,10 @@ export default function (pi: ExtensionAPI): void {
 		updateWidget,
 		getThinkingLevel: () => pi.getThinkingLevel(),
 		setThinkingLevel: (level) => pi.setThinkingLevel(level),
+		availableModels: () => {
+			if (!latestCtx) return [];
+			return latestCtx.modelRegistry.getAll().map((m) => m.id);
+		},
 	});
 	registerUpdateStateTool(pi, { basePath, updateWidget });
 	registerCompleteMissionTool(pi, { basePath, updateWidget });

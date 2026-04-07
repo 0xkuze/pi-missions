@@ -375,7 +375,7 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 	it("complete_mission generates report and transitions to completed", async () => {
 		const { tools } = registerExtension(tmpDir);
 
-		const executingState = makeState("executing");
+		const executingState = makeState("executing", { totalFeaturesCompleted: 1 });
 		saveState(basePath, executingState);
 		const plan = makePlan();
 		savePlan(basePath, plan);

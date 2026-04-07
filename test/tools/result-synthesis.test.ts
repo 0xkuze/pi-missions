@@ -118,6 +118,37 @@ describe("synthesizeWorkerResult", () => {
 			const result = synthesizeWorkerResult(stdout, "some stderr output", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
+
+		it("includes stderr in summary when worker fails with non-zero exit code", () => {
+			const stdout = makeStdout([]);
+			const result = synthesizeWorkerResult(stdout, "No API key found for opencode.\nUse /login or set an API key.", 1, null, Date.now() - 100);
+			expect(result.status).toBe("failure");
+			expect(result.summary).toContain("No API key found for opencode");
+		});
+
+		it("includes truncated stderr when output is very long", () => {
+			const longStderr = Array.from({ length: 200 }, (_, i) => `error line ${i}`).join("\n");
+			const stdout = makeStdout([]);
+			const result = synthesizeWorkerResult(stdout, longStderr, 1, null, Date.now() - 100);
+			expect(result.status).toBe("failure");
+			expect(result.summary).toContain("error line 0");
+			expect(result.summary).toContain("truncated");
+			expect(result.summary).not.toContain("error line 199");
+		});
+
+		it("does not include stderr in summary when worker succeeds", () => {
+			const stdout = makeStdout([makeMessageEnd("assistant", "All done.")]);
+			const result = synthesizeWorkerResult(stdout, "some warning output", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
+			expect(result.summary).not.toContain("some warning output");
+		});
+
+		it("appends stderr to existing summary on failure", () => {
+			const stdout = makeStdout([makeMessageEnd("assistant", "Worker encountered an error.")]);
+			const result = synthesizeWorkerResult(stdout, "FATAL: module not found", 1, null, Date.now() - 100);
+			expect(result.summary).toContain("Worker encountered an error");
+			expect(result.summary).toContain("FATAL: module not found");
+		});
 	});
 
 	describe("VAL-WORKER-005: JSON event stream parsing", () => {

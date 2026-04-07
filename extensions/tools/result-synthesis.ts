@@ -156,9 +156,27 @@ export function parseStructuredSummary(text: string): StructuredSummary {
 	};
 }
 
+const MAX_STDERR_LINES = 50;
+const MAX_STDERR_BYTES = 4096;
+
+function truncateStderr(stderr: string): string {
+	const trimmed = stderr.trim();
+	if (!trimmed) return "";
+	const lines = trimmed.split("\n");
+	if (lines.length <= MAX_STDERR_LINES && trimmed.length <= MAX_STDERR_BYTES) return trimmed;
+	const truncated = lines.slice(0, MAX_STDERR_LINES).join("\n").slice(0, MAX_STDERR_BYTES);
+	return `${truncated}\n... [truncated]`;
+}
+
+function appendStderrToSummary(summary: string, stderr: string): string {
+	const truncated = truncateStderr(stderr);
+	if (!truncated) return summary;
+	return `${summary}\n\n--- Worker stderr ---\n${truncated}`;
+}
+
 export function synthesizeWorkerResult(
 	stdout: string,
-	_stderr: string,
+	stderr: string,
 	exitCode: number | null,
 	signal: string | null,
 	startTime: number,
@@ -182,7 +200,7 @@ export function synthesizeWorkerResult(
 	if (!stdout.trim()) {
 		return {
 			status: "failure",
-			summary: "Worker produced no output",
+			summary: appendStderrToSummary("Worker produced no output", stderr),
 			filesChanged: [],
 			commandsRun: [],
 			error: {
@@ -203,7 +221,7 @@ export function synthesizeWorkerResult(
 	if (exitCode !== 0) {
 		return {
 			status: "failure",
-			summary,
+			summary: appendStderrToSummary(summary, stderr),
 			filesChanged,
 			commandsRun,
 			error: {
@@ -217,7 +235,7 @@ export function synthesizeWorkerResult(
 	if (fatalToolError) {
 		return {
 			status: "failure",
-			summary,
+			summary: appendStderrToSummary(summary, stderr),
 			filesChanged,
 			commandsRun,
 			error: {
