@@ -1,0 +1,34 @@
+{
+  "featureId": "progressive-protocol-injection",
+  "reviewedAt": "2026-04-07T09:30:00.000Z",
+  "commitId": "cab7e4f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Implementation correctly separates static rules from dynamic context in buildOrchestratorProtocol via a new ProtocolOptions parameter. First turn (turnCount <= 1) delivers the full static + dynamic protocol. Subsequent turns (turnCount > 1) deliver only the compact mission summary via buildCompactMissionSummary. Context usage > 60% forces compact mode regardless of turn. Cache key properly includes protocolVersion, turnCount range, and contextUsagePercent. turnCount is incremented in the before_agent_start handler during executing state. getContextUsage unavailability is handled gracefully by falling back to turn-based logic (contextUsagePercent undefined means the threshold check is skipped). 31 new tests cover all validation contract assertions. All 1966 tests pass.",
+    "issues": [
+      {
+        "file": "extensions/index.ts",
+        "line": 541,
+        "severity": "non_blocking",
+        "description": "Dual compact threshold: isHighUsage (line 541) triggers compact at >70% via the boolean 'compact' parameter, while the new contextUsagePercent triggers compact at >60% inside protocol.ts. The 70% threshold is now effectively redundant since contextUsagePercent kicks in first at 60%. This is not a bug — both paths correctly trigger compact mode — but the old isHighUsage boolean could be removed or aligned with the new 60% threshold to avoid confusion."
+      },
+      {
+        "file": "extensions/orchestrator/protocol.ts",
+        "line": 30,
+        "severity": "non_blocking",
+        "description": "Cache key line is 207 characters long. While Biome doesn't flag it (line width 120 is for code, not string content), the key concatenation could be more readable if broken into a template literal across multiple lines. Minor readability concern only."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The before_agent_start handler in index.ts now has two independent compact-mode triggers: the pre-existing isHighUsage boolean (>70%) and the new ProtocolOptions.contextUsagePercent (>60%). Both are correct but the layering is confusing. AGENTS.md or library/architecture.md could document that the 60% threshold in ProtocolOptions supersedes the older 70% isHighUsage mechanism.",
+      "evidence": "extensions/index.ts:541 — `const isHighUsage = lastContextPercent !== null && lastContextPercent > 70;` passed as compact boolean. extensions/orchestrator/protocol.ts:6 — `const CONTEXT_USAGE_COMPACT_THRESHOLD = 60;` used in ProtocolOptions path. Both independently trigger compact mode."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature passes review. The implementation correctly adds progressive protocol injection with turn-based and context-usage-based compact mode switching. All 6 expected behaviors from the feature description are satisfied. 31 comprehensive tests cover first-turn full protocol, subsequent-turn compact protocol, context usage override at 60% threshold, graceful fallback when contextUsagePercent is unavailable, cache key versioning, and non-executing state isolation. One non-blocking observation about dual compact thresholds (70% legacy vs 60% new) that could benefit from documentation alignment."
+}

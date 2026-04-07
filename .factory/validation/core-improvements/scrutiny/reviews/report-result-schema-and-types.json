@@ -1,0 +1,51 @@
+{
+  "featureId": "report-result-schema-and-types",
+  "reviewedAt": "2026-04-07T06:50:00.000Z",
+  "commitId": "4d6a4bf",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Feature fully implements the required schema additions. ReportResultSchema TypeBox definition in types.ts correctly defines all specified fields (whatWasImplemented, whatWasLeftUndone, commandsRun, testsAdded, discoveredIssues) with proper types and optional markers. WorkerHandoff interface mirrors the schema exactly. Optional handoff field added to WorkerResult interface and WorkerResultSchema. validatorStrictness added to MissionConfig as Type.Optional(Type.Union([Type.Literal('strict'), Type.Literal('lenient')])). protocolVersion and turnCount added to MissionState as optional numbers. DEFAULT_CONFIG updated with validatorStrictness: 'strict' and modelByComplexity: {} to satisfy Required<MissionConfig>. 38 new tests cover schema validation, rejection of invalid inputs, severity levels, empty arrays, backward compatibility, and migration scenarios. All 1899 tests pass.",
+    "issues": [
+      {
+        "file": "extensions/types.ts",
+        "line": 200,
+        "severity": "non_blocking",
+        "description": "The WorkerHandoff interface and ReportResultSchema are structurally identical but defined independently. The interface is not derived from the schema via Static<typeof ReportResultSchema>. This means they could drift out of sync if someone edits one but not the other. Consider using `type WorkerHandoff = Static<typeof ReportResultSchema>` to ensure they stay aligned, consistent with how the project uses TypeBox schemas as the source of truth."
+      },
+      {
+        "file": "extensions/types.ts",
+        "line": 538,
+        "severity": "non_blocking",
+        "description": "The `handoff` field in WorkerResultSchema references ReportResultSchema, but the TypeScript interface uses WorkerHandoff. The naming mismatch (ReportResultSchema vs WorkerHandoff) could confuse future developers. This is a naming coherence concern, not a correctness bug — both types are structurally identical."
+      },
+      {
+        "file": "extensions/config.ts",
+        "line": 13,
+        "severity": "non_blocking",
+        "description": "Worker also added `modelByComplexity: {}` to DEFAULT_CONFIG. This was a pre-existing omission (not part of the feature description), but it was necessary to fix the Required<MissionConfig> type error caused by adding validatorStrictness. The fix is correct and the right call, just noting it was scope expansion."
+      },
+      {
+        "file": "test/types/report-result-schema.test.ts",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "Test file is placed in test/types/ but the AGENTS.md says 'Test files live alongside source: extensions/state/manager.test.ts tests extensions/state/manager.ts.' Since types.ts is at extensions/types.ts, the test could arguably be at test/types.test.ts or extensions/types.test.ts. However, the project actually keeps tests in test/ mirroring extensions/ structure, so test/types/ is reasonable for a file testing types.ts exports."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The commit bundles biome formatting changes in 4 unrelated files (git.ts, index.ts, protocol.ts, spawn-worker.ts) alongside the feature implementation. AGENTS.md says 'Never mix refactors with fixes in the same commit' and 'One logical change per commit.' These formatting changes should have been a separate commit.",
+      "evidence": "git show 4d6a4bf --stat shows 7 files changed. extensions/git.ts, extensions/index.ts, extensions/orchestrator/protocol.ts, and extensions/tools/spawn-worker.ts contain only biome formatting changes (line wrapping, catch block formatting) unrelated to the types/schema feature."
+    },
+    {
+      "area": "conventions",
+      "observation": "WorkerHandoff interface is manually duplicated from ReportResultSchema rather than derived via Static<typeof ReportResultSchema>. The project imports and re-exports Static from @sinclair/typebox at the top of types.ts, suggesting the pattern of deriving types from schemas is available and intended.",
+      "evidence": "extensions/types.ts line 1: 'export type { Static, TSchema }' — Static is exported but not used for WorkerHandoff. Compare: no other interface in types.ts duplicates its corresponding schema either, but adding a derived type would be more robust."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Feature passes review. All required schema additions are correctly implemented: ReportResultSchema, WorkerHandoff interface, optional handoff on WorkerResult, validatorStrictness on MissionConfig, and protocolVersion/turnCount on MissionState. The 38 new tests thoroughly cover validation, rejection, edge cases, and backward compatibility. All 1899 tests pass. Non-blocking issues: (1) WorkerHandoff interface duplicates ReportResultSchema rather than being derived via Static<>; (2) naming mismatch between ReportResultSchema and WorkerHandoff; (3) biome formatting changes for unrelated files bundled in the same commit; (4) minor test file placement question."
+}

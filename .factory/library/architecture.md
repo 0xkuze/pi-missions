@@ -42,6 +42,23 @@ pi-missions is a pi extension providing Factory AI Missions-inspired orchestrati
 - plan-history.jsonl: Mutation log
 - runtime/: Worker artifacts per feature/attempt
 
+## Protocol Injection Details
+
+- Progressive injection: first turn gets full static + dynamic protocol; subsequent turns get dynamic-only (compact mode).
+- Two compact-mode triggers: (1) `contextUsagePercent > 60%` in ProtocolOptions, (2) legacy `isHighUsage` boolean at >70% in index.ts. The 60% threshold effectively supersedes the 70% one.
+- Dynamic section uses `## MILESTONES`, `## {name} FEATURES`, and `## CURRENT FEATURE` markdown headers.
+- Cache key includes `protocolVersion`, `turnCount` range, and `contextUsagePercent`.
+
+## Validator Strictness
+
+- Default validator behavior is strict (reject on timeout/abort/missing verdict). Tests that depend on old pass-on-error behavior must set `saveConfig(basePath, { validatorStrictness: 'lenient' })`.
+- `synthesizeWorkerResult` defaults to strict mode for `report_result` extraction. Pass `{ legacyMode: true }` for backward-compat.
+
+## Self-Correction
+
+- `performSelfCorrection()` in spawn-worker.ts creates fix features inline (duplicates create-fix.ts logic). Changes to create_fix_feature tool must be mirrored in performSelfCorrection.
+- autoCompleteMilestone runs before performSelfCorrection, which can result in a 'done' milestone containing a new 'pending' fix feature.
+
 ## Extension API Surface Used
 
 - registerTool, registerCommand, registerShortcut

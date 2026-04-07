@@ -35,78 +35,6 @@ function findFeatureInPlan(
 	return null;
 }
 
-function startMilestone(
-	plan: MissionPlan,
-	state: MissionState,
-	milestoneId: string,
-	reason: string | undefined,
-): string | { plan: MissionPlan; state: MissionState } {
-	const milestone = findMilestone(plan, milestoneId);
-	if (!milestone) return `Milestone '${milestoneId}' not found in plan.`;
-	if (milestone.status === "active" || milestone.status === "done") {
-		return { plan, state, idempotent: `Milestone '${milestoneId}' already ${milestone.status}. No action needed.` };
-	}
-
-	const now = nowISO();
-	const updatedPlan: MissionPlan = {
-		...plan,
-		milestones: plan.milestones.map((m) =>
-			m.id === milestoneId ? { ...m, status: "active" as const, startedAt: now } : m,
-		),
-	};
-	const updatedState: MissionState = {
-		...state,
-		currentMilestoneId: milestoneId,
-		progressLog: [
-			...state.progressLog,
-			{
-				timestamp: now,
-				type: "milestone_start" as const,
-				detail: `Milestone '${milestone.name}' started`,
-				metadata: reason ? { reason } : undefined,
-			},
-		],
-	};
-	return { plan: updatedPlan, state: updatedState };
-}
-
-function completeMilestone(
-	plan: MissionPlan,
-	state: MissionState,
-	milestoneId: string,
-	reason: string | undefined,
-): string | { plan: MissionPlan; state: MissionState } {
-	const milestone = findMilestone(plan, milestoneId);
-	if (!milestone) return `Milestone '${milestoneId}' not found in plan.`;
-	if (milestone.status === "done") {
-		return { plan, state, idempotent: `Milestone '${milestoneId}' already done. No action needed.` };
-	}
-	if (milestone.status !== "active") {
-		return `Cannot complete milestone '${milestoneId}': milestone is not active (current status: '${milestone.status}').`;
-	}
-
-	const now = nowISO();
-	const updatedPlan: MissionPlan = {
-		...plan,
-		milestones: plan.milestones.map((m) =>
-			m.id === milestoneId ? { ...m, status: "done" as const, completedAt: now } : m,
-		),
-	};
-	const updatedState: MissionState = {
-		...state,
-		progressLog: [
-			...state.progressLog,
-			{
-				timestamp: now,
-				type: "milestone_complete" as const,
-				detail: `Milestone '${milestone.name}' completed`,
-				metadata: reason ? { reason } : undefined,
-			},
-		],
-	};
-	return { plan: updatedPlan, state: updatedState };
-}
-
 function skipFeature(
 	plan: MissionPlan,
 	state: MissionState,
@@ -280,6 +208,8 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 					Type.Literal("note"),
 					Type.Literal("add_feature"),
 					Type.Literal("remove_feature"),
+					Type.Literal("start_milestone"),
+					Type.Literal("complete_milestone"),
 				],
 				{ description: "Action to perform" },
 			),

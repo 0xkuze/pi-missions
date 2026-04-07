@@ -342,8 +342,8 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 				clearWidget,
 				isMissionModeActive: () => true,
 				setMissionModeActive: () => {},
-				onActivate: () => {},
-				onDeactivate: () => {},
+				onActivate: async () => {},
+				onDeactivate: () => {}
 			});
 
 			const approvedState = makeState("approved");
