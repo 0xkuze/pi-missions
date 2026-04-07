@@ -27,6 +27,19 @@ function parseEvents(stdout: string): ParsedEvent[] {
 	return events;
 }
 
+function extractPathFromResult(event: ParsedEvent): string | null {
+	const result = event.result as Record<string, unknown> | undefined;
+	if (!result) return null;
+	const content = result.content as Array<Record<string, unknown>> | undefined;
+	if (!Array.isArray(content)) return null;
+	for (const block of content) {
+		if (block.type !== "text" || typeof block.text !== "string") continue;
+		const match = /(?:wrote \d+ bytes to|replaced \d+ block|in) (\S+\.\w+)/.exec(block.text);
+		if (match?.[1]) return match[1];
+	}
+	return null;
+}
+
 function extractFilesChanged(events: ParsedEvent[]): string[] {
 	const files = new Set<string>();
 	for (const event of events) {
@@ -36,21 +49,59 @@ function extractFilesChanged(events: ParsedEvent[]): string[] {
 		const args = event.args as Record<string, unknown> | undefined;
 		if (typeof args?.path === "string") {
 			files.add(args.path);
+			continue;
 		}
+		const pathFromResult = extractPathFromResult(event);
+		if (pathFromResult) files.add(pathFromResult);
 	}
 	return Array.from(files);
 }
 
+function extractCommandFromResult(event: ParsedEvent): { command: string; exitCode: number | null } | null {
+	const result = event.result as Record<string, unknown> | undefined;
+	if (!result) return null;
+	const content = result.content as Array<Record<string, unknown>> | undefined;
+	if (!Array.isArray(content)) return null;
+	for (const block of content) {
+		if (block.type !== "text" || typeof block.text !== "string") continue;
+		const text = block.text;
+		const exitMatch = /Command exited with code (\d+)/.exec(text);
+		const exitCode = exitMatch ? Number.parseInt(exitMatch[1], 10) : null;
+		return { command: "(unknown)", exitCode };
+	}
+	return null;
+}
+
+function buildStartArgsMap(events: ParsedEvent[]): Map<string, Record<string, unknown>> {
+	const map = new Map<string, Record<string, unknown>>();
+	for (const event of events) {
+		if (event.type !== "tool_execution_start") continue;
+		const id = event.toolCallId as string | undefined;
+		const args = event.args as Record<string, unknown> | undefined;
+		if (id && args) map.set(id, args);
+	}
+	return map;
+}
+
 function extractCommandsRun(events: ParsedEvent[]): Array<{ command: string; exitCode: number | null }> {
+	const startArgs = buildStartArgsMap(events);
 	const commands: Array<{ command: string; exitCode: number | null }> = [];
 	for (const event of events) {
 		if (event.type !== "tool_execution_end") continue;
 		if (event.toolName !== "bash") continue;
-		const args = event.args as Record<string, unknown> | undefined;
-		if (typeof args?.command !== "string") continue;
-		const result = event.result as Record<string, unknown> | undefined;
-		const exitCode = typeof result?.exitCode === "number" ? result.exitCode : null;
-		commands.push({ command: args.command, exitCode });
+		const endArgs = event.args as Record<string, unknown> | undefined;
+		const callId = event.toolCallId as string | undefined;
+		const args = (typeof endArgs?.command === "string" ? endArgs : callId ? startArgs.get(callId) : undefined) as
+			| Record<string, unknown>
+			| undefined;
+		if (typeof args?.command === "string") {
+			const result = event.result as Record<string, unknown> | undefined;
+			const exitCode = typeof result?.exitCode === "number" ? result.exitCode : null;
+			commands.push({ command: args.command, exitCode });
+			continue;
+		}
+		const fromResult = extractCommandFromResult(event);
+		if (fromResult) commands.push(fromResult);
 	}
 	return commands;
 }
@@ -73,11 +124,22 @@ function extractSummary(events: ParsedEvent[]): string {
 	return lastAssistantText;
 }
 
-const NON_FATAL_TOOLS = new Set(["commit_changes", "git_commit", "git"]);
+const NON_FATAL_TOOLS = new Set(["commit_changes", "git_commit", "git", "bash", "read", "grep", "find", "ls"]);
 
+// why: only edit/write errors are fatal — read/bash/grep/find/ls errors are
+// normal workflow (file not found, command failed). Workers recover from these.
 function hasFatalToolError(events: ParsedEvent[]): boolean {
-	for (const event of events) {
-		if (event.type !== "tool_execution_end") continue;
+	const toolEndEvents = events.filter((e) => e.type === "tool_execution_end");
+	if (toolEndEvents.length === 0) return false;
+
+	const lastToolEnd = toolEndEvents[toolEndEvents.length - 1];
+	if (lastToolEnd.isError === true) {
+		const toolName = lastToolEnd.toolName as string | undefined;
+		if (toolName && NON_FATAL_TOOLS.has(toolName)) return false;
+		return true;
+	}
+
+	for (const event of toolEndEvents) {
 		if (event.isError !== true) continue;
 		const toolName = event.toolName as string | undefined;
 		if (toolName && NON_FATAL_TOOLS.has(toolName)) continue;

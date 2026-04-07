@@ -12,6 +12,24 @@ function makeToolExecutionEnd(toolName: string, args: object, result: object = {
 	return JSON.stringify({ type: "tool_execution_end", toolName, args, result, isError });
 }
 
+function makeToolEndNoArgs(toolName: string, resultText: string, isError = false): string {
+	return JSON.stringify({
+		type: "tool_execution_end",
+		toolCallId: "call_xxxx",
+		toolName,
+		result: { content: [{ type: "text", text: resultText }] },
+		isError,
+	});
+}
+
+function makeToolExecutionStart(toolCallId: string, toolName: string, args: object): string {
+	return JSON.stringify({ type: "tool_execution_start", toolCallId, toolName, args });
+}
+
+function makeToolExecutionEndById(toolCallId: string, toolName: string, result: object = {}, isError = false): string {
+	return JSON.stringify({ type: "tool_execution_end", toolCallId, toolName, result, isError });
+}
+
 function makeStdout(lines: string[]): string {
 	return lines.join("\n");
 }
@@ -62,10 +80,30 @@ describe("synthesizeWorkerResult", () => {
 			expect(result.status).toBe("failure");
 		});
 
-		it("returns failure with error.kind='tool' when fatal tool error with exit code 0", () => {
+		it("bash tool errors are non-fatal — worker can recover from failed commands", () => {
+			const stdout = makeStdout([
+				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 1 }, true),
+				makeToolExecutionEnd("edit", { path: "/fix.ts", edits: [] }),
+				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
+				makeMessageEnd("assistant", "Fixed the tests."),
+			]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
+		});
+
+		it("bash tool error as only tool event is still non-fatal with exit code 0", () => {
 			const stdout = makeStdout([
 				makeToolExecutionEnd("bash", { command: "rm -rf /" }, { exitCode: 1 }, true),
 				makeMessageEnd("assistant", "Task done."),
+			]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
+		});
+
+		it("non-bash fatal tool error with exit code 0 returns failure", () => {
+			const stdout = makeStdout([
+				makeToolExecutionEnd("write", { path: "/a.ts" }, {}, true),
+				makeMessageEnd("assistant", "Write failed."),
 			]);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("failure");
@@ -82,6 +120,38 @@ describe("synthesizeWorkerResult", () => {
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 			expect(result.error).toBeUndefined();
+		});
+
+		it("read ENOENT errors are non-fatal — worker can adapt when file missing", () => {
+			const stdout = makeStdout([
+				makeToolExecutionEnd("read", { path: "/src/fizzbuzz.ts" }, {}, true),
+				makeToolExecutionEnd("read", { path: "/src/index.ts" }, {}),
+				makeToolExecutionEnd("write", { path: "/src/fizzbuzz.test.ts" }, {}),
+				makeMessageEnd("assistant", "Tests written and passing."),
+			]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
+			expect(result.error).toBeUndefined();
+		});
+
+		it("read error as last tool event is still non-fatal", () => {
+			const stdout = makeStdout([
+				makeToolExecutionEnd("read", { path: "/missing.ts" }, {}, true),
+				makeMessageEnd("assistant", "File not found, adapted."),
+			]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
+		});
+
+		it("grep and find errors are non-fatal", () => {
+			const stdout = makeStdout([
+				makeToolExecutionEnd("grep", { pattern: "foo" }, {}, true),
+				makeToolExecutionEnd("find", { glob: "*.ts" }, {}, true),
+				makeToolExecutionEnd("write", { path: "/src/out.ts" }, {}),
+				makeMessageEnd("assistant", "Done."),
+			]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.status).toBe("success");
 		});
 
 		it("treats git_commit tool errors as non-fatal", () => {
@@ -272,6 +342,18 @@ describe("synthesizeWorkerResult", () => {
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.filesChanged).toHaveLength(0);
 		});
+
+		it("extracts file path from result text when args field is absent (pi JSON mode format)", () => {
+			const stdout = makeStdout([
+				makeToolEndNoArgs("write", "Successfully wrote 549 bytes to /project/fizzbuzz.py"),
+				makeToolEndNoArgs("edit", "Successfully replaced 1 block(s) in /project/test.py"),
+				makeMessageEnd("assistant", "Done."),
+			]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.filesChanged).toContain("/project/fizzbuzz.py");
+			expect(result.filesChanged).toContain("/project/test.py");
+			expect(result.filesChanged).toHaveLength(2);
+		});
 	});
 
 	describe("VAL-WORKER-005: commandsRun extraction", () => {
@@ -316,6 +398,20 @@ describe("synthesizeWorkerResult", () => {
 			]);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.commandsRun).toHaveLength(0);
+		});
+
+		it("extracts command from tool_execution_start when tool_execution_end lacks args", () => {
+			const stdout = makeStdout([
+				makeToolExecutionStart("call_1", "bash", { command: "npm install" }),
+				makeToolExecutionEndById("call_1", "bash", { exitCode: 0 }),
+				makeToolExecutionStart("call_2", "bash", { command: "npm test" }),
+				makeToolExecutionEndById("call_2", "bash", { exitCode: 1 }),
+				makeMessageEnd("assistant", "Done."),
+			]);
+			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+			expect(result.commandsRun).toHaveLength(2);
+			expect(result.commandsRun[0]).toEqual({ command: "npm install", exitCode: 0 });
+			expect(result.commandsRun[1]).toEqual({ command: "npm test", exitCode: 1 });
 		});
 
 		it("ignores bash calls with missing command field", () => {
