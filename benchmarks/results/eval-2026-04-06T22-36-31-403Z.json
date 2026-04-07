@@ -1,0 +1,696 @@
+{
+  "metadata": {
+    "model": "claude-sonnet-4-20250514",
+    "trials": 2,
+    "timestamp": "2026-04-06T22:36:31.403Z",
+    "promptCount": 6
+  },
+  "summaries": [
+    {
+      "promptId": "explain-rerender",
+      "category": "explanation",
+      "modes": {
+        "default": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 1099.5,
+          "medianCacheWrite": 3053,
+          "medianCost": 0.02888415,
+          "medianDurationMs": 19084,
+          "medianWords": 464,
+          "sampleResponse": "A React component re-renders when you pass an inline object as a prop because of how React's reconciliation algorithm determines whether props have changed, combined with JavaScript's object reference",
+          "errors": 0
+        },
+        "caveman": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 574.5,
+          "medianCacheWrite": 2040,
+          "medianCost": 0.0175263,
+          "medianDurationMs": 12020.5,
+          "medianWords": 212,
+          "sampleResponse": "React component re-renders with inline object props because React uses **reference equality** (shallow comparison) to determine if props changed.\n\n## Why This Happens\n\n```javascript\n// This creates a ",
+          "errors": 0
+        },
+        "caveman-full": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 529.5,
+          "medianCacheWrite": 2138,
+          "medianCost": 0.017248199999999998,
+          "medianDurationMs": 12816,
+          "medianWords": 180,
+          "sampleResponse": "React re-render happens because inline objects create new reference each render.\n\n**Problem:**\n```jsx\n// Creates new object every render\n<MyComponent data={{name: \"John\", age: 30}} />\n```\n\n**Why:**\n- ",
+          "errors": 0
+        }
+      }
+    },
+    {
+      "promptId": "explain-connection-pool",
+      "category": "explanation",
+      "modes": {
+        "default": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 194.5,
+          "medianCacheWrite": 164,
+          "medianCost": 0.005342700000000001,
+          "medianDurationMs": 6039.5,
+          "medianWords": 92,
+          "sampleResponse": "Database connection pooling is a technique where a cache of database connections is maintained and reused across multiple requests, rather than creating and destroying connections for each database op",
+          "errors": 0
+        },
+        "caveman": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 163,
+          "medianCacheWrite": 164,
+          "medianCost": 0.0048822,
+          "medianDurationMs": 6028.5,
+          "medianWords": 57,
+          "sampleResponse": "Database connection pooling maintains reusable pool of database connections instead of creating/destroying connections per request. Eliminates expensive connection setup overhead + limits concurrent c",
+          "errors": 0
+        },
+        "caveman-full": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 146.5,
+          "medianCacheWrite": 164,
+          "medianCost": 0.0046935,
+          "medianDurationMs": 5327.5,
+          "medianWords": 52.5,
+          "sampleResponse": "Database connection pooling pre-creates and reuses database connections instead of opening new one for each request. Pool manages fixed number connections, hands them out to requests, returns them whe",
+          "errors": 0
+        }
+      }
+    },
+    {
+      "promptId": "plan-todo-api",
+      "category": "planning",
+      "modes": {
+        "default": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 525,
+          "medianCacheWrite": 169.5,
+          "medianCost": 0.010322475000000001,
+          "medianDurationMs": 9081,
+          "medianWords": 149.5,
+          "sampleResponse": "Here's a concise REST API design for a todo app:\n\n## Data Model\n\n```typescript\ninterface Todo {\n  id: string;\n  title: string;\n  description?: string;\n  completed: boolean;\n  createdAt: Date;\n  update",
+          "errors": 0
+        },
+        "caveman": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 417,
+          "medianCacheWrite": 169.5,
+          "medianCost": 0.008714475,
+          "medianDurationMs": 8476.5,
+          "medianWords": 120.5,
+          "sampleResponse": "## Data Model\n\n```javascript\n// Todo Item\n{\n  id: string,\n  title: string,\n  description?: string,\n  completed: boolean,\n  createdAt: Date,\n  updatedAt: Date\n}\n```\n\n## REST Endpoints\n\n```\nGET    /todo",
+          "errors": 0
+        },
+        "caveman-full": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 403,
+          "medianCacheWrite": 169.5,
+          "medianCost": 0.008563275,
+          "medianDurationMs": 12396,
+          "medianWords": 116,
+          "sampleResponse": "# Todo API Design\n\n## Data Model\n\n```typescript\ninterface Todo {\n  id: string;\n  title: string;\n  description?: string;\n  completed: boolean;\n  createdAt: Date;\n  updatedAt: Date;\n}\n```\n\n## Endpoints\n",
+          "errors": 0
+        }
+      }
+    },
+    {
+      "promptId": "analyze-bug",
+      "category": "analysis",
+      "modes": {
+        "default": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 472.5,
+          "medianCacheWrite": 170.5,
+          "medianCost": 0.009539025,
+          "medianDurationMs": 10635.5,
+          "medianWords": 140,
+          "sampleResponse": "The bug is in the conditional statement - you're using the assignment operator `=` instead of a comparison operator.\n\n**What's wrong:**\n- `if (user.role = \"admin\")` assigns the value `\"admin\"` to `use",
+          "errors": 0
+        },
+        "caveman": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 315,
+          "medianCacheWrite": 170.5,
+          "medianCost": 0.007188525,
+          "medianDurationMs": 7803.5,
+          "medianWords": 54.5,
+          "sampleResponse": "Bug: assignment operator instead comparison.\n\n```javascript\nif (user.role = \"admin\") { grantAccess(); }\n//            ^ assignment, not comparison\n```\n\nProblem: \n- `=` assigns \"admin\" to `user.role` \n",
+          "errors": 0
+        },
+        "caveman-full": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 327,
+          "medianCacheWrite": 170.5,
+          "medianCost": 0.007427325,
+          "medianDurationMs": 8664,
+          "medianWords": 48.5,
+          "sampleResponse": "Bug in condition. Using assignment `=` instead of equality comparison.\n\n**Problem:**\n`user.role = \"admin\"` assigns \"admin\" to user.role, returns \"admin\" (truthy). Condition always true.\n\n**Fix:**\n```j",
+          "errors": 0
+        }
+      }
+    },
+    {
+      "promptId": "code-fizzbuzz",
+      "category": "coding",
+      "modes": {
+        "default": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 289.5,
+          "medianCacheWrite": 163,
+          "medianCost": 0.0067636499999999995,
+          "medianDurationMs": 4917,
+          "medianWords": 60,
+          "sampleResponse": "```typescript\nfunction fizzbuzz(n: number = 100): string[] {\n\tconst result: string[] = [];\n\t\n\tfor (let i = 1; i <= n; i++) {\n\t\tif (i % 15 === 0) {\n\t\t\tresult.push(\"FizzBuzz\");\n\t\t} else if (i % 3 === 0)",
+          "errors": 0
+        },
+        "caveman": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 320.5,
+          "medianCacheWrite": 163,
+          "medianCost": 0.0072406499999999995,
+          "medianDurationMs": 5946.5,
+          "medianWords": 59,
+          "sampleResponse": "```typescript\nfunction fizzbuzz(n: number): string[] {\n\tconst result: string[] = [];\n\t\n\tfor (let i = 1; i <= n; i++) {\n\t\tif (i % 15 === 0) {\n\t\t\tresult.push(\"FizzBuzz\");\n\t\t} else if (i % 3 === 0) {\n\t\t\t",
+          "errors": 0
+        },
+        "caveman-full": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 310,
+          "medianCacheWrite": 163,
+          "medianCost": 0.00714195,
+          "medianDurationMs": 6210,
+          "medianWords": 58,
+          "sampleResponse": "```typescript\nfunction fizzbuzz(n: number): string[] {\n\tconst result: string[] = [];\n\tfor (let i = 1; i <= n; i++) {\n\t\tif (i % 15 === 0) {\n\t\t\tresult.push(\"FizzBuzz\");\n\t\t} else if (i % 3 === 0) {\n\t\t\tre",
+          "errors": 0
+        }
+      }
+    },
+    {
+      "promptId": "explain-git-rebase",
+      "category": "explanation",
+      "modes": {
+        "default": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 792,
+          "medianCacheWrite": 163,
+          "medianCost": 0.014301149999999999,
+          "medianDurationMs": 16877.5,
+          "medianWords": 449.5,
+          "sampleResponse": "## Git Rebase vs Git Merge\n\nBoth `git rebase` and `git merge` are used to integrate changes from one branch into another, but they work very differently:\n\n### Git Merge\n\n**What it does:**\n- Creates a ",
+          "errors": 0
+        },
+        "caveman": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 568.5,
+          "medianCacheWrite": 163,
+          "medianCost": 0.010960649999999999,
+          "medianDurationMs": 15080.5,
+          "medianWords": 262,
+          "sampleResponse": "Git merge vs rebase - different ways combine branches.\n\n## Git Merge\n\n**What it does:**\n- Creates new merge commit\n- Preserves branch history\n- Non-destructive operation\n\n**How it works:**\n```\nfeature",
+          "errors": 0
+        },
+        "caveman-full": {
+          "medianInputTokens": 9,
+          "medianOutputTokens": 518,
+          "medianCacheWrite": 163,
+          "medianCost": 0.010261949999999999,
+          "medianDurationMs": 14027,
+          "medianWords": 226,
+          "sampleResponse": "## Git Rebase vs Git Merge\n\n### What They Do\n\n**Merge**: Takes two branches, creates new commit that combines them. Preserves original branch history.\n\n**Rebase**: Takes commits from feature branch, r",
+          "errors": 0
+        }
+      }
+    }
+  ],
+  "raw": [
+    {
+      "mode": "default",
+      "promptId": "explain-rerender",
+      "inputTokens": 9,
+      "outputTokens": 944,
+      "cacheRead": 0,
+      "cacheWrite": 6106,
+      "totalCost": 0.0370845,
+      "responseText": "A React component re-renders when you pass an inline object as a prop because of how React's reconciliation algorithm determines whether props have changed, combined with JavaScript's object reference equality behavior.\n\n## Why This Happens\n\n### 1. **Object Reference Equality**\nIn JavaScript, objects are compared by reference, not by value:\n\n```javascript\nconst obj1 = { name: \"John\" };\nconst obj2 = { name: \"John\" };\nconsole.log(obj1 === obj2); // false - different references\n\nconst obj3 = obj1;\nconsole.log(obj1 === obj3); // true - same reference\n```\n\n### 2. **Inline Objects Create New References**\nEvery time the parent component renders, inline objects are recreated:\n\n```jsx\nfunction Parent() {\n  return (\n    <Child \n      user={{ name: \"John\", age: 25 }} // New object on every render\n      style={{ color: \"red\" }}         // New object on every render\n    />\n  );\n}\n```\n\n### 3. **React's Props Comparison**\nReact uses `Object.is()` (similar to `===`) to compare props between renders. When it sees that the object reference has changed, it assumes the prop value has changed and triggers a re-render of the child component.\n\n## The Problem in Action\n\n```jsx\nfunction Parent() {\n  const [count, setCount] = useState(0);\n  \n  return (\n    <div>\n      <button onClick={() => setCount(count + 1)}>Count: {count}</button>\n      {/* Child re-renders even though the object content is identical */}\n      <Child config={{ theme: \"dark\", size: \"large\" }} />\n    </div>\n  );\n}\n\nconst Child = React.memo(({ config }) => {\n  console.log(\"Child rendered!\"); // This logs on every Parent render\n  return <div>Theme: {config.theme}</div>;\n});\n```\n\nEven with `React.memo()`, the child re-renders because the `config` prop gets a new object reference each time.\n\n## Solutions\n\n### 1. **Extract Objects Outside Component**\n```jsx\nconst CONFIG = { theme: \"dark\", size: \"large\" };\n\nfunction Parent() {\n  return <Child config={CONFIG} />;\n}\n```\n\n### 2. **useMemo for Dynamic Objects**\n```jsx\nfunction Parent({ userTheme }) {\n  const config = useMemo(() => ({\n    theme: userTheme,\n    size: \"large\"\n  }), [userTheme]);\n  \n  return <Child config={config} />;\n}\n```\n\n### 3. **useCallback for Function Props**\n```jsx\nfunction Parent() {\n  const handleClick = useCallback((id) => {\n    // handle click\n  }, []);\n  \n  return <Child onClick={handleClick} />;\n}\n```\n\n### 4. **Separate Primitive Props**\n```jsx\n// Instead of this:\n<Child config={{ theme: \"dark\", size: \"large\" }} />\n\n// Do this:\n<Child theme=\"dark\" size=\"large\" />\n```\n\n## Key Takeaway\n\nReact's re-rendering isn't actually broken - it's being conservative. Since object content could have changed (React doesn't do deep equality checks for performance reasons), it assumes any new object reference means new data and re-renders to be safe. The solution is to maintain stable references for objects that don't actually change between renders.",
+      "responseChars": 2894,
+      "responseWords": 427,
+      "durationMs": 18405
+    },
+    {
+      "mode": "caveman",
+      "promptId": "explain-rerender",
+      "inputTokens": 9,
+      "outputTokens": 542,
+      "cacheRead": 2066,
+      "cacheWrite": 4080,
+      "totalCost": 0.024076800000000002,
+      "responseText": "React component re-renders with inline object props because React uses **reference equality** (shallow comparison) to determine if props changed.\n\n## Why This Happens\n\n```javascript\n// This creates a NEW object every render\n<MyComponent style={{ color: 'red' }} />\n\n// Even if values identical, reference differs:\nconst obj1 = { color: 'red' };\nconst obj2 = { color: 'red' };\nconsole.log(obj1 === obj2); // false\n```\n\nReact checks: `prevProps.style === nextProps.style`\n\nInline object → new reference → `false` → re-render triggered.\n\n## Solutions\n\n**1. Extract object outside render:**\n```javascript\nconst STYLE = { color: 'red' };\n<MyComponent style={STYLE} />\n```\n\n**2. useMemo for dynamic objects:**\n```javascript\nconst style = useMemo(() => ({ \n  color: isActive ? 'red' : 'blue' \n}), [isActive]);\n<MyComponent style={style} />\n```\n\n**3. useCallback for functions:**\n```javascript\nconst handleClick = useCallback(() => {\n  doSomething(id);\n}, [id]);\n<MyComponent onClick={handleClick} />\n```\n\n**4. React.memo with custom comparison:**\n```javascript\nconst MyComponent = React.memo(({ style }) => {\n  // component\n}, (prevProps, nextProps) => {\n  return prevProps.style.color === nextProps.style.color;\n});\n```\n\nSame issue applies to inline arrays, functions, any object literal passed as prop.",
+      "responseChars": 1297,
+      "responseWords": 181,
+      "durationMs": 11451
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "explain-rerender",
+      "inputTokens": 9,
+      "outputTokens": 489,
+      "cacheRead": 2066,
+      "cacheWrite": 4276,
+      "totalCost": 0.0240168,
+      "responseText": "React re-render happens because inline objects create new reference each render.\n\n**Problem:**\n```jsx\n// Creates new object every render\n<MyComponent data={{name: \"John\", age: 30}} />\n```\n\n**Why:**\n- JavaScript: `{} !== {}` (different references)\n- React uses `Object.is()` for prop comparison\n- New object = \"prop changed\" = re-render triggered\n- Even if content identical\n\n**Solutions:**\n\n1. **Move outside component:**\n```jsx\nconst userData = {name: \"John\", age: 30};\n<MyComponent data={userData} />\n```\n\n2. **useMemo for dynamic objects:**\n```jsx\nconst userData = useMemo(() => ({\n  name: user.name,\n  age: user.age\n}), [user.name, user.age]);\n<MyComponent data={userData} />\n```\n\n3. **useCallback for inline functions:**\n```jsx\nconst handleClick = useCallback(() => {\n  // handler logic\n}, [dependencies]);\n<MyComponent onClick={handleClick} />\n```\n\n**Rule:** Don't create new objects/functions in JSX unless wrapped in memo hooks.\n\nSame applies to inline functions, arrays, any object literal in render.",
+      "responseChars": 1009,
+      "responseWords": 139,
+      "durationMs": 12778
+    },
+    {
+      "mode": "default",
+      "promptId": "explain-connection-pool",
+      "inputTokens": 9,
+      "outputTokens": 200,
+      "cacheRead": 5780,
+      "cacheWrite": 328,
+      "totalCost": 0.005991,
+      "responseText": "Database connection pooling is a technique where a cache of database connections is maintained and reused across multiple requests, rather than creating and destroying connections for each database operation. This eliminates the overhead of establishing new connections (which involves network handshakes, authentication, and resource allocation) and prevents exhausting database connection limits.\n\nYou should use connection pooling in any application that makes frequent database queries, especially web applications, APIs, or services with concurrent users. It's particularly important when your database has connection limits or when connection establishment is expensive due to network latency, SSL handshakes, or authentication overhead.",
+      "responseChars": 743,
+      "responseWords": 97,
+      "durationMs": 6377
+    },
+    {
+      "mode": "caveman",
+      "promptId": "explain-connection-pool",
+      "inputTokens": 9,
+      "outputTokens": 179,
+      "cacheRead": 5820,
+      "cacheWrite": 328,
+      "totalCost": 0.005688,
+      "responseText": "Database connection pooling maintains reusable pool of database connections instead of creating/destroying connections per request. Eliminates expensive connection setup overhead + limits concurrent connections to prevent overwhelming database.\n\nUse when: multiple clients/requests hit database frequently, connection creation is expensive (network latency, authentication), or need to limit database load. Avoid for single-threaded apps or infrequent database access.",
+      "responseChars": 468,
+      "responseWords": 56,
+      "durationMs": 6171
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "explain-connection-pool",
+      "inputTokens": 9,
+      "outputTokens": 140,
+      "cacheRead": 6016,
+      "cacheWrite": 328,
+      "totalCost": 0.0051618,
+      "responseText": "Database connection pooling pre-creates and reuses database connections instead of opening new one for each request. Pool manages fixed number connections, hands them out to requests, returns them when done.\n\nUse when app makes frequent database calls. Avoids expensive connection setup/teardown overhead. Essential for web apps, APIs, any multi-user system hitting database regularly.",
+      "responseChars": 385,
+      "responseWords": 53,
+      "durationMs": 4968
+    },
+    {
+      "mode": "default",
+      "promptId": "plan-todo-api",
+      "inputTokens": 9,
+      "outputTokens": 532,
+      "cacheRead": 5780,
+      "cacheWrite": 339,
+      "totalCost": 0.01101225,
+      "responseText": "Here's a concise REST API design for a todo app:\n\n## Data Model\n\n```typescript\ninterface Todo {\n  id: string;\n  title: string;\n  description?: string;\n  completed: boolean;\n  createdAt: Date;\n  updatedAt: Date;\n}\n```\n\n## REST Endpoints\n\n| Method | Endpoint | Description |\n|--------|----------|-------------|\n| `GET` | `/api/todos` | Get all todos |\n| `POST` | `/api/todos` | Create new todo |\n| `GET` | `/api/todos/:id` | Get todo by ID |\n| `PUT` | `/api/todos/:id` | Update todo |\n| `PATCH` | `/api/todos/:id` | Partial update (e.g., toggle completed) |\n| `DELETE` | `/api/todos/:id` | Delete todo |\n\n## Request/Response Examples\n\n**POST /api/todos**\n```json\n{\n  \"title\": \"Buy groceries\",\n  \"description\": \"Milk, eggs, bread\"\n}\n```\n\n**GET /api/todos**\n```json\n{\n  \"todos\": [\n    {\n      \"id\": \"1\",\n      \"title\": \"Buy groceries\",\n      \"description\": \"Milk, eggs, bread\",\n      \"completed\": false,\n      \"createdAt\": \"2026-04-06T10:00:00Z\",\n      \"updatedAt\": \"2026-04-06T10:00:00Z\"\n    }\n  ]\n}\n```\n\n**PATCH /api/todos/1**\n```json\n{\n  \"completed\": true\n}\n```\n\nThat covers the core CRUD operations for a todo app. Add authentication endpoints (`/auth/login`, `/auth/register`) if user management is needed.",
+      "responseChars": 1207,
+      "responseWords": 167,
+      "durationMs": 9032
+    },
+    {
+      "mode": "caveman",
+      "promptId": "plan-todo-api",
+      "inputTokens": 9,
+      "outputTokens": 449,
+      "cacheRead": 5820,
+      "cacheWrite": 339,
+      "totalCost": 0.00977925,
+      "responseText": "## Data Model\n\n```javascript\n// Todo Item\n{\n  id: string,\n  title: string,\n  description?: string,\n  completed: boolean,\n  createdAt: Date,\n  updatedAt: Date\n}\n```\n\n## REST Endpoints\n\n```\nGET    /todos           # List all todos\nPOST   /todos           # Create new todo\nGET    /todos/:id       # Get single todo\nPUT    /todos/:id       # Update todo\nDELETE /todos/:id       # Delete todo\nPATCH  /todos/:id/toggle # Toggle completion status\n```\n\n## Request/Response Examples\n\n**POST /todos**\n```json\n{ \"title\": \"Buy milk\", \"description\": \"2% milk from store\" }\n```\n\n**PUT /todos/:id**\n```json\n{ \"title\": \"Buy milk\", \"description\": \"Updated\", \"completed\": true }\n```\n\n**Response format**\n```json\n{\n  \"id\": \"123\",\n  \"title\": \"Buy milk\",\n  \"description\": \"2% milk from store\",\n  \"completed\": false,\n  \"createdAt\": \"2026-04-06T10:00:00Z\",\n  \"updatedAt\": \"2026-04-06T10:00:00Z\"\n}\n```\n\nStatus codes: 200 (success), 201 (created), 404 (not found), 400 (bad request), 500 (server error).",
+      "responseChars": 979,
+      "responseWords": 128,
+      "durationMs": 9360
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "plan-todo-api",
+      "inputTokens": 9,
+      "outputTokens": 419,
+      "cacheRead": 6016,
+      "cacheWrite": 339,
+      "totalCost": 0.00938805,
+      "responseText": "# Todo API Design\n\n## Data Model\n\n```typescript\ninterface Todo {\n  id: string;\n  title: string;\n  description?: string;\n  completed: boolean;\n  createdAt: Date;\n  updatedAt: Date;\n}\n```\n\n## Endpoints\n\n```\nGET    /todos          - List all todos\nGET    /todos/:id      - Get specific todo\nPOST   /todos          - Create new todo\nPUT    /todos/:id      - Update todo\nDELETE /todos/:id      - Delete todo\nPATCH  /todos/:id      - Toggle completion status\n```\n\n## Request/Response\n\n**POST/PUT Body:**\n```json\n{\n  \"title\": \"Buy groceries\",\n  \"description\": \"Milk, eggs, bread\",\n  \"completed\": false\n}\n```\n\n**Response:**\n```json\n{\n  \"id\": \"uuid\",\n  \"title\": \"Buy groceries\", \n  \"description\": \"Milk, eggs, bread\",\n  \"completed\": false,\n  \"createdAt\": \"2026-04-06T10:00:00Z\",\n  \"updatedAt\": \"2026-04-06T10:00:00Z\"\n}\n```\n\n**PATCH Body:**\n```json\n{\n  \"completed\": true\n}\n```\n\nDone. Simple CRUD + toggle completion.",
+      "responseChars": 906,
+      "responseWords": 114,
+      "durationMs": 7955
+    },
+    {
+      "mode": "default",
+      "promptId": "analyze-bug",
+      "inputTokens": 9,
+      "outputTokens": 431,
+      "cacheRead": 5780,
+      "cacheWrite": 341,
+      "totalCost": 0.009504750000000001,
+      "responseText": "The bug is in the conditional statement - you're using the assignment operator `=` instead of a comparison operator.\n\n**What's wrong:**\n- `if (user.role = \"admin\")` assigns the value `\"admin\"` to `user.role`\n- The assignment expression evaluates to `\"admin\"` (which is truthy)\n- This means the condition is always true, so `grantAccess()` always runs\n- It also unintentionally modifies the `user.role` property\n\n**The fix:**\nUse a comparison operator instead of assignment:\n\n```javascript\nif (user.role === \"admin\") { grantAccess(); }\n```\n\nOr:\n```javascript\nif (user.role == \"admin\") { grantAccess(); }\n```\n\n**Recommendation:** Use `===` (strict equality) rather than `==` (loose equality) to avoid type coercion issues and make your intent clearer.\n\nThis is a common mistake that can lead to serious security vulnerabilities, as it would grant admin access to anyone and potentially corrupt user data.",
+      "responseChars": 902,
+      "responseWords": 135,
+      "durationMs": 10238
+    },
+    {
+      "mode": "caveman",
+      "promptId": "analyze-bug",
+      "inputTokens": 9,
+      "outputTokens": 289,
+      "cacheRead": 5820,
+      "cacheWrite": 341,
+      "totalCost": 0.007386750000000001,
+      "responseText": "Bug: assignment operator instead comparison.\n\n```javascript\nif (user.role = \"admin\") { grantAccess(); }\n//            ^ assignment, not comparison\n```\n\nProblem: \n- `=` assigns \"admin\" to `user.role` \n- Returns \"admin\" (truthy)\n- Always executes `grantAccess()`\n- Overwrites original role value\n\nFix:\n```javascript\nif (user.role === \"admin\") { grantAccess(); }\n//            ^^^ strict equality comparison\n```\n\nUse `===` for comparison. Never `=` in conditions.",
+      "responseChars": 460,
+      "responseWords": 62,
+      "durationMs": 7639
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "analyze-bug",
+      "inputTokens": 9,
+      "outputTokens": 345,
+      "cacheRead": 6016,
+      "cacheWrite": 341,
+      "totalCost": 0.00828555,
+      "responseText": "Bug in condition. Using assignment `=` instead of equality comparison.\n\n**Problem:**\n`user.role = \"admin\"` assigns \"admin\" to user.role, returns \"admin\" (truthy). Condition always true.\n\n**Fix:**\n```javascript\nif (user.role === \"admin\") { grantAccess(); }\n```\n\nUse `===` for strict equality comparison. Never use `=` in conditions unless intentional assignment needed.",
+      "responseChars": 368,
+      "responseWords": 49,
+      "durationMs": 8858
+    },
+    {
+      "mode": "default",
+      "promptId": "code-fizzbuzz",
+      "inputTokens": 9,
+      "outputTokens": 298,
+      "cacheRead": 5780,
+      "cacheWrite": 326,
+      "totalCost": 0.0074535,
+      "responseText": "```typescript\nfunction fizzbuzz(n: number = 100): string[] {\n\tconst result: string[] = [];\n\t\n\tfor (let i = 1; i <= n; i++) {\n\t\tif (i % 15 === 0) {\n\t\t\tresult.push(\"FizzBuzz\");\n\t\t} else if (i % 3 === 0) {\n\t\t\tresult.push(\"Fizz\");\n\t\t} else if (i % 5 === 0) {\n\t\t\tresult.push(\"Buzz\");\n\t\t} else {\n\t\t\tresult.push(i.toString());\n\t\t}\n\t}\n\t\n\treturn result;\n}\n```",
+      "responseChars": 350,
+      "responseWords": 61,
+      "durationMs": 5087
+    },
+    {
+      "mode": "caveman",
+      "promptId": "code-fizzbuzz",
+      "inputTokens": 9,
+      "outputTokens": 334,
+      "cacheRead": 5820,
+      "cacheWrite": 326,
+      "totalCost": 0.0080055,
+      "responseText": "```typescript\nfunction fizzbuzz(n: number): string[] {\n\tconst result: string[] = [];\n\t\n\tfor (let i = 1; i <= n; i++) {\n\t\tif (i % 15 === 0) {\n\t\t\tresult.push(\"FizzBuzz\");\n\t\t} else if (i % 3 === 0) {\n\t\t\tresult.push(\"Fizz\");\n\t\t} else if (i % 5 === 0) {\n\t\t\tresult.push(\"Buzz\");\n\t\t} else {\n\t\t\tresult.push(i.toString());\n\t\t}\n\t}\n\t\n\treturn result;\n}\n```",
+      "responseChars": 344,
+      "responseWords": 59,
+      "durationMs": 6487
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "code-fizzbuzz",
+      "inputTokens": 9,
+      "outputTokens": 291,
+      "cacheRead": 6016,
+      "cacheWrite": 326,
+      "totalCost": 0.0074193,
+      "responseText": "```typescript\nfunction fizzbuzz(n: number): string[] {\n\tconst result: string[] = [];\n\tfor (let i = 1; i <= n; i++) {\n\t\tif (i % 15 === 0) {\n\t\t\tresult.push(\"FizzBuzz\");\n\t\t} else if (i % 3 === 0) {\n\t\t\tresult.push(\"Fizz\");\n\t\t} else if (i % 5 === 0) {\n\t\t\tresult.push(\"Buzz\");\n\t\t} else {\n\t\t\tresult.push(i.toString());\n\t\t}\n\t}\n\treturn result;\n}\n```",
+      "responseChars": 340,
+      "responseWords": 59,
+      "durationMs": 5213
+    },
+    {
+      "mode": "default",
+      "promptId": "explain-git-rebase",
+      "inputTokens": 9,
+      "outputTokens": 845,
+      "cacheRead": 5780,
+      "cacheWrite": 326,
+      "totalCost": 0.0156585,
+      "responseText": "## Git Rebase vs Git Merge\n\nBoth `git rebase` and `git merge` are used to integrate changes from one branch into another, but they work very differently:\n\n### Git Merge\n\n**What it does:**\n- Creates a new \"merge commit\" that combines the histories of two branches\n- Preserves the original branch structure and commit history\n- Shows exactly when branches were merged\n\n**Visual representation:**\n```\nmain:     A---B---C---F (merge commit)\n               \\     /\nfeature:        D---E\n```\n\n**When to use:**\n- **Feature branches**: When completing a feature and want to preserve the context of when it was integrated\n- **Public branches**: When working with shared branches where rewriting history would affect others\n- **Release branches**: To maintain a clear record of when features were integrated\n- **When collaboration matters**: Multiple people working on the same branch\n\n### Git Rebase\n\n**What it does:**\n- Replays commits from one branch onto another\n- Rewrites commit history to create a linear sequence\n- Makes it appear as if work was done sequentially\n\n**Visual representation:**\n```\nBefore rebase:\nmain:     A---B---C\n               \\\nfeature:        D---E\n\nAfter rebase:\nmain:     A---B---C---D'---E'\n```\n\n**When to use:**\n- **Personal feature branches**: Before merging to keep main branch clean\n- **Local development**: Cleaning up your own commit history before sharing\n- **Linear history preference**: When you want a clean, sequential project history\n- **Interactive cleanup**: Using `git rebase -i` to squash, edit, or reorder commits\n\n## Key Differences\n\n| Aspect | Merge | Rebase |\n|--------|-------|---------|\n| **History** | Preserves original timeline | Rewrites history |\n| **Commits** | Creates new merge commit | Replays existing commits |\n| **Conflicts** | Resolve once | May resolve multiple times |\n| **Safety** | Non-destructive | Can lose commits if done incorrectly |\n| **Collaboration** | Safe for shared branches | Dangerous on public branches |\n\n## Best Practices\n\n**Use merge when:**\n- Working on shared/public branches\n- You want to preserve the context of when changes were integrated\n- Working in a team where others might have based work on your branch\n- Following a \"merge-based\" workflow\n\n**Use rebase when:**\n- Cleaning up personal feature branches before merging\n- You want a linear, clean project history\n- Updating your feature branch with latest main changes\n- Following a \"rebase-based\" workflow\n\n**Golden rule:** Never rebase commits that have been pushed and shared with others unless your team explicitly agrees to rewrite shared history.\n\n## Common Workflows\n\n**Feature development with rebase:**\n```bash\n# While developing\ngit rebase main  # Keep feature branch up to date\n\n# Before merging\ngit rebase -i main  # Clean up commits\ngit checkout main\ngit merge feature  # Fast-forward merge\n```\n\n**Feature development with merge:**\n```bash\n# When ready to integrate\ngit checkout main\ngit merge feature  # Creates merge commit\n```\n\nChoose based on your team's workflow preferences and whether you prioritize preserving history (merge) or maintaining clean linear history (rebase).",
+      "responseChars": 3129,
+      "responseWords": 480,
+      "durationMs": 17969
+    },
+    {
+      "mode": "caveman",
+      "promptId": "explain-git-rebase",
+      "inputTokens": 9,
+      "outputTokens": 654,
+      "cacheRead": 5820,
+      "cacheWrite": 326,
+      "totalCost": 0.0128055,
+      "responseText": "Git merge vs rebase - different ways combine branches.\n\n## Git Merge\n\n**What it does:**\n- Creates new merge commit\n- Preserves branch history\n- Non-destructive operation\n\n**How it works:**\n```\nfeature branch: A---B---C\nmain branch:         D---E\nAfter merge:    A---B---C---F (merge commit)\n                    D---E---/\n```\n\n## Git Rebase\n\n**What it does:**\n- Replays commits on new base\n- Rewrites commit history\n- Creates linear history\n\n**How it works:**\n```\nfeature branch: A---B---C\nmain branch:         D---E\nAfter rebase:        D---E---A'---B'---C'\n```\n\n## Key Differences\n\n| Aspect | Merge | Rebase |\n|--------|-------|--------|\n| History | Preserves original | Rewrites history |\n| Commits | Adds merge commit | No merge commit |\n| Timeline | Shows when work happened | Shows linear progression |\n| Safety | Safe for shared branches | Dangerous for shared branches |\n\n## When to Use Merge\n\n- **Shared/public branches** - Never rewrite published history\n- **Feature integration** - Want to preserve context of when feature was merged\n- **Team collaboration** - Multiple people working on same branch\n- **Release branches** - Preserving branch points matters\n\n```bash\ngit checkout main\ngit merge feature-branch\n```\n\n## When to Use Rebase\n\n- **Local cleanup** - Before pushing feature branch\n- **Linear history** - Want clean, readable history\n- **Private branches** - Only you have worked on the branch\n- **Catch up with main** - Update feature branch with latest main\n\n```bash\n# Interactive rebase to clean up\ngit rebase -i HEAD~3\n\n# Rebase onto main\ngit checkout feature-branch  \ngit rebase main\n```\n\n## Common Workflows\n\n**Feature workflow with rebase:**\n```bash\ngit checkout -b feature\n# work, commit\ngit rebase main  # clean up before merge\ngit checkout main\ngit merge feature  # fast-forward merge\n```\n\n**Keep merge commits for context:**\n```bash\ngit checkout main\ngit merge --no-ff feature  # force merge commit\n```\n\n**Golden rule:** Never rebase shared branches. Use merge for collaboration, rebase for cleanup.",
+      "responseChars": 2028,
+      "responseWords": 316,
+      "durationMs": 14329
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "explain-git-rebase",
+      "inputTokens": 9,
+      "outputTokens": 533,
+      "cacheRead": 6016,
+      "cacheWrite": 326,
+      "totalCost": 0.0110493,
+      "responseText": "## Git Rebase vs Git Merge\n\n### What They Do\n\n**Merge**: Takes two branches, creates new commit that combines them. Preserves original branch history.\n\n**Rebase**: Takes commits from feature branch, replays them on top of target branch. Rewrites commit history.\n\n### History Difference\n\n**Merge**:\n```\nA---B---C  main\n     \\   \\\n      D---E---F  feature\n           \\   /\n            \\ /\n             M  <- merge commit\n```\n\n**Rebase**:\n```\nA---B---C---D'---E'---F'  main (feature rebased)\n```\n\n### When Use Merge\n\n- Shared/public branches (never rebase these)\n- Want preserve branch context/collaboration history  \n- Integration commits meaningful (like release merges)\n- Working with team that expects merge workflow\n- Merge conflicts easier to resolve (one big conflict vs multiple small ones)\n\n### When Use Rebase\n\n- Private feature branches before merging\n- Want clean, linear history\n- Small focused changes\n- Following \"rebase before merge\" workflow\n- Cleaning up messy local commits before sharing\n\n### Commands\n\n```bash\n# Merge\ngit checkout main\ngit merge feature-branch\n\n# Rebase  \ngit checkout feature-branch\ngit rebase main\n# Then merge with fast-forward\ngit checkout main\ngit merge feature-branch\n```\n\n### Golden Rule\n\n**Never rebase commits that exist on public/shared repositories.** Rewrite history = bad time for teammates.\n\n### Workflow Pattern\n\n1. Work on private feature branch\n2. Rebase onto latest main (clean up history)\n3. Merge to main (often fast-forward)\n\nGets benefits of both: clean history + safe collaboration.",
+      "responseChars": 1540,
+      "responseWords": 225,
+      "durationMs": 14649
+    },
+    {
+      "mode": "default",
+      "promptId": "explain-rerender",
+      "inputTokens": 9,
+      "outputTokens": 1255,
+      "cacheRead": 6106,
+      "cacheWrite": 0,
+      "totalCost": 0.020683800000000002,
+      "responseText": "A React component re-renders when you pass an inline object as a prop because **React uses reference equality (shallow comparison) to determine if props have changed**, and inline objects create a new reference on every render.\n\n## Why This Happens\n\nWhen you write something like this:\n\n```jsx\nfunction Parent() {\n  return <Child style={{ color: 'red' }} />;\n}\n```\n\nOn each render of `Parent`, a completely new object `{ color: 'red' }` is created in memory. Even though the contents are identical, it's a different object reference each time.\n\nReact's reconciliation process checks if props have changed by comparing references:\n- Old prop: `{ color: 'red' }` (reference A)\n- New prop: `{ color: 'red' }` (reference B) \n- `Object.is(A, B)` → `false` → React thinks props changed → re-render triggered\n\n## Example Demonstrating the Problem\n\n```jsx\nfunction ExpensiveChild({ style, data }) {\n  console.log('ExpensiveChild rendered!');\n  // Imagine expensive calculations here\n  return <div style={style}>{data.message}</div>;\n}\n\nfunction Parent() {\n  const [count, setCount] = useState(0);\n  \n  return (\n    <div>\n      <button onClick={() => setCount(count + 1)}>Count: {count}</button>\n      {/* These inline objects cause unnecessary re-renders */}\n      <ExpensiveChild \n        style={{ color: 'red', fontSize: '16px' }}\n        data={{ message: 'Hello World' }}\n      />\n    </div>\n  );\n}\n```\n\nEvery time you click the button, `ExpensiveChild` re-renders even though the actual prop values haven't changed.\n\n## Solutions\n\n### 1. Move Objects Outside the Component\n```jsx\nconst CHILD_STYLE = { color: 'red', fontSize: '16px' };\nconst CHILD_DATA = { message: 'Hello World' };\n\nfunction Parent() {\n  const [count, setCount] = useState(0);\n  \n  return (\n    <div>\n      <button onClick={() => setCount(count + 1)}>Count: {count}</button>\n      <ExpensiveChild style={CHILD_STYLE} data={CHILD_DATA} />\n    </div>\n  );\n}\n```\n\n### 2. Use useMemo for Dynamic Objects\n```jsx\nfunction Parent() {\n  const [count, setCount] = useState(0);\n  const [theme, setTheme] = useState('light');\n  \n  const childStyle = useMemo(() => ({\n    color: theme === 'dark' ? 'white' : 'black',\n    fontSize: '16px'\n  }), [theme]);\n  \n  const childData = useMemo(() => ({\n    message: 'Hello World'\n  }), []);\n  \n  return (\n    <div>\n      <button onClick={() => setCount(count + 1)}>Count: {count}</button>\n      <ExpensiveChild style={childStyle} data={childData} />\n    </div>\n  );\n}\n```\n\n### 3. Use React.memo with Custom Comparison\n```jsx\nconst ExpensiveChild = React.memo(({ style, data }) => {\n  console.log('ExpensiveChild rendered!');\n  return <div style={style}>{data.message}</div>;\n}, (prevProps, nextProps) => {\n  // Custom comparison logic\n  return (\n    prevProps.style.color === nextProps.style.color &&\n    prevProps.style.fontSize === nextProps.style.fontSize &&\n    prevProps.data.message === nextProps.data.message\n  );\n});\n```\n\n### 4. Flatten Props Instead of Objects\n```jsx\nfunction Parent() {\n  const [count, setCount] = useState(0);\n  \n  return (\n    <div>\n      <button onClick={() => setCount(count + 1)}>Count: {count}</button>\n      {/* Pass primitive values instead of objects */}\n      <ExpensiveChild \n        color=\"red\"\n        fontSize=\"16px\"\n        message=\"Hello World\"\n      />\n    </div>\n  );\n}\n\nconst ExpensiveChild = React.memo(({ color, fontSize, message }) => {\n  const style = { color, fontSize };\n  return <div style={style}>{message}</div>;\n});\n```\n\n## Key Takeaway\n\nThe fundamental issue is that **object identity matters in React**, not just object content. When you create inline objects, you're essentially telling React \"this prop is different every time,\" even when the values inside are identical. The solutions all focus on maintaining stable references to objects that don't actually change between renders.",
+      "responseChars": 3836,
+      "responseWords": 501,
+      "durationMs": 19763
+    },
+    {
+      "mode": "caveman",
+      "promptId": "explain-rerender",
+      "inputTokens": 9,
+      "outputTokens": 607,
+      "cacheRead": 6146,
+      "cacheWrite": 0,
+      "totalCost": 0.010975799999999999,
+      "responseText": "React component re-renders when inline object prop because **reference equality fails**.\n\n## Problem\n\n```jsx\n// BAD - creates new object every render\nfunction Parent() {\n  return <Child config={{ theme: 'dark', size: 'large' }} />;\n}\n\nfunction Child({ config }) {\n  // Re-renders every time Parent renders\n  // Even though config contents identical\n}\n```\n\n## Why This Happens\n\n1. **New object reference**: `{}` creates fresh object each render\n2. **React shallow comparison**: Uses `===` to check prop changes\n3. **`{ theme: 'dark' } !== { theme: 'dark' }`**: Different references\n4. **Triggers re-render**: React assumes prop changed\n\n## Solutions\n\n### Move object outside component\n```jsx\nconst CONFIG = { theme: 'dark', size: 'large' };\n\nfunction Parent() {\n  return <Child config={CONFIG} />;\n}\n```\n\n### useMemo hook\n```jsx\nfunction Parent() {\n  const config = useMemo(\n    () => ({ theme: 'dark', size: 'large' }),\n    [] // No dependencies = stable reference\n  );\n  return <Child config={config} />;\n}\n```\n\n### useState for stable reference\n```jsx\nfunction Parent() {\n  const [config] = useState({ theme: 'dark', size: 'large' });\n  return <Child config={config} />;\n}\n```\n\n### memo with custom comparison\n```jsx\nconst Child = memo(({ config }) => {\n  // Component logic\n}, (prevProps, nextProps) => {\n  // Custom comparison logic\n  return prevProps.config.theme === nextProps.config.theme;\n});\n```\n\n## Same issue applies to:\n- Inline arrays: `items={[1, 2, 3]}`\n- Inline functions: `onClick={() => doSomething()}`\n- Inline styles: `style={{ color: 'red' }}`\n\n**Fix**: Extract, memoize, or use stable references.",
+      "responseChars": 1618,
+      "responseWords": 243,
+      "durationMs": 12590
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "explain-rerender",
+      "inputTokens": 9,
+      "outputTokens": 570,
+      "cacheRead": 6342,
+      "cacheWrite": 0,
+      "totalCost": 0.010479599999999999,
+      "responseText": "React component re-renders when you pass inline object as prop because **referential equality fails**.\n\n## Why This Happens\n\nReact uses `Object.is()` comparison to check if props changed between renders. When you create inline object:\n\n```jsx\n// BAD - creates new object every render\n<MyComponent config={{ color: 'blue', size: 10 }} />\n```\n\nEach render creates **new object instance** with different memory reference, even if content identical.\n\nReact sees:\n- Previous render: `{ color: 'blue', size: 10 }` at memory address A\n- Current render: `{ color: 'blue', size: 10 }` at memory address B\n- `Object.is(A, B) === false` → triggers re-render\n\n## Solutions\n\n**1. Move object outside component:**\n```jsx\nconst CONFIG = { color: 'blue', size: 10 };\n\nfunction Parent() {\n  return <MyComponent config={CONFIG} />; // Same reference every time\n}\n```\n\n**2. Use useMemo:**\n```jsx\nfunction Parent() {\n  const config = useMemo(() => ({ color: 'blue', size: 10 }), []);\n  return <MyComponent config={config} />;\n}\n```\n\n**3. Use useState for dynamic objects:**\n```jsx\nfunction Parent() {\n  const [config] = useState({ color: 'blue', size: 10 });\n  return <MyComponent config={config} />;\n}\n```\n\n**4. Pass primitive props instead:**\n```jsx\n// Better than inline object\n<MyComponent color=\"blue\" size={10} />\n```\n\nSame issue happens with inline functions, arrays, and any object created during render. Key is maintaining **stable references** for React's equality checks.",
+      "responseChars": 1462,
+      "responseWords": 221,
+      "durationMs": 12854
+    },
+    {
+      "mode": "default",
+      "promptId": "explain-connection-pool",
+      "inputTokens": 9,
+      "outputTokens": 189,
+      "cacheRead": 6108,
+      "cacheWrite": 0,
+      "totalCost": 0.0046944000000000005,
+      "responseText": "Database connection pooling is a technique where a cache of database connections is maintained and reused across multiple requests, rather than creating and destroying connections for each database operation. This eliminates the overhead of establishing new connections (which involves network handshakes, authentication, and resource allocation) and prevents exhausting database connection limits.\n\nYou should use connection pooling in any application that makes frequent database queries, especially web applications, APIs, or services with concurrent users, as it dramatically improves performance and resource efficiency while preventing connection exhaustion under load.",
+      "responseChars": 675,
+      "responseWords": 87,
+      "durationMs": 5702
+    },
+    {
+      "mode": "caveman",
+      "promptId": "explain-connection-pool",
+      "inputTokens": 9,
+      "outputTokens": 147,
+      "cacheRead": 6148,
+      "cacheWrite": 0,
+      "totalCost": 0.0040764,
+      "responseText": "Database connection pooling reuses existing database connections instead of creating new ones for each request. Pool maintains fixed number of open connections, hands them out to requests, returns them when done.\n\nUse when: multiple concurrent database operations, connection overhead high, want to limit max connections to database. Critical for web apps, APIs, any multi-user system hitting database frequently.",
+      "responseChars": 413,
+      "responseWords": 58,
+      "durationMs": 5886
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "explain-connection-pool",
+      "inputTokens": 9,
+      "outputTokens": 153,
+      "cacheRead": 6344,
+      "cacheWrite": 0,
+      "totalCost": 0.0042252,
+      "responseText": "Database connection pooling reuses database connections across requests instead of creating new connection each time. Pool maintains ready connections, hands them out when needed, returns them when done.\n\nUse when app makes frequent database calls. Without pooling, connection overhead kills performance. Essential for web apps, APIs, any multi-user system hitting database regularly.",
+      "responseChars": 384,
+      "responseWords": 52,
+      "durationMs": 5687
+    },
+    {
+      "mode": "default",
+      "promptId": "plan-todo-api",
+      "inputTokens": 9,
+      "outputTokens": 518,
+      "cacheRead": 6119,
+      "cacheWrite": 0,
+      "totalCost": 0.009632700000000001,
+      "responseText": "Here's a concise REST API design for a todo app:\n\n## Data Model\n\n```typescript\ninterface Todo {\n  id: string;\n  title: string;\n  description?: string;\n  completed: boolean;\n  createdAt: Date;\n  updatedAt: Date;\n}\n```\n\n## REST Endpoints\n\n```\nGET    /api/todos          # Get all todos\nPOST   /api/todos          # Create new todo\nGET    /api/todos/:id      # Get todo by ID\nPUT    /api/todos/:id      # Update todo\nDELETE /api/todos/:id      # Delete todo\nPATCH  /api/todos/:id      # Partial update (e.g., toggle completed)\n```\n\n## Request/Response Examples\n\n**POST /api/todos**\n```json\n{\n  \"title\": \"Learn Node.js\",\n  \"description\": \"Build a REST API\"\n}\n```\n\n**Response**\n```json\n{\n  \"id\": \"123\",\n  \"title\": \"Learn Node.js\", \n  \"description\": \"Build a REST API\",\n  \"completed\": false,\n  \"createdAt\": \"2026-04-06T10:00:00Z\",\n  \"updatedAt\": \"2026-04-06T10:00:00Z\"\n}\n```\n\n**PATCH /api/todos/123**\n```json\n{\n  \"completed\": true\n}\n```\n\nThis covers the core CRUD operations you'll need for a functional todo app.",
+      "responseChars": 1007,
+      "responseWords": 132,
+      "durationMs": 9130
+    },
+    {
+      "mode": "caveman",
+      "promptId": "plan-todo-api",
+      "inputTokens": 9,
+      "outputTokens": 385,
+      "cacheRead": 6159,
+      "cacheWrite": 0,
+      "totalCost": 0.0076497,
+      "responseText": "## Data Model\n\n```typescript\ninterface Todo {\n  id: string\n  title: string\n  description?: string\n  completed: boolean\n  createdAt: Date\n  updatedAt: Date\n}\n```\n\n## REST Endpoints\n\n```\nGET    /todos           # List all todos\nPOST   /todos           # Create new todo\nGET    /todos/:id       # Get specific todo\nPUT    /todos/:id       # Update todo (full replace)\nPATCH  /todos/:id       # Update todo (partial)\nDELETE /todos/:id       # Delete todo\n```\n\n## Request/Response Examples\n\n**POST /todos**\n```json\n{ \"title\": \"Buy milk\", \"description\": \"2% organic\" }\n```\n\n**PATCH /todos/:id** \n```json\n{ \"completed\": true }\n```\n\n**GET /todos response**\n```json\n[{\n  \"id\": \"123\",\n  \"title\": \"Buy milk\", \n  \"completed\": false,\n  \"createdAt\": \"2026-04-06T10:00:00Z\",\n  \"updatedAt\": \"2026-04-06T10:00:00Z\"\n}]\n```\n\nStandard HTTP status codes: 200, 201, 204, 400, 404, 500.",
+      "responseChars": 863,
+      "responseWords": 113,
+      "durationMs": 7593
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "plan-todo-api",
+      "inputTokens": 9,
+      "outputTokens": 387,
+      "cacheRead": 6355,
+      "cacheWrite": 0,
+      "totalCost": 0.007738500000000001,
+      "responseText": "## Data Model\n\n```javascript\nTodo {\n  id: string,\n  title: string,\n  description?: string,\n  completed: boolean,\n  createdAt: Date,\n  updatedAt: Date\n}\n```\n\n## Endpoints\n\n```\nGET    /todos           - List all todos\nGET    /todos/:id       - Get single todo\nPOST   /todos           - Create todo\nPUT    /todos/:id       - Update todo\nDELETE /todos/:id       - Delete todo\nPATCH  /todos/:id       - Toggle completion status\n```\n\n## Request/Response Examples\n\n**POST /todos**\n```json\n{ \"title\": \"Buy milk\", \"description\": \"From grocery store\" }\n```\n\n**Response**\n```json\n{ \"id\": \"123\", \"title\": \"Buy milk\", \"description\": \"From grocery store\", \"completed\": false, \"createdAt\": \"...\", \"updatedAt\": \"...\" }\n```\n\n**PATCH /todos/123**\n```json\n{ \"completed\": true }\n```\n\nSix endpoints cover all basic todo operations. Add auth endpoints (`POST /auth/login`, etc.) if you need users.",
+      "responseChars": 875,
+      "responseWords": 118,
+      "durationMs": 16837
+    },
+    {
+      "mode": "default",
+      "promptId": "analyze-bug",
+      "inputTokens": 9,
+      "outputTokens": 514,
+      "cacheRead": 6121,
+      "cacheWrite": 0,
+      "totalCost": 0.0095733,
+      "responseText": "The bug is in the condition of the if statement. You're using the assignment operator `=` instead of a comparison operator.\n\n**The Problem:**\n```javascript\nif (user.role = \"admin\") { grantAccess(); }\n```\n\nThis code:\n1. **Assigns** the value `\"admin\"` to `user.role` (overwrites the original value)\n2. Returns `\"admin\"` as the result of the assignment\n3. Since `\"admin\"` is a truthy string, the condition is always `true`\n4. `grantAccess()` will always be called, regardless of the user's actual role\n\n**The Fix:**\nUse a comparison operator instead:\n\n```javascript\nif (user.role === \"admin\") { grantAccess(); }\n```\n\nOr if you want loose equality:\n```javascript\nif (user.role == \"admin\") { grantAccess(); }\n```\n\n**Recommendation:** Use `===` (strict equality) as it's generally safer and more predictable than `==` (loose equality).\n\nThis is a common mistake that can lead to serious security vulnerabilities, especially in access control logic like this example.",
+      "responseChars": 961,
+      "responseWords": 145,
+      "durationMs": 11033
+    },
+    {
+      "mode": "caveman",
+      "promptId": "analyze-bug",
+      "inputTokens": 9,
+      "outputTokens": 341,
+      "cacheRead": 6161,
+      "cacheWrite": 0,
+      "totalCost": 0.0069903,
+      "responseText": "Bug: Assignment operator `=` instead of comparison operator.\n\n`user.role = \"admin\"` assigns \"admin\" to user.role, returns \"admin\" (truthy), condition always true.\n\nFix: Use comparison operator `===`:\n\n```javascript\nif (user.role === \"admin\") { grantAccess(); }\n```\n\nOr `==` if type coercion needed, but `===` preferred for strict equality.",
+      "responseChars": 339,
+      "responseWords": 47,
+      "durationMs": 7968
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "analyze-bug",
+      "inputTokens": 9,
+      "outputTokens": 309,
+      "cacheRead": 6357,
+      "cacheWrite": 0,
+      "totalCost": 0.0065691000000000005,
+      "responseText": "Bug: use assignment `=` instead comparison. \n\n`user.role = \"admin\"` assigns \"admin\" to user.role, always returns truthy. Condition always true, grants access to everyone.\n\nFix: use strict equality `===`\n\n```javascript\nif (user.role === \"admin\") { grantAccess(); }\n```\n\nAlternative: loose equality `==` but not recommended due type coercion issues.",
+      "responseChars": 347,
+      "responseWords": 48,
+      "durationMs": 8470
+    },
+    {
+      "mode": "default",
+      "promptId": "code-fizzbuzz",
+      "inputTokens": 9,
+      "outputTokens": 281,
+      "cacheRead": 6106,
+      "cacheWrite": 0,
+      "totalCost": 0.0060738,
+      "responseText": "```typescript\nfunction fizzbuzz(n: number): string[] {\n\tconst result: string[] = [];\n\t\n\tfor (let i = 1; i <= n; i++) {\n\t\tif (i % 15 === 0) {\n\t\t\tresult.push(\"FizzBuzz\");\n\t\t} else if (i % 3 === 0) {\n\t\t\tresult.push(\"Fizz\");\n\t\t} else if (i % 5 === 0) {\n\t\t\tresult.push(\"Buzz\");\n\t\t} else {\n\t\t\tresult.push(i.toString());\n\t\t}\n\t}\n\t\n\treturn result;\n}\n```",
+      "responseChars": 344,
+      "responseWords": 59,
+      "durationMs": 4747
+    },
+    {
+      "mode": "caveman",
+      "promptId": "code-fizzbuzz",
+      "inputTokens": 9,
+      "outputTokens": 307,
+      "cacheRead": 6146,
+      "cacheWrite": 0,
+      "totalCost": 0.0064757999999999994,
+      "responseText": "```typescript\nfunction fizzbuzz(n: number): string[] {\n\tconst result: string[] = [];\n\t\n\tfor (let i = 1; i <= n; i++) {\n\t\tif (i % 15 === 0) {\n\t\t\tresult.push(\"FizzBuzz\");\n\t\t} else if (i % 3 === 0) {\n\t\t\tresult.push(\"Fizz\");\n\t\t} else if (i % 5 === 0) {\n\t\t\tresult.push(\"Buzz\");\n\t\t} else {\n\t\t\tresult.push(i.toString());\n\t\t}\n\t}\n\t\n\treturn result;\n}\n```",
+      "responseChars": 344,
+      "responseWords": 59,
+      "durationMs": 5406
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "code-fizzbuzz",
+      "inputTokens": 9,
+      "outputTokens": 329,
+      "cacheRead": 6342,
+      "cacheWrite": 0,
+      "totalCost": 0.0068646,
+      "responseText": "```typescript\nfunction fizzbuzz(n: number): string {\n\tif (n % 15 === 0) return \"FizzBuzz\";\n\tif (n % 3 === 0) return \"Fizz\";\n\tif (n % 5 === 0) return \"Buzz\";\n\treturn n.toString();\n}\n\nfunction fizzbuzzRange(start: number, end: number): string[] {\n\treturn Array.from({ length: end - start + 1 }, (_, i) => fizzbuzz(start + i));\n}\n```",
+      "responseChars": 330,
+      "responseWords": 57,
+      "durationMs": 7207
+    },
+    {
+      "mode": "default",
+      "promptId": "explain-git-rebase",
+      "inputTokens": 9,
+      "outputTokens": 739,
+      "cacheRead": 6106,
+      "cacheWrite": 0,
+      "totalCost": 0.0129438,
+      "responseText": "## Git Rebase vs Git Merge\n\nBoth `git rebase` and `git merge` are used to integrate changes from one branch into another, but they do it in fundamentally different ways.\n\n### Git Merge\n\n**What it does:**\n- Creates a new \"merge commit\" that combines the histories of two branches\n- Preserves the original branch structure and commit history\n- Shows exactly when and where branches diverged and merged\n\n**Result:**\n```\n    A---B---C feature\n   /         \\\n  D---E---F---G---H main\n              ^\n          merge commit\n```\n\n**When to use:**\n- When you want to preserve the complete history of how work was done\n- For feature branches that represent significant work units\n- When working on public/shared branches that others might have based work on\n- When you want to clearly show collaboration points\n\n### Git Rebase\n\n**What it does:**\n- Replays your commits on top of another branch\n- Rewrites commit history to create a linear progression\n- Makes it appear as if your work was done sequentially after the target branch\n\n**Result:**\n```\n  D---E---F---A'---B'---C' main\n                   ^\n              rebased commits\n```\n\n**When to use:**\n- When you want a clean, linear history\n- For small feature branches or bug fixes\n- When working on private branches that haven't been shared\n- Before merging to clean up messy commit history\n- When updating a feature branch with latest main changes\n\n### Key Differences\n\n| Aspect | Merge | Rebase |\n|--------|--------|---------|\n| **History** | Preserves original timeline | Rewrites history |\n| **Commits** | Adds merge commit | No extra commits |\n| **Conflicts** | Resolve once | May resolve multiple times |\n| **Traceability** | Shows branch relationships | Linear progression |\n| **Safety** | Non-destructive | Destructive (rewrites history) |\n\n### Best Practices\n\n**Use Merge when:**\n- Working on shared/public branches\n- You want to preserve context of parallel development\n- The branch represents a significant feature or milestone\n- Multiple people collaborated on the branch\n\n**Use Rebase when:**\n- Cleaning up private work before sharing\n- Updating your feature branch with latest main\n- You want clean, readable history\n- Working alone on a small feature\n\n**Golden Rule:** Never rebase commits that have been pushed to a shared repository and others might have based work on them.\n\n### Example Workflow\n```bash\n# Update feature branch with latest main (rebase)\ngit checkout feature-branch\ngit rebase main\n\n# Integrate completed feature (merge)\ngit checkout main\ngit merge feature-branch\n```\n\nThis gives you the benefits of both: clean feature development (rebase) and preserved integration history (merge).",
+      "responseChars": 2662,
+      "responseWords": 419,
+      "durationMs": 15786
+    },
+    {
+      "mode": "caveman",
+      "promptId": "explain-git-rebase",
+      "inputTokens": 9,
+      "outputTokens": 483,
+      "cacheRead": 6146,
+      "cacheWrite": 0,
+      "totalCost": 0.0091158,
+      "responseText": "Git merge vs rebase. Different history strategies.\n\n## Git Merge\nCreates merge commit. Preserves branch history. Shows when branches diverged/converged.\n\n```bash\ngit checkout main\ngit merge feature-branch\n```\n\nResult: Diamond-shaped history. All original commits preserved. Merge commit has two parents.\n\n## Git Rebase\nReplays commits on top of target branch. Linear history. Rewrites commit SHAs.\n\n```bash\ngit checkout feature-branch\ngit rebase main\n```\n\nResult: Straight line history. Feature commits appear to come after main's latest commit.\n\n## When to Use Merge\n\n**Public branches.** Never rebase shared history.\n\n**Feature integration.** Want to preserve context of when feature was developed vs when integrated.\n\n**Complex merges.** Merge conflicts easier to resolve in single merge commit vs multiple rebased commits.\n\n**Audit trails.** Need to see exact timeline of when changes were integrated.\n\n## When to Use Rebase\n\n**Private branches.** Clean up messy local history before sharing.\n\n**Linear history preference.** Easier to follow, cleaner `git log`.\n\n**Before merge.** Rebase feature branch, then merge for best of both worlds.\n\n**Interactive cleanup.** `git rebase -i` to squash, reorder, edit commits.\n\n## Golden Rule\n\nNever rebase commits that exist in public repositories. Others may have based work on those SHAs.\n\nInteractive rebase powerful for local cleanup. Regular rebase good for keeping feature branches current with main.",
+      "responseChars": 1450,
+      "responseWords": 208,
+      "durationMs": 15832
+    },
+    {
+      "mode": "caveman-full",
+      "promptId": "explain-git-rebase",
+      "inputTokens": 9,
+      "outputTokens": 503,
+      "cacheRead": 6342,
+      "cacheWrite": 0,
+      "totalCost": 0.0094746,
+      "responseText": "Git rebase vs merge - different ways combine branches.\n\n## Git Merge\n\nCreates new commit with two parents. Preserves branch history.\n\n```\nA---B---C feature\n       /         \\\nD---E---F---------G main\n```\n\nBranch history visible. Shows when feature was developed vs integrated.\n\n## Git Rebase\n\nReplays commits on new base. Rewrites history.\n\n```\nA---B---C feature (original)\n\nD---E---F---A'---B'---C' main (after rebase)\n```\n\nLinear history. Looks like feature developed on latest main.\n\n## Key Differences\n\n**Merge:**\n- Preserves context and timing\n- Shows parallel development\n- Non-destructive\n- Creates merge commits\n\n**Rebase:**\n- Clean linear history  \n- Rewrites commit SHAs\n- Can lose context\n- No merge commits\n\n## When Use Each\n\n**Use Merge:**\n- Public/shared branches\n- Want preserve collaboration history\n- Release branches\n- Multiple developers on feature\n\n**Use Rebase:**\n- Private feature branches\n- Want clean history\n- Before pushing to shared branch\n- Catching up with main\n\n## Golden Rule\n\nNever rebase commits pushed to shared repository. Other developers have those commits - rewriting breaks their history.\n\n**Safe rebase:** Only commits not yet pushed\n**Dangerous rebase:** Published commits others might have\n\n## Common Workflows\n\n**Feature branch:**\n```bash\ngit checkout feature\ngit rebase main        # Clean up before merge\ngit checkout main  \ngit merge feature      # Fast-forward or merge commit\n```\n\n**Hotfix:**\n```bash\ngit merge hotfix       # Preserve urgency context\n```\n\nMerge for collaboration visibility. Rebase for clean history.",
+      "responseChars": 1565,
+      "responseWords": 227,
+      "durationMs": 13405
+    }
+  ]
+}
