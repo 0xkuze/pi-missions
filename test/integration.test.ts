@@ -158,7 +158,7 @@ function buildMockCtx(
 			getTree: () => [],
 			getSessionName: () => undefined,
 		} as never,
-		modelRegistry: {} as never,
+		modelRegistry: { getAll: () => [] } as never,
 		model: undefined,
 		isIdle: () => true,
 		signal: undefined,
@@ -349,7 +349,7 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 		}
 	});
 
-	it("update_mission_state manages milestones and features", async () => {
+	it("update_mission_state returns auto-managed for milestone actions", async () => {
 		const { tools } = registerExtension(tmpDir);
 
 		const executingState = makeState("executing");
@@ -363,13 +363,7 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 			action: "start_milestone",
 			targetId: "m1",
 		});
-		expect(startResult.content[0].text).toContain("started");
-
-		const stateAfterStart = loadState(basePath);
-		expect(stateAfterStart?.currentMilestoneId).toBe("m1");
-
-		const planAfterStart = loadPlan(basePath);
-		expect(planAfterStart?.milestones[0].status).toBe("active");
+		expect(startResult.content[0].text).toContain("auto-managed");
 	});
 
 	it("complete_mission generates report and transitions to completed", async () => {
@@ -659,7 +653,7 @@ describe("VAL-STATE-014: crash recovery — validating and draft_review states",
 // ---------------------------------------------------------------------------
 
 describe("crash recovery wired into session_start", () => {
-	it("session_start with executing state triggers recovery and persists result", () => {
+	it("session_start with executing state triggers recovery and persists result", async () => {
 		const plan = makePlan({
 			milestones: [makeMilestone("m1", [makeFeature("f1", "active")])],
 		});
@@ -669,14 +663,14 @@ describe("crash recovery wired into session_start", () => {
 
 		const { handlers } = registerExtension(tmpDir);
 		const ctx = buildMockCtx();
-		handlers.get("session_start")!({ type: "session_start" }, ctx);
+		await handlers.get("session_start")!({ type: "session_start" }, ctx);
 
 		const recovered = loadState(basePath);
 		expect(recovered?.currentFeatureId).toBeUndefined();
 		expect(recovered?.progressLog.some((e) => e.detail.toLowerCase().includes("recovery"))).toBe(true);
 	});
 
-	it("session_start with validating state recovers to executing", () => {
+	it("session_start with validating state recovers to executing", async () => {
 		const plan = makePlan();
 		const state = makeState("validating");
 		saveState(basePath, state);
@@ -684,13 +678,13 @@ describe("crash recovery wired into session_start", () => {
 
 		const { handlers } = registerExtension(tmpDir);
 		const ctx = buildMockCtx();
-		handlers.get("session_start")!({ type: "session_start" }, ctx);
+		await handlers.get("session_start")!({ type: "session_start" }, ctx);
 
 		const recovered = loadState(basePath);
 		expect(recovered?.status).toBe("executing");
 	});
 
-	it("recovery context injected into before_agent_start system prompt", () => {
+	it("recovery context injected into before_agent_start system prompt", async () => {
 		const plan = makePlan();
 		const state = makeState("validating");
 		saveState(basePath, state);
@@ -698,7 +692,7 @@ describe("crash recovery wired into session_start", () => {
 
 		const { handlers } = registerExtension(tmpDir);
 		const ctx = buildMockCtx();
-		handlers.get("session_start")!({ type: "session_start" }, ctx);
+		await handlers.get("session_start")!({ type: "session_start" }, ctx);
 
 		const event = { systemPrompt: "base prompt" };
 		const result = handlers.get("before_agent_start")!(event, ctx) as { systemPrompt: string } | undefined;
@@ -706,7 +700,7 @@ describe("crash recovery wired into session_start", () => {
 		expect(result?.systemPrompt).toContain("Recovery Context");
 	});
 
-	it("recovery context only injected once (cleared after first before_agent_start)", () => {
+	it("recovery context only injected once (cleared after first before_agent_start)", async () => {
 		const plan = makePlan();
 		const state = makeState("validating");
 		saveState(basePath, state);
@@ -714,7 +708,7 @@ describe("crash recovery wired into session_start", () => {
 
 		const { handlers } = registerExtension(tmpDir);
 		const ctx = buildMockCtx();
-		handlers.get("session_start")!({ type: "session_start" }, ctx);
+		await handlers.get("session_start")!({ type: "session_start" }, ctx);
 
 		const event = { systemPrompt: "base" };
 		const first = handlers.get("before_agent_start")!(event, ctx) as { systemPrompt: string } | undefined;
@@ -730,7 +724,7 @@ describe("crash recovery wired into session_start", () => {
 // ---------------------------------------------------------------------------
 
 describe("VAL-CROSS-009 / VAL-STATE-011: session entry cache", () => {
-	it("filesystem state takes priority over session entries on session_start", () => {
+	it("filesystem state takes priority over session entries on session_start", async () => {
 		const fsState = makeState("planning");
 		saveState(basePath, fsState);
 
@@ -739,19 +733,19 @@ describe("VAL-CROSS-009 / VAL-STATE-011: session entry cache", () => {
 		const ctx = buildMockCtx([cacheEntry]);
 
 		const { handlers } = registerExtension(tmpDir);
-		handlers.get("session_start")!({ type: "session_start" }, ctx);
+		await handlers.get("session_start")!({ type: "session_start" }, ctx);
 
 		const state = loadState(basePath);
 		expect(state?.status).toBe("planning");
 	});
 
-	it("session entries used as fallback when state.json missing", () => {
+	it("session entries used as fallback when state.json missing", async () => {
 		const cachedState = makeState("draft_review");
 		const cacheEntry = makeCacheEntry(cachedState);
 		const ctx = buildMockCtx([cacheEntry]);
 
 		const { handlers } = registerExtension(tmpDir);
-		handlers.get("session_start")!({ type: "session_start" }, ctx);
+		await handlers.get("session_start")!({ type: "session_start" }, ctx);
 
 		const state = loadState(basePath);
 		expect(state?.status).toBe("draft_review");
@@ -768,26 +762,26 @@ describe("VAL-CROSS-009 / VAL-STATE-011: session entry cache", () => {
 		expect(state).toBeNull();
 	});
 
-	it("last session cache entry takes priority over earlier entries", () => {
+	it("last session cache entry takes priority over earlier entries", async () => {
 		const oldEntry = makeCacheEntry(makeState("planning"));
 		const newEntry = makeCacheEntry(makeState("approved"));
 		const ctx = buildMockCtx([oldEntry, newEntry]);
 
 		const { handlers } = registerExtension(tmpDir);
-		handlers.get("session_start")!({ type: "session_start" }, ctx);
+		await handlers.get("session_start")!({ type: "session_start" }, ctx);
 
 		const state = loadState(basePath);
 		expect(state?.status).toBe("approved");
 	});
 
-	it("session_compact re-caches state from filesystem — widget restore after /compact", () => {
+	it("session_compact re-caches state from filesystem — widget restore after /compact", async () => {
 		const state = makeState("executing");
 		saveState(basePath, state);
 
 		const ctx = buildMockCtx();
 		const { handlers, appendedEntries } = registerExtension(tmpDir);
 		// session_start auto-activates mission mode when state exists on filesystem
-		handlers.get("session_start")!({ type: "session_start" }, ctx);
+		await handlers.get("session_start")!({ type: "session_start" }, ctx);
 		const preCompactCount = appendedEntries.filter((e) => e.type === "mission-state-cache").length;
 		handlers.get("session_compact")!({ type: "session_compact" }, ctx);
 

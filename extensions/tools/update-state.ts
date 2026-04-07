@@ -6,8 +6,6 @@ import type { Feature, MissionPlan, MissionState, MissionStatus } from "../types
 import { nowISO } from "../utils.js";
 
 const VALID_STATES_FOR_ACTION: Record<string, ReadonlySet<MissionStatus>> = {
-	start_milestone: new Set(["approved", "executing"]),
-	complete_milestone: new Set(["executing", "validating"]),
 	skip_feature: new Set(["executing"]),
 	block_feature: new Set(["executing"]),
 	add_feature: new Set(["planning", "draft_review", "executing"]),
@@ -45,7 +43,9 @@ function startMilestone(
 ): string | { plan: MissionPlan; state: MissionState } {
 	const milestone = findMilestone(plan, milestoneId);
 	if (!milestone) return `Milestone '${milestoneId}' not found in plan.`;
-	if (milestone.status === "active") return `Milestone '${milestoneId}' is already active.`;
+	if (milestone.status === "active" || milestone.status === "done") {
+		return { plan, state, idempotent: `Milestone '${milestoneId}' already ${milestone.status}. No action needed.` };
+	}
 
 	const now = nowISO();
 	const updatedPlan: MissionPlan = {
@@ -78,6 +78,9 @@ function completeMilestone(
 ): string | { plan: MissionPlan; state: MissionState } {
 	const milestone = findMilestone(plan, milestoneId);
 	if (!milestone) return `Milestone '${milestoneId}' not found in plan.`;
+	if (milestone.status === "done") {
+		return { plan, state, idempotent: `Milestone '${milestoneId}' already done. No action needed.` };
+	}
 	if (milestone.status !== "active") {
 		return `Cannot complete milestone '${milestoneId}': milestone is not active (current status: '${milestone.status}').`;
 	}
@@ -267,13 +270,11 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 		name: "update_mission_state",
 		label: "Update Mission State",
 		description:
-			"Update milestone or feature status. Actions: start_milestone, complete_milestone, skip_feature, block_feature, note, add_feature, remove_feature.",
-		promptSnippet: "Update mission state: start/complete milestones, skip/block features.",
+			"Update feature status or manage plan. Actions: skip_feature, block_feature, note, add_feature, remove_feature. Milestones are auto-managed.",
+		promptSnippet: "Update mission state: skip/block features, add/remove features, notes.",
 		parameters: Type.Object({
 			action: Type.Union(
 				[
-					Type.Literal("start_milestone"),
-					Type.Literal("complete_milestone"),
 					Type.Literal("skip_feature"),
 					Type.Literal("block_feature"),
 					Type.Literal("note"),
@@ -333,26 +334,11 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			if (action === "start_milestone") {
-				const result = startMilestone(plan, state, targetId, reason);
-				if (typeof result === "string") {
-					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
-				}
-				savePlan(deps.basePath, result.plan);
-				saveState(deps.basePath, result.state);
-				deps.updateWidget(result.state, result.plan);
-				return { content: [{ type: "text", text: `Milestone '${targetId}' started.` }], details: {} };
-			}
-
-			if (action === "complete_milestone") {
-				const result = completeMilestone(plan, state, targetId, reason);
-				if (typeof result === "string") {
-					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
-				}
-				savePlan(deps.basePath, result.plan);
-				saveState(deps.basePath, result.state);
-				deps.updateWidget(result.state, result.plan);
-				return { content: [{ type: "text", text: `Milestone '${targetId}' completed.` }], details: {} };
+			if (action === "start_milestone" || action === "complete_milestone") {
+				return {
+					content: [{ type: "text", text: "Milestones are auto-managed. No action needed." }],
+					details: {},
+				};
 			}
 
 			if (action === "skip_feature") {

@@ -9,14 +9,7 @@ import { registerCommitChangesTool } from "../extensions/tools/commit-changes.js
 import { registerCreateFixTool } from "../extensions/tools/create-fix.js";
 import { registerRunValidationTool } from "../extensions/tools/run-validation.js";
 import type { Feature, Milestone, MissionPlan, MissionState, ValidationResult } from "../extensions/types.js";
-import { nowISO } from "../extensions/utils.js";
-import {
-	createMockPi as _createMockPi,
-	makeFeature as _sf,
-	makeMilestone as _sm,
-	makePlan as _sp,
-	makeState as _ss,
-} from "./helpers/index.js";
+import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "./helpers/index.js";
 
 // ---------------------------------------------------------------------------
 // Test factories
@@ -746,7 +739,7 @@ describe("git snapshot capture in session_start", () => {
 
 			const ctx = makeFullMockCtx();
 			// Should not throw even without a real git repo
-			expect(() => sessionStartHandler!({ type: "session_start" }, ctx)).not.toThrow();
+			await sessionStartHandler!({ type: "session_start" }, ctx);
 		} finally {
 			(process as typeof process & { cwd: () => string }).cwd = original;
 		}
@@ -859,7 +852,7 @@ function makeFullMockCtx(): ExtensionContext {
 			getTree: () => [],
 			getSessionName: () => undefined,
 		} as never,
-		modelRegistry: {} as never,
+		modelRegistry: { getAll: () => [] } as never,
 		model: undefined,
 		isIdle: () => true,
 		signal: undefined,

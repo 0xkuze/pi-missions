@@ -77,8 +77,6 @@ describe("registerUpdateStateTool", () => {
 
 	describe("state guards — reject actions from invalid mission statuses", () => {
 		const INVALID_STATUSES_FOR = {
-			start_milestone: ["planning", "draft_review", "validating", "paused", "completed", "failed", "aborted"],
-			complete_milestone: ["planning", "draft_review", "approved", "paused", "completed", "failed", "aborted"],
 			skip_feature: ["planning", "draft_review", "approved", "validating", "paused", "completed", "failed", "aborted"],
 			block_feature: ["planning", "draft_review", "approved", "validating", "paused", "completed", "failed", "aborted"],
 			add_feature: ["approved", "validating", "paused", "completed", "failed", "aborted"],
@@ -106,18 +104,18 @@ describe("registerUpdateStateTool", () => {
 			}
 		}
 
-		it("allows start_milestone from 'approved' state", async () => {
-			const state = makeState({ status: "approved" });
-			const plan = localMakePlan();
-			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
-			expect(result.content[0].text).not.toContain("Error");
-		});
-
-		it("allows start_milestone from 'executing' state", async () => {
+		it("start_milestone returns auto-managed from any state", async () => {
 			const state = makeState({ status: "executing" });
 			const plan = localMakePlan();
 			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
-			expect(result.content[0].text).not.toContain("Error");
+			expect(result.content[0].text).toContain("auto-managed");
+		});
+
+		it("complete_milestone returns auto-managed from any state", async () => {
+			const state = makeState({ status: "executing" });
+			const plan = localMakePlan();
+			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
+			expect(result.content[0].text).toContain("auto-managed");
 		});
 
 		it("allows add_feature from 'planning' state", async () => {
@@ -168,153 +166,6 @@ describe("registerUpdateStateTool", () => {
 			);
 			expect(result.content[0].text).toContain("Error");
 			expect(result.content[0].text).toContain("no active mission");
-		});
-	});
-
-	describe("VAL-TOOL-015: start_milestone", () => {
-		it("sets milestone to active and updates currentMilestoneId", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan();
-			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
-
-			const savedState = loadState(tmpDir)!;
-			const savedPlan = loadPlan(tmpDir)!;
-			expect(savedState.currentMilestoneId).toBe("milestone-1");
-			expect(savedPlan.milestones[0]!.status).toBe("active");
-		});
-
-		it("sets startedAt on the milestone", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan();
-			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
-
-			const savedPlan = loadPlan(tmpDir)!;
-			expect(savedPlan.milestones[0]!.startedAt).toBeTruthy();
-		});
-
-		it("appends milestone_start progress event", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan();
-			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
-
-			const savedState = loadState(tmpDir)!;
-			const events = savedState.progressLog.filter((e) => e.type === "milestone_start");
-			expect(events).toHaveLength(1);
-			expect(events[0]!.detail).toContain("Milestone One");
-		});
-
-		it("records reason in event metadata when provided", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan();
-			await callTool(
-				tmpDir,
-				{ action: "start_milestone", targetId: "milestone-1", reason: "ready to go" },
-				state,
-				plan,
-			);
-
-			const savedState = loadState(tmpDir)!;
-			const event = savedState.progressLog.find((e) => e.type === "milestone_start")!;
-			expect(event.metadata?.reason).toBe("ready to go");
-		});
-
-		it("persists plan.json and state.json", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan();
-			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
-
-			const savedPlan = loadPlan(tmpDir);
-			const savedState = loadState(tmpDir);
-			expect(savedPlan).not.toBeNull();
-			expect(savedState).not.toBeNull();
-		});
-
-		it("calls updateWidget", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan();
-			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
-			await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan, updateWidget);
-
-			expect(updateWidget).toHaveBeenCalledTimes(1);
-		});
-	});
-
-	describe("VAL-TOOL-015: complete_milestone", () => {
-		it("sets milestone to done and sets completedAt", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan({
-				milestones: [
-					makeMilestone({
-						name: "Milestone One",
-						status: "active",
-						features: [makeFeature({ id: "feature-1", name: "Feature One" })],
-					}),
-				],
-			});
-			await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
-
-			const savedPlan = loadPlan(tmpDir)!;
-			expect(savedPlan.milestones[0]!.status).toBe("done");
-			expect(savedPlan.milestones[0]!.completedAt).toBeTruthy();
-		});
-
-		it("appends milestone_complete progress event", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan({
-				milestones: [
-					makeMilestone({
-						name: "Milestone One",
-						status: "active",
-						features: [makeFeature({ id: "feature-1", name: "Feature One" })],
-					}),
-				],
-			});
-			await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
-
-			const savedState = loadState(tmpDir)!;
-			const events = savedState.progressLog.filter((e) => e.type === "milestone_complete");
-			expect(events).toHaveLength(1);
-			expect(events[0]!.detail).toContain("Milestone One");
-		});
-
-		it("records reason in event metadata", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan({
-				milestones: [
-					makeMilestone({
-						name: "Milestone One",
-						status: "active",
-						features: [makeFeature({ id: "feature-1", name: "Feature One" })],
-					}),
-				],
-			});
-			await callTool(
-				tmpDir,
-				{ action: "complete_milestone", targetId: "milestone-1", reason: "all done" },
-				state,
-				plan,
-			);
-
-			const savedState = loadState(tmpDir)!;
-			const event = savedState.progressLog.find((e) => e.type === "milestone_complete")!;
-			expect(event.metadata?.reason).toBe("all done");
-		});
-
-		it("calls updateWidget", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan({
-				milestones: [
-					makeMilestone({
-						name: "Milestone One",
-						status: "active",
-						features: [makeFeature({ id: "feature-1", name: "Feature One" })],
-					}),
-				],
-			});
-			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
-			await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan, updateWidget);
-
-			expect(updateWidget).toHaveBeenCalledTimes(1);
 		});
 	});
 
@@ -468,29 +319,6 @@ describe("registerUpdateStateTool", () => {
 	});
 
 	describe("VAL-TOOL-016: validation of unknown targetId", () => {
-		it("returns error for unknown milestoneId in start_milestone", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan();
-			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "does-not-exist" }, state, plan);
-
-			expect(result.content[0].text).toContain("Error");
-			expect(result.content[0].text).toContain("does-not-exist");
-		});
-
-		it("returns error for unknown milestoneId in complete_milestone", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan();
-			const result = await callTool(
-				tmpDir,
-				{ action: "complete_milestone", targetId: "no-such-milestone" },
-				state,
-				plan,
-			);
-
-			expect(result.content[0].text).toContain("Error");
-			expect(result.content[0].text).toContain("no-such-milestone");
-		});
-
 		it("returns error for unknown featureId in skip_feature", async () => {
 			const state = makeExecutingState();
 			const plan = localMakePlan();
@@ -511,40 +339,20 @@ describe("registerUpdateStateTool", () => {
 	});
 
 	describe("VAL-TOOL-016: invalid state preconditions", () => {
-		it("rejects completing a non-active milestone (pending status)", async () => {
+		it("rejects start_milestone as auto-managed", async () => {
 			const state = makeExecutingState();
 			const plan = localMakePlan({ milestones: [makeMilestone({ status: "pending" })] });
-			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
-
-			expect(result.content[0].text).toContain("Error");
-			expect(result.content[0].text).toContain("not active");
-		});
-
-		it("rejects completing a non-active milestone (done status)", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan({ milestones: [makeMilestone({ status: "done" })] });
-			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
-
-			expect(result.content[0].text).toContain("Error");
-			expect(result.content[0].text).toContain("not active");
-		});
-
-		it("rejects completing a non-active milestone (failed status)", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan({ milestones: [makeMilestone({ status: "failed" })] });
-			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
-
-			expect(result.content[0].text).toContain("Error");
-			expect(result.content[0].text).toContain("not active");
-		});
-
-		it("rejects starting an already-active milestone", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan({ milestones: [makeMilestone({ status: "active" })] });
 			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
 
-			expect(result.content[0].text).toContain("Error");
-			expect(result.content[0].text).toContain("already active");
+			expect(result.content[0].text).toContain("auto-managed");
+		});
+
+		it("rejects complete_milestone as auto-managed", async () => {
+			const state = makeExecutingState();
+			const plan = localMakePlan({ milestones: [makeMilestone({ status: "active" })] });
+			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
+
+			expect(result.content[0].text).toContain("auto-managed");
 		});
 
 		it("rejects skipping a completed (done) feature", async () => {
@@ -561,7 +369,7 @@ describe("registerUpdateStateTool", () => {
 		it("does not modify state.json or plan.json when returning an error", async () => {
 			const state = makeExecutingState();
 			const plan = localMakePlan();
-			await callTool(tmpDir, { action: "start_milestone", targetId: "nonexistent" }, state, plan);
+			await callTool(tmpDir, { action: "skip_feature", targetId: "nonexistent" }, state, plan);
 
 			const savedState = loadState(tmpDir)!;
 			const savedPlan = loadPlan(tmpDir)!;
@@ -571,14 +379,6 @@ describe("registerUpdateStateTool", () => {
 	});
 
 	describe("no plan for plan-required actions", () => {
-		it("returns error when no plan exists for start_milestone", async () => {
-			const state = makeExecutingState();
-			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, null);
-
-			expect(result.content[0].text).toContain("Error");
-			expect(result.content[0].text).toContain("no plan");
-		});
-
 		it("returns error when no plan exists for block_feature", async () => {
 			const state = makeExecutingState();
 			const result = await callTool(tmpDir, { action: "block_feature", targetId: "feature-1" }, state, null);
@@ -630,15 +430,15 @@ describe("registerUpdateStateTool", () => {
 		it("returns error in content for unknown targetId (not throws)", async () => {
 			const state = makeExecutingState();
 			const plan = localMakePlan();
-			const fn = () => callTool(tmpDir, { action: "start_milestone", targetId: "ghost" }, state, plan);
+			const fn = () => callTool(tmpDir, { action: "skip_feature", targetId: "ghost" }, state, plan);
 			const result = await fn();
 			expect(result.content[0].text).toContain("Error");
 		});
 
 		it("returns error in content for invalid precondition (not throws)", async () => {
 			const state = makeExecutingState();
-			const plan = localMakePlan();
-			const fn = () => callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
+			const plan = localMakePlan({ milestones: [makeMilestone({ features: [makeFeature({ status: "done" })] })] });
+			const fn = () => callTool(tmpDir, { action: "skip_feature", targetId: "feat-1" }, state, plan);
 			const result = await fn();
 			expect(result.content[0].text).toContain("Error");
 		});

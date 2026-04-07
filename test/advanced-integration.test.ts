@@ -385,9 +385,10 @@ describe("advanced integration: full lifecycle with report generation", () => {
 
 describe("advanced integration: autonomy enforcement in protocol (VAL-CROSS-008)", () => {
 	const plan = makePlan();
+	const verbose = { promptingMode: "default" as const };
 
 	it("low autonomy instructs pause after every feature", () => {
-		const config: MissionConfig = { autonomy: "low" };
+		const config: MissionConfig = { autonomy: "low", ...verbose };
 		const state = makeState("executing");
 		const protocol = buildOrchestratorProtocol(state, plan, config);
 		expect(protocol).not.toBeNull();
@@ -395,7 +396,7 @@ describe("advanced integration: autonomy enforcement in protocol (VAL-CROSS-008)
 	});
 
 	it("medium autonomy instructs pause at milestone boundaries and failures", () => {
-		const config: MissionConfig = { autonomy: "medium" };
+		const config: MissionConfig = { autonomy: "medium", ...verbose };
 		const state = makeState("executing");
 		const protocol = buildOrchestratorProtocol(state, plan, config);
 		expect(protocol).not.toBeNull();
@@ -403,7 +404,7 @@ describe("advanced integration: autonomy enforcement in protocol (VAL-CROSS-008)
 	});
 
 	it("high autonomy instructs run to completion", () => {
-		const config: MissionConfig = { autonomy: "high" };
+		const config: MissionConfig = { autonomy: "high", ...verbose };
 		const state = makeState("executing");
 		const protocol = buildOrchestratorProtocol(state, plan, config);
 		expect(protocol).not.toBeNull();
@@ -411,7 +412,7 @@ describe("advanced integration: autonomy enforcement in protocol (VAL-CROSS-008)
 	});
 
 	it("missing autonomy config defaults to medium behavior", () => {
-		const config: MissionConfig = {};
+		const config: MissionConfig = { ...verbose };
 		const state = makeState("executing");
 		const protocol = buildOrchestratorProtocol(state, plan, config);
 		expect(protocol).not.toBeNull();
@@ -420,9 +421,9 @@ describe("advanced integration: autonomy enforcement in protocol (VAL-CROSS-008)
 
 	it("three autonomy levels produce distinct protocol content", () => {
 		const state = makeState("executing");
-		const low = buildOrchestratorProtocol(state, plan, { autonomy: "low" })!;
-		const med = buildOrchestratorProtocol(state, plan, { autonomy: "medium" })!;
-		const high = buildOrchestratorProtocol(state, plan, { autonomy: "high" })!;
+		const low = buildOrchestratorProtocol(state, plan, { autonomy: "low", ...verbose })!;
+		const med = buildOrchestratorProtocol(state, plan, { autonomy: "medium", ...verbose })!;
+		const high = buildOrchestratorProtocol(state, plan, { autonomy: "high", ...verbose })!;
 		expect(low).not.toBe(med);
 		expect(med).not.toBe(high);
 		expect(low).not.toBe(high);
@@ -430,9 +431,9 @@ describe("advanced integration: autonomy enforcement in protocol (VAL-CROSS-008)
 
 	it("autonomy level applies consistently in planning state as well", () => {
 		const state = makeState("planning");
-		const low = buildOrchestratorProtocol(state, undefined, { autonomy: "low" });
-		const med = buildOrchestratorProtocol(state, undefined, { autonomy: "medium" });
-		const high = buildOrchestratorProtocol(state, undefined, { autonomy: "high" });
+		const low = buildOrchestratorProtocol(state, undefined, { autonomy: "low", ...verbose });
+		const med = buildOrchestratorProtocol(state, undefined, { autonomy: "medium", ...verbose });
+		const high = buildOrchestratorProtocol(state, undefined, { autonomy: "high", ...verbose });
 		// Each produces non-null output
 		expect(low).not.toBeNull();
 		expect(med).not.toBeNull();
