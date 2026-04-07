@@ -4,8 +4,9 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { resolveModel } from "../config.js";
+import { resolveModel, resolveSpawnAndLearn } from "../config.js";
 import { getChangedFiles, isGitAvailable, stageAndCommit } from "../git.js";
+import { learnFromResult } from "../learn.js";
 import {
 	type CompletedFeatureSummary,
 	generateWorkerContext,
@@ -832,6 +833,9 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			};
 
 			writeRunArtifacts(runtimeDir, procResult.stdout, procResult.stderr, result, metadata);
+
+			const spawnAndLearn = resolveSpawnAndLearn(config);
+			learnFromResult(deps.basePath, result, spawnAndLearn);
 
 			if (result.status === "success") {
 				const validatorResult = await runValidator(feature, result, {
