@@ -1,0 +1,34 @@
+{
+  "featureId": "fix-validation-ui-call-sites",
+  "reviewedAt": "2026-04-07T18:45:00.000Z",
+  "commitId": "3bd071f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix correctly addresses all three blocking integration gaps identified in the prior review. (1) mission-control.ts now loads the validation contract and scrutiny report and passes assertions + scrutinyReport to renderValidationView(). (2) index.ts adds computeAssertionInfo() that loads the contract, counts pass/fail/error assertions, and forwards WidgetAssertionInfo through updateWidget() and refreshWidget() into buildWidgetLines(). (3) complete.ts adds buildValidationInfo() that loads the contract, maps completed assertions, and passes ReportValidationInfo to generateReport(). A new loadScrutinyReport() export was added to run-scrutiny.ts. 15 integration tests across 2 files verify all 3 call sites receive the correct parameters, including an end-to-end test that flows contract data through validation view, widget, and report.",
+    "issues": [
+      {
+        "file": "extensions/tools/complete.ts",
+        "line": 183,
+        "severity": "non_blocking",
+        "description": "buildValidationInfo uses milestoneIds[0] (the first milestone in the plan) for evidenceDir, which may not be the last/current milestone when a mission has multiple milestones. In practice the contract is global (not per-milestone), so the first milestone's evidence dir may not contain all validation evidence. This is a minor correctness concern for multi-milestone missions."
+      },
+      {
+        "file": "extensions/ui/mission-control.ts",
+        "line": 1013,
+        "severity": "non_blocking",
+        "description": "The AssertionResultData objects mapped from contract assertions use placeholder values (exitCode: null, stdout: '', stderr: '', timedOut: false, durationMs: 0, timestamp: ''). This is acceptable since the contract only stores status, not full execution details, but it means the validation view may display misleading zero-duration or empty output if it ever renders those fields."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The pattern of mapping contract assertions to AssertionResultData with placeholder values (empty strings, zeros, nulls) is repeated in 3 places: mission-control.ts, complete.ts buildValidationInfo(), and the test helpers. A shared helper to convert contract assertions to AssertionResultData could reduce duplication and prevent divergence.",
+      "evidence": "extensions/ui/mission-control.ts:1015-1026, extensions/tools/complete.ts:172-181 — identical mapping logic with same placeholder values"
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/validation-elevation/scrutiny/reviews/validation-ui-report-integration.json",
+  "summary": "The fix adequately addresses all 3 blocking issues from the prior review. All call sites now load and pass validation data: mission-control.ts passes assertions and scrutiny report to the validation view, index.ts forwards assertion counts to the widget, and complete.ts passes validation info to report generation. The loadScrutinyReport() utility was cleanly added. 15 integration tests verify the data actually flows through each call site, including an end-to-end test. Two non-blocking issues noted: (1) evidence dir uses first milestone ID which may be wrong for multi-milestone missions, (2) contract-to-AssertionResultData mapping uses placeholder values and is duplicated in 3 places. Neither blocks the feature."
+}

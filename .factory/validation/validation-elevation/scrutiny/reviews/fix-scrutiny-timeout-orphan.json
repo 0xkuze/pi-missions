@@ -1,0 +1,28 @@
+{
+  "featureId": "fix-scrutiny-timeout-orphan",
+  "reviewedAt": "2026-04-07T18:45:00.000Z",
+  "commitId": "44bba67",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The fix correctly addresses the blocking issue from the milestone-scrutiny review. The timeout handler in spawnScrutinyProcess now calls proc.kill?.('SIGTERM') immediately after setting killed=true, preventing orphaned child processes. The ProcLike interface was updated with an optional kill method. A new test verifies that kill('SIGTERM') is called on timeout using a custom mock spawn that tracks kill calls. The fix is minimal, targeted, and follows the established pattern from spawn-worker.ts's setup command timeout handler. All 2296 tests pass, typecheck clean, lint clean.",
+    "issues": [
+      {
+        "file": "extensions/tools/run-scrutiny.ts",
+        "line": 342,
+        "severity": "non_blocking",
+        "description": "No SIGKILL fallback after SIGTERM. spawn-worker.ts's killProc helper has a setTimeout that sends SIGKILL if the process hasn't died after SIGTERM. However, spawn-worker.ts's own setup command timeout handler (line 557) also uses bare SIGTERM without fallback, so this is consistent with existing patterns. The scrutiny process is a pi subprocess that should respond to SIGTERM; a hung process ignoring SIGTERM is an edge case not worth the added complexity here."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "architecture.md tool count is still stale (says 11 registered tools, should be 12 including run_scrutiny). This was noted in the original milestone-scrutiny review but was not addressed by this fix feature, which is expected since the fix was scoped to the orphan process bug only.",
+      "evidence": ".factory/library/architecture.md line '## Tools (11 registered)' — should be 12 and include run_scrutiny."
+    }
+  ],
+  "addressesFailureFrom": ".factory/validation/validation-elevation/scrutiny/reviews/milestone-scrutiny.json",
+  "summary": "Fix adequately addresses the blocking issue from the milestone-scrutiny review. The original issue was that the timeout handler in spawnScrutinyProcess set killed=true but never called proc.kill(), leaving orphaned pi reviewer processes. The fix adds proc.kill?.('SIGTERM') to the timeout handler, adds kill as an optional method on ProcLike, updates MockChildProcess with a kill method, and adds a test verifying kill is called with 'SIGTERM' on timeout. The implementation is clean, minimal, and follows established patterns. Pass."
+}
