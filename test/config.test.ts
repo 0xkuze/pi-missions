@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
-	DEFAULT_WORKER_MODEL,
 	clearValidationCommandCache,
+	DEFAULT_ORCHESTRATOR_MODEL,
+	DEFAULT_VALIDATOR_MODEL,
+	DEFAULT_WORKER_MODEL,
 	getDefaultConfig,
 	loadMissionConfig,
 	resolveModel,
@@ -270,10 +272,14 @@ describe("resolveModel", () => {
 		expect(resolveModel("worker", config, null)).toBe(DEFAULT_WORKER_MODEL);
 	});
 
-	it("returns undefined for non-worker roles when neither config nor plan has a model", () => {
+	it("returns default orchestrator model when neither config nor plan has an orchestrator model", () => {
 		const config: MissionConfig = {};
-		expect(resolveModel("orchestrator", config, null)).toBeUndefined();
-		expect(resolveModel("validator", config, null)).toBeUndefined();
+		expect(resolveModel("orchestrator", config, null)).toBe(DEFAULT_ORCHESTRATOR_MODEL);
+	});
+
+	it("returns default validator model when neither config nor plan has a validator model", () => {
+		const config: MissionConfig = {};
+		expect(resolveModel("validator", config, null)).toBe(DEFAULT_VALIDATOR_MODEL);
 	});
 
 	it("resolves orchestrator role correctly", () => {
@@ -297,6 +303,47 @@ describe("resolveModel", () => {
 		expect(resolveModel("orchestrator", config, plan)).toBe("config-orch");
 		expect(resolveModel("worker", config, plan)).toBe("config-worker");
 		expect(resolveModel("validator", config, plan)).toBe("config-val");
+	});
+
+	it("uses modelByComplexity.high for high complexity features", () => {
+		const config: MissionConfig = {
+			modelByComplexity: { high: "opus-big" },
+			models: { worker: "sonnet-default" },
+		};
+		expect(resolveModel("worker", config, null, "high")).toBe("opus-big");
+	});
+
+	it("uses modelByComplexity.low for low complexity features", () => {
+		const config: MissionConfig = {
+			modelByComplexity: { low: "haiku-fast" },
+			models: { worker: "sonnet-default" },
+		};
+		expect(resolveModel("worker", config, null, "low")).toBe("haiku-fast");
+	});
+
+	it("falls through to role-based default when modelByComplexity has no match", () => {
+		const config: MissionConfig = {
+			modelByComplexity: { high: "opus-big" },
+			models: { worker: "sonnet-default" },
+		};
+		expect(resolveModel("worker", config, null, "low")).toBe("sonnet-default");
+	});
+
+	it("ignores modelByComplexity for non-worker roles", () => {
+		const config: MissionConfig = {
+			modelByComplexity: { high: "opus-big" },
+			models: { orchestrator: "orch-model" },
+		};
+		expect(resolveModel("orchestrator", config, null, "high")).toBe("orch-model");
+	});
+
+	it("modelByComplexity takes highest priority for worker role", () => {
+		const config: MissionConfig = {
+			modelByComplexity: { medium: "medium-model" },
+			models: { worker: "config-worker" },
+		};
+		const plan = makePlan({ modelAssignment: { worker: "plan-worker" } });
+		expect(resolveModel("worker", config, plan, "medium")).toBe("medium-model");
 	});
 });
 

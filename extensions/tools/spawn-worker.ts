@@ -417,12 +417,12 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const config = loadConfig(deps.basePath);
 			const maxRetries = config.maxRetries ?? 3;
-			const workerModel = resolveModel("worker", config, plan);
+			const workerModel = resolveModel("worker", config, plan, feature.estimatedComplexity);
 			const attemptNumber = feature.attempts.length + 1;
 			const runtimeDir = join(deps.basePath, "runtime", feature.id, String(attemptNumber));
 
 			const agentsMd = readAgentsMd(deps.projectDir);
-			const skill = generateWorkerSkill(feature, agentsMd);
+			const skill = generateWorkerSkill(feature, agentsMd, config.promptingMode);
 			const prompt = generateWorkerPrompt(feature, params.additionalContext);
 			const context = generateWorkerContext(agentsMd);
 			writeWorkerFiles(deps.basePath, feature.id, attemptNumber, { skill, prompt, context });

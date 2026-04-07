@@ -1,12 +1,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { loadGlobalConfig } from "./state/global-config.js";
 import { loadConfig } from "./state/manager.js";
-import type { Milestone, MissionConfig, MissionPlan, ModelAssignment } from "./types.js";
+import type { Milestone, MissionConfig, MissionPlan, ModelAssignment, PromptingMode } from "./types.js";
 
-export const DEFAULT_WORKER_MODEL = "claude-sonnet-4-20250514";
+export const DEFAULT_ORCHESTRATOR_MODEL = "opus-4.6";
+export const DEFAULT_WORKER_MODEL = "opencode/glm-5";
+export const DEFAULT_VALIDATOR_MODEL = "openaicodex/gpt-5.4";
 
 const DEFAULT_CONFIG: Required<MissionConfig> = {
 	models: {},
+	promptingMode: "caveman",
+	spawnAndLearn: true,
 	validation: {
 		commands: [],
 		timeoutMs: 120000,
@@ -179,13 +184,42 @@ export function resolveModel(
 	role: keyof ModelAssignment,
 	config: MissionConfig,
 	plan: MissionPlan | null,
+	complexity?: "low" | "medium" | "high",
 ): string | undefined {
+	if (role === "worker" && complexity && config.modelByComplexity?.[complexity]) {
+		return config.modelByComplexity[complexity];
+	}
 	if (config.models?.[role]) {
 		return config.models[role];
 	}
 	if (plan?.modelAssignment?.[role]) {
 		return plan.modelAssignment[role];
 	}
-	if (role === "worker") return DEFAULT_WORKER_MODEL;
+	const global = loadGlobalConfig();
+	if (global?.models?.[role]) {
+		return global.models[role];
+	}
+	switch (role) {
+		case "orchestrator":
+			return DEFAULT_ORCHESTRATOR_MODEL;
+		case "worker":
+			return DEFAULT_WORKER_MODEL;
+		case "validator":
+			return DEFAULT_VALIDATOR_MODEL;
+	}
 	return undefined;
+}
+
+export function resolvePromptingMode(config: MissionConfig): PromptingMode {
+	if (config.promptingMode) return config.promptingMode;
+	const global = loadGlobalConfig();
+	if (global?.promptingMode) return global.promptingMode;
+	return "caveman";
+}
+
+export function resolveSpawnAndLearn(config: MissionConfig): boolean {
+	if (config.spawnAndLearn !== undefined) return config.spawnAndLearn;
+	const global = loadGlobalConfig();
+	if (global?.spawnAndLearn !== undefined) return global.spawnAndLearn;
+	return true;
 }

@@ -146,6 +146,11 @@ export interface GlobalConfig {
 
 export interface MissionConfig {
 	models?: ModelAssignment;
+	modelByComplexity?: {
+		low?: string;
+		medium?: string;
+		high?: string;
+	};
 	promptingMode?: PromptingMode;
 	spawnAndLearn?: boolean;
 	validation?: {
@@ -446,6 +451,13 @@ export const GlobalConfigSchema = Type.Object({
 
 export const MissionConfigSchema = Type.Object({
 	models: Type.Optional(ModelAssignmentSchema),
+	modelByComplexity: Type.Optional(
+		Type.Object({
+			low: Type.Optional(Type.String()),
+			medium: Type.Optional(Type.String()),
+			high: Type.Optional(Type.String()),
+		}),
+	),
 	promptingMode: PromptingModeSchema,
 	spawnAndLearn: Type.Optional(Type.Boolean()),
 	validation: Type.Optional(
