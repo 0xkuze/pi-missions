@@ -9,6 +9,22 @@ const ACTIVE_CHAR = "\u2593";
 const PENDING_CHAR = "\u2591";
 const SHORTCUT_HINT = "(Ctrl+Shift+M)";
 
+function formatElapsed(ms: number): string {
+	const totalSeconds = Math.floor(ms / 1000);
+	const minutes = Math.floor(totalSeconds / 60);
+	const hours = Math.floor(minutes / 60);
+	if (hours > 0) return `${hours}h${minutes % 60}m`;
+	if (minutes > 0) return `${minutes}m`;
+	return `${totalSeconds}s`;
+}
+
+function getElapsedStr(state: MissionState): string | undefined {
+	if (state.missionStartedAtMs === undefined) return undefined;
+	const elapsed = Date.now() - state.missionStartedAtMs;
+	if (elapsed < 0) return undefined;
+	return formatElapsed(elapsed);
+}
+
 export type ThemeStyler = {
 	fg: (color: ThemeColor, text: string) => string;
 	bold: (text: string) => string;
@@ -103,6 +119,7 @@ function buildExecutingSuffix(
 	milestoneName: string | undefined,
 	featureName: string | undefined,
 	theme?: ThemeStyler,
+	elapsed?: string,
 ): string {
 	const parts: string[] = [];
 	if (milestoneName) {
@@ -114,6 +131,10 @@ function buildExecutingSuffix(
 		const label = theme ? theme.fg("muted", "Feature:") : "Feature:";
 		const value = theme ? theme.fg("text", ` ${featureName}`) : ` ${featureName}`;
 		parts.push(`${label}${value}`);
+	}
+	if (elapsed) {
+		const elapsedStr = theme ? theme.fg("muted", `${elapsed} elapsed`) : `${elapsed} elapsed`;
+		parts.push(elapsedStr);
 	}
 	return parts.length > 0 ? parts.join(sep(theme)) : "running";
 }
@@ -190,15 +211,22 @@ export function buildWidgetLines(
 			}
 			const milestoneName = findCurrentMilestoneName(state, plan);
 			const featureName = findCurrentFeatureName(state, plan);
+			const elapsed = getElapsedStr(state);
 			if (!theme) {
 				const bar = buildProgressBar(done, total, hasActive, barWidth);
 				return [
-					formatProgressLine("\u25cf Running", bar, done, total, buildExecutingSuffix(milestoneName, featureName)),
+					formatProgressLine(
+						"\u25cf Running",
+						bar,
+						done,
+						total,
+						buildExecutingSuffix(milestoneName, featureName, undefined, elapsed),
+					),
 				];
 			}
 			const prefix = theme.bold(theme.fg("success", "\u25cf Running"));
 			const bar = buildStyledProgressBar(done, total, hasActive, barWidth, theme);
-			const suffix = buildExecutingSuffix(milestoneName, featureName, theme);
+			const suffix = buildExecutingSuffix(milestoneName, featureName, theme, elapsed);
 			return [buildStyledLine(prefix, bar, done, total, suffix, theme)];
 		}
 

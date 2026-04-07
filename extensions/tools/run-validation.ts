@@ -41,7 +41,21 @@ function inferLabel(cmd: string): string {
 	return sanitizeLabel(cmd);
 }
 
-function buildSummary(commands: ValidationResult["commands"]): string {
+const MAX_OUTPUT_LINES = 100;
+const MAX_OUTPUT_BYTES = 8192;
+
+function truncateOutput(text: string): string {
+	if (!text || text.trim().length === 0) return "";
+	const lines = text.split("\n");
+	if (lines.length <= MAX_OUTPUT_LINES && text.length <= MAX_OUTPUT_BYTES) return text.trim();
+	const truncated = lines.slice(0, MAX_OUTPUT_LINES).join("\n").slice(0, MAX_OUTPUT_BYTES);
+	return `${truncated}\n... [truncated]`;
+}
+
+function buildSummary(
+	commands: ValidationResult["commands"],
+	outputs?: Map<string, { stdout: string; stderr: string }>,
+): string {
 	if (commands.length === 0) {
 		return "No validation commands configured. Validation passed by default.";
 	}
@@ -55,7 +69,24 @@ function buildSummary(commands: ValidationResult["commands"]): string {
 		.filter((c) => c.exitCode !== 0 || c.timedOut)
 		.map((c) => c.label)
 		.join(", ");
-	return `${passed}/${total} checks passed, ${failed} failed: ${failingLabels}`;
+	const header = `${passed}/${total} checks passed, ${failed} failed: ${failingLabels}`;
+
+	if (!outputs) return header;
+
+	const failingOutputs: string[] = [];
+	for (const cmd of commands) {
+		if (cmd.exitCode === 0 && !cmd.timedOut) continue;
+		const out = outputs.get(cmd.command);
+		if (!out) continue;
+		const content = out.stderr.trim() ? out.stderr : out.stdout;
+		const truncated = truncateOutput(content);
+		if (truncated) {
+			failingOutputs.push(`--- ${cmd.label} ---\n${truncated}`);
+		}
+	}
+
+	if (failingOutputs.length === 0) return header;
+	return `${header}\n\n${failingOutputs.join("\n\n")}`;
 }
 
 export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationDeps): void {
@@ -193,6 +224,7 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 			}
 
 			const commandResults: ValidationResult["commands"] = [];
+			const commandOutputs = new Map<string, { stdout: string; stderr: string }>();
 
 			for (const cmd of commands) {
 				const label = inferLabel(cmd);
@@ -206,6 +238,7 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 
 				writeFileSync(stdoutPath, cmdResult.stdout, "utf8");
 				writeFileSync(stderrPath, cmdResult.stderr, "utf8");
+				commandOutputs.set(cmd, { stdout: cmdResult.stdout, stderr: cmdResult.stderr });
 
 				commandResults.push({
 					label,
@@ -221,7 +254,7 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 			const failingChecks = commandResults.filter((c) => c.exitCode !== 0 || c.timedOut).map((c) => c.label);
 
 			const overallStatus: "pass" | "fail" = failingChecks.length === 0 ? "pass" : "fail";
-			const summary = buildSummary(commandResults);
+			const summary = buildSummary(commandResults, commandOutputs);
 
 			const validationResult: ValidationResult = {
 				status: overallStatus,

@@ -132,10 +132,22 @@ export interface MissionState {
 	totalFeaturesSkipped: number;
 	totalFixFeaturesCreated: number;
 	gitSnapshot?: GitSnapshot;
+	missionStartedAtMs?: number;
+}
+
+export type PromptingMode = "default" | "caveman" | "caveman-full";
+
+export interface GlobalConfig {
+	models?: ModelAssignment;
+	promptingMode?: PromptingMode;
+	spawnAndLearn?: boolean;
+	onboardingCompleted?: boolean;
 }
 
 export interface MissionConfig {
 	models?: ModelAssignment;
+	promptingMode?: PromptingMode;
+	spawnAndLearn?: boolean;
 	validation?: {
 		commands?: string[];
 		timeoutMs?: number;
@@ -418,10 +430,24 @@ export const MissionStateSchema = Type.Object({
 	totalFeaturesSkipped: Type.Number(),
 	totalFixFeaturesCreated: Type.Number(),
 	gitSnapshot: Type.Optional(GitSnapshotSchema),
+	missionStartedAtMs: Type.Optional(Type.Number()),
+});
+
+const PromptingModeSchema = Type.Optional(
+	Type.Union([Type.Literal("default"), Type.Literal("caveman"), Type.Literal("caveman-full")]),
+);
+
+export const GlobalConfigSchema = Type.Object({
+	models: Type.Optional(ModelAssignmentSchema),
+	promptingMode: PromptingModeSchema,
+	spawnAndLearn: Type.Optional(Type.Boolean()),
+	onboardingCompleted: Type.Optional(Type.Boolean()),
 });
 
 export const MissionConfigSchema = Type.Object({
 	models: Type.Optional(ModelAssignmentSchema),
+	promptingMode: PromptingModeSchema,
+	spawnAndLearn: Type.Optional(Type.Boolean()),
 	validation: Type.Optional(
 		Type.Object({
 			commands: Type.Optional(Type.Array(Type.String())),

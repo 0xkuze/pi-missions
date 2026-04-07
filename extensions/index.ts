@@ -814,6 +814,7 @@ export default function (pi: ExtensionAPI): void {
 			status: "planning",
 			progressLog: [{ timestamp: now, type: "mission_started", detail: "Mission started" }],
 			startedAt: now,
+			missionStartedAtMs: Date.now(),
 			totalFeaturesCompleted: 0,
 			totalFeaturesFailed: 0,
 			totalFeaturesSkipped: 0,

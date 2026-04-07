@@ -504,6 +504,57 @@ describe("registerRunValidationTool", () => {
 			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
 			expect(parsed.summary.trim().length).toBeGreaterThan(0);
 		});
+
+		it("includes truncated stderr output for failing commands", async () => {
+			const exec: ExecFn = async () => ({
+				exitCode: 1,
+				stdout: "",
+				stderr: "error: cannot find module 'foo'\nTypeError at line 42",
+				timedOut: false,
+			});
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			expect(parsed.summary).toContain("cannot find module");
+		});
+
+		it("includes truncated stdout when stderr is empty for failing commands", async () => {
+			const exec: ExecFn = async () => ({
+				exitCode: 1,
+				stdout: "FAIL src/test.ts\n  Expected 1 to be 2",
+				stderr: "",
+				timedOut: false,
+			});
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			expect(parsed.summary).toContain("Expected 1 to be 2");
+		});
+
+		it("does not include output for passing commands", async () => {
+			const exec: ExecFn = async () => ({
+				exitCode: 0,
+				stdout: "All tests passed",
+				stderr: "",
+				timedOut: false,
+			});
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			expect(parsed.summary).not.toContain("All tests passed");
+		});
+
+		it("truncates large output with suffix", async () => {
+			const longOutput = Array.from({ length: 200 }, (_, i) => `line ${i}`).join("\n");
+			const exec: ExecFn = async () => ({
+				exitCode: 1,
+				stdout: "",
+				stderr: longOutput,
+				timedOut: false,
+			});
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			expect(parsed.summary).toContain("truncated");
+			expect(parsed.summary).toContain("line 0");
+			expect(parsed.summary).not.toContain("line 199");
+		});
 	});
 
 	describe("VAL-CROSS-011: three commands, first fails, all three execute", () => {

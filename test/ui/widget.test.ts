@@ -164,6 +164,29 @@ describe("buildWidgetLines", () => {
 			expect(line).toContain("Running");
 			expect(line).not.toContain("completing");
 		});
+
+		it("shows elapsed time when missionStartedAtMs is set", () => {
+			const features = [makeFeature("f1", "done"), makeFeature("f2", "active")];
+			const plan = makePlan([makeMilestone("m1", features, "active")]);
+			const state = makeState("executing", {
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+				missionStartedAtMs: Date.now() - 23 * 60 * 1000,
+			});
+			const lines = buildWidgetLines(state, plan);
+			const line = lines.join(" ");
+			expect(line).toContain("23m");
+		});
+
+		it("does not show elapsed time when missionStartedAtMs is not set", () => {
+			const features = [makeFeature("f1", "active")];
+			const plan = makePlan([makeMilestone("m1", features, "active")]);
+			const state = makeState("executing", { currentMilestoneId: "m1", currentFeatureId: "f1" });
+			const lines = buildWidgetLines(state, plan);
+			const line = lines.join(" ");
+			expect(line).not.toMatch(/\d+m/);
+		});
 	});
 
 	describe("paused state (VAL-UI-001)", () => {
