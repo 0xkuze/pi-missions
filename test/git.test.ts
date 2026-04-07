@@ -161,7 +161,7 @@ describe("getChangedFiles", () => {
 			expect(Array.isArray(changed)).toBe(true);
 		});
 
-		it("does not include pre-existing dirty files in committed delta", () => {
+		it("includes pre-existing dirty files alongside committed changes", () => {
 			initGitRepo(testDir);
 			makeInitialCommit(testDir);
 			writeFileSync(join(testDir, "pre-existing.ts"), "// pre-existing dirty");
@@ -171,7 +171,7 @@ describe("getChangedFiles", () => {
 			execSync("git commit -m 'worker added file'", { cwd: testDir, stdio: "ignore" });
 			const changed = getChangedFiles(testDir, base);
 			expect(changed).toContain("worker-change.ts");
-			expect(changed).not.toContain("pre-existing.ts");
+			expect(changed).toContain("pre-existing.ts");
 		});
 
 		it("returns multiple changed files", () => {
@@ -184,6 +184,65 @@ describe("getChangedFiles", () => {
 			const changed = getChangedFiles(testDir, base);
 			expect(changed).toContain("file-a.ts");
 			expect(changed).toContain("file-b.ts");
+		});
+
+		it("detects untracked files created by workers", () => {
+			initGitRepo(testDir);
+			makeInitialCommit(testDir);
+			writeFileSync(join(testDir, "new-untracked.ts"), "// created by worker");
+			const changed = getChangedFiles(testDir);
+			expect(changed).toContain("new-untracked.ts");
+		});
+
+		it("detects untracked files in subdirectories", () => {
+			initGitRepo(testDir);
+			makeInitialCommit(testDir);
+			mkdirSync(join(testDir, "src"), { recursive: true });
+			writeFileSync(join(testDir, "src", "index.ts"), "// new");
+			const changed = getChangedFiles(testDir);
+			expect(changed).toContain("src/index.ts");
+		});
+
+		it("returns both tracked modifications and untracked files", () => {
+			initGitRepo(testDir);
+			makeInitialCommit(testDir);
+			writeFileSync(join(testDir, "README.md"), "# Modified");
+			writeFileSync(join(testDir, "new-file.ts"), "// brand new");
+			const changed = getChangedFiles(testDir);
+			expect(changed).toContain("README.md");
+			expect(changed).toContain("new-file.ts");
+		});
+
+		it("excludes node_modules files", () => {
+			initGitRepo(testDir);
+			makeInitialCommit(testDir);
+			mkdirSync(join(testDir, "node_modules", "pkg"), { recursive: true });
+			writeFileSync(join(testDir, "node_modules", "pkg", "index.js"), "// dep");
+			writeFileSync(join(testDir, "real.ts"), "// real");
+			const changed = getChangedFiles(testDir);
+			expect(changed).toContain("real.ts");
+			expect(changed.some((f) => f.startsWith("node_modules"))).toBe(false);
+		});
+
+		it("excludes .pi directory files", () => {
+			initGitRepo(testDir);
+			makeInitialCommit(testDir);
+			mkdirSync(join(testDir, ".pi", "missions"), { recursive: true });
+			writeFileSync(join(testDir, ".pi", "missions", "state.json"), "{}");
+			writeFileSync(join(testDir, "src.ts"), "// src");
+			const changed = getChangedFiles(testDir);
+			expect(changed).toContain("src.ts");
+			expect(changed.some((f) => f.startsWith(".pi"))).toBe(false);
+		});
+
+		it("does not duplicate files that are both modified and staged", () => {
+			initGitRepo(testDir);
+			makeInitialCommit(testDir);
+			writeFileSync(join(testDir, "README.md"), "# Modified");
+			execSync("git add README.md", { cwd: testDir, stdio: "ignore" });
+			const changed = getChangedFiles(testDir);
+			const readmeCount = changed.filter((f) => f === "README.md").length;
+			expect(readmeCount).toBe(1);
 		});
 	});
 
@@ -300,6 +359,13 @@ describe("detectOutOfScopeChanges", () => {
 			const relevant = ["src/auth.ts"];
 			const outOfScope = detectOutOfScopeChanges(changed, relevant);
 			expect(outOfScope).toContain("src/Auth.ts");
+		});
+
+		it("does not flag lockfiles as out-of-scope", () => {
+			const changed = ["src/auth.ts", "package-lock.json", "bun.lock", "yarn.lock", "pnpm-lock.yaml"];
+			const relevant = ["src/auth.ts"];
+			const outOfScope = detectOutOfScopeChanges(changed, relevant);
+			expect(outOfScope).toEqual([]);
 		});
 	});
 });
