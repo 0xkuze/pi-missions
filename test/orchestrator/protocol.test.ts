@@ -1412,4 +1412,41 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result2).toMatch(/2\/3/);
 		});
 	});
+
+	describe("scrutiny instructions in executing protocol (VAL-SCRUTINY-007, VAL-SCRUTINY-008)", () => {
+		it("includes run_scrutiny in executing protocol", () => {
+			const state = makeState({ status: "executing" });
+			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toContain("run_scrutiny");
+		});
+
+		it("instructs running scrutiny after validation passes", () => {
+			const state = makeState({ status: "executing" });
+			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toContain("run_scrutiny");
+			const scrutinyIdx = result.indexOf("run_scrutiny");
+			const validationPassIdx = result.toLowerCase().indexOf("validation");
+			expect(scrutinyIdx).toBeGreaterThan(0);
+			expect(validationPassIdx).toBeGreaterThan(0);
+		})
+
+		it("states validation must pass before scrutiny", () => {
+			const state = makeState({ status: "executing" });
+			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toMatch(/validation.*pass.*scrutiny|scrutiny.*validation.*pass/i);
+		})
+
+		it("includes fix feature instructions for error-severity scrutiny issues", () => {
+			const state = makeState({ status: "executing" });
+			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toContain("scrutiny");
+			expect(result).toMatch(/error.*severity|error-severity/i);
+		})
+
+		it("caveman executing includes run_scrutiny", () => {
+			const state = makeState({ status: "executing" });
+			const result = buildOrchestratorProtocol(state, undefined, { promptingMode: "caveman" }, false, { turnCount: 1 }) as string;
+			expect(result).toContain("run_scrutiny");
+		})
+	});
 });

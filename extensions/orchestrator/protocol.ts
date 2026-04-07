@@ -195,6 +195,8 @@ Communicate progress concisely after each feature completes: what was done, what
 Match the user's configured output style. No emoji, no filler, no pleasantries unless the user's style uses them.
 CODE REVIEW: For complex features that touch many files or introduce architecture, use create_fix_feature to add a review feature AFTER the implementation feature completes. The review feature worker reads the changed files and checks: code reusability, simplicity, no comments in code, proper error handling, follows AGENTS.md conventions, minimal and performant. Only for substantial changes — skip for trivial features.
 
+SCRUTINY: After run_validation returns status "pass" for a milestone, call run_scrutiny for that milestone. The scrutiny reviewer checks for architectural issues, cross-feature gaps, duplication, and convention violations. If scrutiny finds error-severity issues, create fix features addressing them. Warning/info issues can be noted but do not require fixes. If validation fails, skip scrutiny — fix validation failures first.
+
 INTERVENTION PATTERNS:
 - Feature fails twice \u2192 create a targeted fix feature addressing the specific failure.
 - Feature exhausts retries (3x) \u2192 mark blocked, inform user clearly what went wrong and why.
@@ -242,6 +244,7 @@ You boss. No touch code. spawn_worker do work. ONE worker at a time. Wait result
 Worker fail? create_fix_feature then spawn_worker again.
 Big feature done? create_fix_feature for code review — worker reads changed files, checks quality, simplicity, no comments, error handling, AGENTS.md rules. Skip review for trivial features.
 All features done? run_validation. Validation fail? create_fix_feature, spawn_worker, run_validation again. NEVER complete_mission with failing checks.
+Validation pass? run_scrutiny. Scrutiny find error issues? create_fix_feature, fix, re-validate. Warning/info? note, move on.
 All milestones done AND validation pass? complete_mission. Go.`;
 }
 

@@ -1,4 +1,4 @@
-import { exec } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -20,6 +20,7 @@ import { registerCommitChangesTool } from "./tools/commit-changes.js";
 import { registerCompleteMissionTool } from "./tools/complete.js";
 import { registerConfigureEnvironmentTool } from "./tools/configure-environment.js";
 import { registerCreateFixTool } from "./tools/create-fix.js";
+import { registerRunScrutinyTool } from "./tools/run-scrutiny.js";
 import { registerRunValidationTool } from "./tools/run-validation.js";
 import { killActiveWorker, registerSpawnWorkerTool } from "./tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
@@ -324,6 +325,7 @@ export default function (pi: ExtensionAPI): void {
 		"update_mission_state",
 		"complete_mission",
 		"run_validation",
+		"run_scrutiny",
 		"create_fix_feature",
 		"ask_questions",
 		"update_library",
@@ -708,6 +710,12 @@ export default function (pi: ExtensionAPI): void {
 				timedOut: result.killed,
 			};
 		},
+	});
+	registerRunScrutinyTool(pi, {
+		basePath,
+		projectDir,
+		updateWidget,
+		spawnFn: spawn as never,
 	});
 	registerCommitChangesTool(pi, { basePath, projectDir, updateWidget });
 	registerCreateFixTool(pi, { basePath, updateWidget });
