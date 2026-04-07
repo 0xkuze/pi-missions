@@ -9,6 +9,7 @@ import { captureGitSnapshot, ensureGitRepo, isGitAvailable } from "./git.js";
 import { handleMissionInput } from "./input-handler.js";
 import { buildCompactMissionSummary, buildOrchestratorProtocol, clearProtocolCache } from "./orchestrator/protocol.js";
 import { isOnboardingCompleted, saveGlobalConfig } from "./state/global-config.js";
+import { initLibrary } from "./state/library.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
 import { invalidateCaches, loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
 import { appendMutation, clearHistory } from "./state/plan-history.js";
@@ -924,6 +925,7 @@ export default function (pi: ExtensionAPI): void {
 			gitSnapshot,
 		};
 		saveState(basePath, newState);
+		initLibrary(basePath);
 		missionModeActive = true;
 		enableMissionTools();
 		if (latestCtx) {

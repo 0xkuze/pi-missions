@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { clearProtocolCache } from "../orchestrator/protocol.js";
 import { appendLibraryTopic } from "../state/library.js";
 import { loadState } from "../state/manager.js";
 
@@ -71,6 +72,7 @@ export function registerUpdateLibraryTool(pi: ExtensionAPI, deps: Deps): void {
 
 			try {
 				appendLibraryTopic(deps.basePath, params.topic, params.content);
+				clearProtocolCache();
 			} catch (err) {
 				return {
 					content: [

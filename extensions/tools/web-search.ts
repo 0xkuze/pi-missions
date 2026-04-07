@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { clearProtocolCache } from "../orchestrator/protocol.js";
 import { appendLibraryTopic } from "../state/library.js";
 
 const DEFAULT_MAX_RESULTS = 5;
@@ -153,6 +154,7 @@ function saveResultsToLibrary(basePath: string, query: string, results: SearchRe
 		lines.push("");
 	}
 	appendLibraryTopic(basePath, "research", lines.join("\n"));
+	clearProtocolCache();
 }
 
 interface Deps {
