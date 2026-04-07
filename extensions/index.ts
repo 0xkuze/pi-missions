@@ -24,6 +24,7 @@ import { killActiveWorker, registerSpawnWorkerTool } from "./tools/spawn-worker.
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
 import { registerUpdateLibraryTool } from "./tools/update-library.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
+import { registerWebSearchTool } from "./tools/web-search.js";
 import type { Feature, GlobalConfig, MissionPlan, MissionState, WorkerResult } from "./types.js";
 import { DraftReviewComponent } from "./ui/draft-review.js";
 import { MissionControlComponent } from "./ui/mission-control.js";
@@ -326,6 +327,7 @@ export default function (pi: ExtensionAPI): void {
 		"ask_questions",
 		"update_library",
 		"configure_environment",
+		"web_search",
 	] as const;
 
 	const missionToolSet = new Set<string>(MISSION_TOOL_NAMES);
@@ -710,6 +712,7 @@ export default function (pi: ExtensionAPI): void {
 	registerCreateFixTool(pi, { basePath, updateWidget });
 	registerUpdateLibraryTool(pi, { basePath });
 	registerConfigureEnvironmentTool(pi, { basePath });
+	registerWebSearchTool(pi, { basePath });
 	registerAskQuestionsTool(pi, {
 		basePath,
 		showQuestions: (questions: Question[]) => {
