@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { readLibraryTopic } from "../state/library.js";
 import type { Feature, PromptingMode } from "../types.js";
 
 export function generateWorkerSkill(feature: Feature, agentsMdContent?: string, promptingMode?: PromptingMode): string {
@@ -50,10 +51,39 @@ export interface CompletedFeatureSummary {
 	relevantFiles: string[];
 }
 
-export function generateWorkerContext(agentsMdContent?: string, completedFeatures?: CompletedFeatureSummary[]): string {
+const LIBRARY_TOPIC_HEADER_RE = /^#\s+\w+\s*\n?$/;
+
+function isHeaderOnly(content: string): boolean {
+	return LIBRARY_TOPIC_HEADER_RE.test(content.trim());
+}
+
+function buildLibrarySection(basePath: string): string {
+	const sections: string[] = [];
+	const pitfalls = readLibraryTopic(basePath, "pitfalls");
+	if (pitfalls && !isHeaderOnly(pitfalls)) {
+		sections.push(`## Known Pitfalls\n\n${pitfalls}`);
+	}
+	const conventions = readLibraryTopic(basePath, "conventions");
+	if (conventions && !isHeaderOnly(conventions)) {
+		sections.push(`## Project Conventions\n\n${conventions}`);
+	}
+	return sections.join("\n\n");
+}
+
+export function generateWorkerContext(
+	agentsMdContent?: string,
+	completedFeatures?: CompletedFeatureSummary[],
+	basePath?: string,
+): string {
 	const parts: string[] = [];
 	if (agentsMdContent) {
 		parts.push(agentsMdContent);
+	}
+	if (basePath) {
+		const librarySection = buildLibrarySection(basePath);
+		if (librarySection) {
+			parts.push(librarySection);
+		}
 	}
 	if (completedFeatures && completedFeatures.length > 0) {
 		const featureLines = completedFeatures.map(

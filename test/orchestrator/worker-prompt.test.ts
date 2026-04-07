@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { initLibrary, readLibraryTopic, writeLibraryTopic } from "../../extensions/state/library.js";
 import {
 	generateWorkerContext,
 	generateWorkerPrompt,
@@ -363,6 +364,126 @@ describe("writeWorkerFiles", () => {
 
 		const skillContent = readFileSync(join(fakeBase, "runtime", "feat-123", "2", "worker-skill.md"), "utf8");
 		expect(skillContent).toBe("skill text");
+	});
+});
+
+describe("generateWorkerContext with library injection", () => {
+	let tmp: ReturnType<typeof createTempDir>;
+
+	beforeEach(() => {
+		tmp = createTempDir("worker-context-lib-");
+	});
+
+	afterEach(() => {
+		tmp.cleanup();
+	});
+
+	it("includes pitfalls content under Known Pitfalls heading (VAL-CROSS-003)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\nAlways run migrations before seeding");
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("Always run migrations before seeding");
+	});
+
+	it("includes conventions content under Project Conventions heading (VAL-CROSS-004)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "conventions", "# Conventions\n\nUse camelCase for variables");
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Project Conventions");
+		expect(ctx).toContain("Use camelCase for variables");
+	});
+
+	it("empty header-only pitfalls file produces no injection (VAL-LIBRARY-006)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).not.toContain("Known Pitfalls");
+	});
+
+	it("empty header-only conventions file produces no injection (VAL-LIBRARY-006)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).not.toContain("Project Conventions");
+	});
+
+	it("conventions supplement AGENTS.md, not replace it (VAL-CROSS-004)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "conventions", "# Conventions\n\nUse strict null checks");
+		const agentsMd = "## Project Conventions\n\nAlways use TypeScript strict mode.";
+		const ctx = generateWorkerContext(agentsMd, [], basePath);
+		expect(ctx).toContain("Always use TypeScript strict mode.");
+		expect(ctx).toContain("Use strict null checks");
+		expect(ctx).toContain("Project Conventions");
+	});
+
+	it("includes both pitfalls and conventions when both have content (VAL-LIBRARY-006)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\nAvoid global state");
+		writeLibraryTopic(basePath, "conventions", "# Conventions\n\nUse named exports");
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("Avoid global state");
+		expect(ctx).toContain("Project Conventions");
+		expect(ctx).toContain("Use named exports");
+	});
+
+	it("works without basePath — no library injection (backward compat)", () => {
+		const ctx = generateWorkerContext(undefined, []);
+		expect(ctx).toBe("");
+		expect(ctx).not.toContain("Known Pitfalls");
+		expect(ctx).not.toContain("Project Conventions");
+	});
+
+	it("works without basePath but with agentsMd — no library injection", () => {
+		const agentsMd = "## Conventions\n\nUse strict mode.";
+		const ctx = generateWorkerContext(agentsMd, []);
+		expect(ctx).toContain("Use strict mode.");
+		expect(ctx).not.toContain("Known Pitfalls");
+		expect(ctx).not.toContain("Project Conventions");
+	});
+
+	it("missing library directory produces no injection and no error", () => {
+		const basePath = tmp.path;
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).not.toContain("Known Pitfalls");
+		expect(ctx).not.toContain("Project Conventions");
+	});
+
+	it("truncated library content included in context (VAL-SCALE-001)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		const longPitfall = "# Pitfalls\n\n" + "x".repeat(2500);
+		writeFileSync(join(basePath, "library", "pitfalls.md"), longPitfall);
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("...truncated");
+		expect(ctx.length).toBeLessThan(longPitfall.length + 100);
+	});
+
+	it("accumulated pitfalls from multiple workers appear in context (VAL-SKILLS-004)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\n- Pin dep@2.1.0 due to breaking change\n- Always run migrations first");
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Pin dep@2.1.0");
+		expect(ctx).toContain("Always run migrations first");
+	});
+
+	it("completed features still included alongside library content", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\nAvoid global state");
+		const completedFeatures = [{ name: "Auth", description: "Auth module", relevantFiles: ["auth.ts"] }];
+		const ctx = generateWorkerContext(undefined, completedFeatures, basePath);
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("Avoid global state");
+		expect(ctx).toContain("Auth");
 	});
 });
 
