@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadState, savePlan, saveState } from "../../extensions/state/manager.js";
+import { loadState, saveContract, savePlan, saveState } from "../../extensions/state/manager.js";
 import { transitionState } from "../../extensions/state/transitions.js";
 import { registerCompleteMissionTool } from "../../extensions/tools/complete.js";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
@@ -436,5 +436,160 @@ describe("registerCompleteMissionTool", () => {
 			const result = await fn();
 			expect(result.content[0].text).toContain("Error");
 		});
+	});
+});
+
+describe("complete_mission passes validationInfo to generateReport", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = mkdtempSync(join(tmpdir(), "complete-validation-test-"));
+	});
+
+	afterEach(() => {
+		rmSync(tmpDir, { recursive: true, force: true });
+	});
+
+	function makeExecutingState(overrides: Partial<MissionState> = {}) {
+		return makeState({
+			status: "executing",
+			startedAt: new Date(Date.now() - 60_000).toISOString(),
+			totalFeaturesCompleted: 1,
+			...overrides,
+		});
+	}
+
+	function makeCompletePlan(overrides: Partial<MissionPlan> = {}) {
+		return makePlan({
+			description: "Build a test system",
+			milestones: [makeMilestone({ status: "done", features: [makeFeature({ status: "done" })] })],
+			...overrides,
+		});
+	}
+
+	async function callTool(
+		basePath: string,
+		params: { summary: string; remainingNotes?: string[] },
+		state: MissionState,
+		plan: MissionPlan | null,
+		updateWidget?: (state: MissionState, plan?: MissionPlan) => void,
+	): Promise<ToolResult> {
+		const { pi, getRegisteredTool } = createMockPi();
+		saveState(basePath, state);
+		if (plan) savePlan(basePath, plan);
+		registerCompleteMissionTool(pi, { basePath, updateWidget: updateWidget ?? (() => {}) });
+		const tool = getRegisteredTool("complete_mission")!;
+		return tool.execute("tool-call-id", params, undefined, undefined, undefined as never) as Promise<ToolResult>;
+	}
+
+	it("report includes Validation Assertions section when contract has completed assertions", async () => {
+		const state = makeExecutingState();
+		const plan = makeCompletePlan({
+			milestones: [
+				makeMilestone({
+					id: "m1",
+					status: "done",
+					features: [makeFeature({ id: "f1", status: "done" })],
+				}),
+			],
+		});
+
+		saveContract(tmpDir, {
+			assertions: [
+				{
+					id: "VAL-001",
+					featureId: "f1",
+					type: "command",
+					command: "bun test",
+					expect: { exitCode: 0 },
+					description: "tests pass",
+					status: "pass",
+				},
+				{
+					id: "VAL-002",
+					featureId: "f1",
+					type: "command",
+					command: "bun lint",
+					expect: { exitCode: 0 },
+					description: "lint passes",
+					status: "fail",
+				},
+			],
+		});
+
+		await callTool(tmpDir, { summary: "done" }, state, plan);
+
+		const reportPath = join(tmpDir, "report.md");
+		expect(existsSync(reportPath)).toBe(true);
+		const reportContent = readFileSync(reportPath, "utf8");
+		expect(reportContent).toMatch(/## Validation Assertions/i);
+		expect(reportContent).toContain("VAL-001");
+		expect(reportContent).toContain("VAL-002");
+	});
+
+	it("report includes evidence directory reference when contract exists", async () => {
+		const state = makeExecutingState();
+		const plan = makeCompletePlan({
+			milestones: [
+				makeMilestone({
+					id: "m1",
+					status: "done",
+					features: [makeFeature({ id: "f1", status: "done" })],
+				}),
+			],
+		});
+
+		saveContract(tmpDir, {
+			assertions: [
+				{
+					id: "VAL-001",
+					featureId: "f1",
+					type: "command",
+					command: "bun test",
+					expect: { exitCode: 0 },
+					description: "tests pass",
+					status: "pass",
+				},
+			],
+		});
+
+		await callTool(tmpDir, { summary: "done" }, state, plan);
+
+		const reportContent = readFileSync(join(tmpDir, "report.md"), "utf8");
+		expect(reportContent).toMatch(/evidence/i);
+		expect(reportContent).toContain("runtime");
+	});
+
+	it("report omits Validation Assertions section when no contract exists", async () => {
+		const state = makeExecutingState();
+		const plan = makeCompletePlan();
+		await callTool(tmpDir, { summary: "done" }, state, plan);
+
+		const reportContent = readFileSync(join(tmpDir, "report.md"), "utf8");
+		expect(reportContent).not.toMatch(/## Validation Assertions/i);
+	});
+
+	it("report omits Validation Assertions section when all assertions are pending", async () => {
+		const state = makeExecutingState();
+		const plan = makeCompletePlan();
+
+		saveContract(tmpDir, {
+			assertions: [
+				{
+					id: "VAL-001",
+					featureId: "f1",
+					type: "command",
+					command: "bun test",
+					expect: { exitCode: 0 },
+					description: "tests pass",
+					status: "pending",
+				},
+			],
+		});
+
+		await callTool(tmpDir, { summary: "done" }, state, plan);
+
+		const reportContent = readFileSync(join(tmpDir, "report.md"), "utf8");
+		expect(reportContent).not.toMatch(/## Validation Assertions/i);
 	});
 });

@@ -3,8 +3,8 @@ import { dirname, join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { generateReport } from "../report.js";
-import { loadPlan, loadState, saveState } from "../state/manager.js";
+import { generateReport, type ReportValidationInfo } from "../report.js";
+import { loadContract, loadPlan, loadState, saveState } from "../state/manager.js";
 import { transitionState } from "../state/transitions.js";
 import type { MissionPlan, MissionState } from "../types.js";
 
@@ -128,12 +128,18 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 				const reportPath = join(deps.basePath, "report.md");
 				const reportDir = dirname(reportPath);
 				mkdirSync(reportDir, { recursive: true });
-				const reportContent = generateReport(completedState, plan, {
-					filesChanged: [],
-					commits: [],
-					summary,
-					remainingNotes: remainingNotes ?? [],
-				});
+				const validationInfo = buildValidationInfo(deps.basePath, plan);
+				const reportContent = generateReport(
+					completedState,
+					plan,
+					{
+						filesChanged: [],
+						commits: [],
+						summary,
+						remainingNotes: remainingNotes ?? [],
+					},
+					validationInfo,
+				);
 				writeFileSync(reportPath, reportContent, "utf8");
 			}
 
@@ -153,4 +159,29 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 			};
 		},
 	});
+}
+
+function buildValidationInfo(basePath: string, plan: MissionPlan): ReportValidationInfo | undefined {
+	const contract = loadContract(basePath);
+	if (!contract) return undefined;
+	const assertionResults = contract.assertions.filter(
+		(a) => a.status === "pass" || a.status === "fail" || a.status === "error",
+	);
+	if (assertionResults.length === 0) return undefined;
+	const assertions = assertionResults.map((a) => ({
+		assertionId: a.id,
+		status: a.status as "pass" | "fail" | "error",
+		exitCode: null as number | null,
+		stdout: "",
+		stderr: "",
+		timedOut: false,
+		durationMs: 0,
+		timestamp: "",
+		command: a.command,
+	}));
+	const milestoneIds = plan.milestones.map((m) => m.id);
+	return {
+		assertions,
+		evidenceDir: milestoneIds.length > 0 ? join(basePath, "runtime", "validation", milestoneIds[0]!) : undefined,
+	};
 }

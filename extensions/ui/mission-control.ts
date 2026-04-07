@@ -1,10 +1,19 @@
 import type { Component, Focusable, TUI } from "@mariozechner/pi-tui";
 import { matchesKey, truncateToWidth, visibleWidth } from "@mariozechner/pi-tui";
-import { saveConfig, savePlan, saveState } from "../state/manager.js";
+import { loadContract, saveConfig, savePlan, saveState } from "../state/manager.js";
 import { appendMutation, readHistory } from "../state/plan-history.js";
 import type { MissionRegistryEntry } from "../state/registry.js";
 import { transitionState } from "../state/transitions.js";
-import type { Feature, MissionConfig, MissionPlan, MissionState, PlanMutation, ProgressEvent } from "../types.js";
+import { loadScrutinyReport } from "../tools/run-scrutiny.js";
+import type {
+	AssertionResultData,
+	Feature,
+	MissionConfig,
+	MissionPlan,
+	MissionState,
+	PlanMutation,
+	ProgressEvent,
+} from "../types.js";
 import { nowISO } from "../utils.js";
 import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
 import { countProgress } from "./count-progress.js";
@@ -1000,6 +1009,24 @@ export class MissionControlComponent implements Component, Focusable {
 					label: cmd,
 					status: "pending" as const,
 				}));
+				const milestoneId = state.currentMilestoneId ?? "";
+				const contract = loadContract(this.deps.basePath);
+				const assertions: AssertionResultData[] | undefined = contract?.assertions
+					.filter((a) => a.status === "pass" || a.status === "fail" || a.status === "error")
+					.map(
+						(a): AssertionResultData => ({
+							assertionId: a.id,
+							status: a.status as AssertionResultData["status"],
+							exitCode: null,
+							stdout: "",
+							stderr: "",
+							timedOut: false,
+							durationMs: 0,
+							timestamp: "",
+							command: a.command,
+						}),
+					);
+				const scrutinyReport = milestoneId ? loadScrutinyReport(this.deps.basePath, milestoneId) : undefined;
 				return renderValidationView(
 					milestoneName,
 					commands,
@@ -1008,6 +1035,8 @@ export class MissionControlComponent implements Component, Focusable {
 					this.style,
 					height,
 					this.subViewScrollOffset,
+					assertions,
+					scrutinyReport ?? undefined,
 				);
 			}
 			case "logs":

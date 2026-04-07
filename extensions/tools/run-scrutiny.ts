@@ -255,6 +255,21 @@ function writeScrutinyArtifacts(basePath: string, milestoneId: string, report: S
 	writeFileSync(join(dir, "stdout.log"), stdout, "utf8");
 }
 
+export function loadScrutinyReport(basePath: string, milestoneId: string): ScrutinyReport | null {
+	const filePath = join(basePath, "runtime", "validation", milestoneId, "scrutiny", "report.json");
+	let raw: string;
+	try {
+		raw = readFileSync(filePath, "utf8");
+	} catch {
+		return null;
+	}
+	try {
+		return JSON.parse(raw) as ScrutinyReport;
+	} catch {
+		return null;
+	}
+}
+
 function spawnScrutinyProcess(
 	spawnFn: SpawnFn,
 	command: string,
