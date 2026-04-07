@@ -1,5 +1,4 @@
-import { existsSync } from "node:fs";
-import { basename, join } from "node:path";
+import { join } from "node:path";
 import { resolveModel } from "../config.js";
 import {
 	generateValidatorPrompt,
@@ -8,6 +7,7 @@ import {
 } from "../orchestrator/validator-prompt.js";
 import { loadConfig } from "../state/manager.js";
 import type { Feature, MissionConfig, MissionPlan, WorkerResult } from "../types.js";
+import { getPiInvocation } from "../utils.js";
 
 type ValidatorVerdict = "pass" | "fix" | "reject";
 
@@ -131,20 +131,6 @@ export async function runValidator(
 	}
 
 	return parseValidatorVerdict(procResult.stdout);
-}
-
-function getPiInvocation(args: string[]): { command: string; commandArgs: string[] } {
-	const currentScript = process.argv[1];
-
-	if (currentScript && existsSync(currentScript)) {
-		return { command: process.execPath, commandArgs: [currentScript, ...args] };
-	}
-	const execName = basename(process.execPath).toLowerCase();
-	const isGenericRuntime = /^(node|bun)(\.exe)?$/.test(execName);
-	if (!isGenericRuntime) {
-		return { command: process.execPath, commandArgs: args };
-	}
-	return { command: "pi", commandArgs: args };
 }
 
 function spawnValidatorProcess(

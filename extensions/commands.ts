@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { loadPlan, loadState } from "./state/manager.js";
 import type { MissionPlan, MissionState } from "./types.js";
 
@@ -8,7 +8,7 @@ export interface CommandDeps {
 	clearWidget: () => void;
 	isMissionModeActive: () => boolean;
 	setMissionModeActive: (active: boolean) => void;
-	onActivate: () => void;
+	onActivate: (ctx: ExtensionContext) => Promise<void>;
 	onDeactivate: () => void;
 }
 
@@ -46,7 +46,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
 				ctx.ui.notify("Mission mode deactivated.", "info");
 			} else {
 				deps.setMissionModeActive(true);
-				deps.onActivate();
+				await deps.onActivate(ctx);
 				ctx.ui.notify(
 					"Mission mode activated. Open Mission Control with Ctrl+Shift+M or describe your mission goal.",
 					"info",

@@ -1,3 +1,6 @@
+import { existsSync } from "node:fs";
+import { basename } from "node:path";
+
 export function generateId(): string {
 	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 	let result = "";
@@ -26,4 +29,17 @@ export function formatDuration(ms: number): string {
 
 export function nowISO(): string {
 	return new Date().toISOString();
+}
+
+export function getPiInvocation(args: string[]): { command: string; commandArgs: string[] } {
+	const currentScript = process.argv[1];
+	if (currentScript && existsSync(currentScript)) {
+		return { command: process.execPath, commandArgs: [currentScript, ...args] };
+	}
+	const execName = basename(process.execPath).toLowerCase();
+	const isGenericRuntime = /^(node|bun)(\.exe)?$/.test(execName);
+	if (!isGenericRuntime) {
+		return { command: process.execPath, commandArgs: args };
+	}
+	return { command: "pi", commandArgs: args };
 }
