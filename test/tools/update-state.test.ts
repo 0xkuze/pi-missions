@@ -77,8 +77,26 @@ describe("registerUpdateStateTool", () => {
 
 	describe("state guards — reject actions from invalid mission statuses", () => {
 		const INVALID_STATUSES_FOR = {
-			skip_feature: ["planning", "draft_review", "approved", "validating", "paused", "completed", "failed", "aborted"],
-			block_feature: ["planning", "draft_review", "approved", "validating", "paused", "completed", "failed", "aborted"],
+			skip_feature: [
+				"planning",
+				"draft_review",
+				"approved",
+				"validating",
+				"paused",
+				"completed",
+				"failed",
+				"aborted",
+			],
+			block_feature: [
+				"planning",
+				"draft_review",
+				"approved",
+				"validating",
+				"paused",
+				"completed",
+				"failed",
+				"aborted",
+			],
 			add_feature: ["approved", "validating", "paused", "completed", "failed", "aborted"],
 			remove_feature: ["approved", "validating", "paused", "completed", "failed", "aborted"],
 		} as const;

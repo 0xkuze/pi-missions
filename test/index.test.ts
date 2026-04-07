@@ -986,10 +986,7 @@ describe("extension entry point (index.ts)", () => {
 			handlers.get("session_start")!({ type: "session_start" }, ctx);
 
 			// session_compact triggers appendEntry
-			handlers.get("session_compact")!(
-				{ type: "session_compact", compactionEntry: {}, fromExtension: false },
-				ctx,
-			);
+			handlers.get("session_compact")!({ type: "session_compact", compactionEntry: {}, fromExtension: false }, ctx);
 
 			const cacheEntries = appendedEntries.filter((e) => e.type === "mission-state-cache");
 			expect(cacheEntries.length).toBeGreaterThan(0);

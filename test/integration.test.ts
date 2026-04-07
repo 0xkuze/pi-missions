@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import setup, { reconcileStateOnStart } from "../extensions/index.js";
-import { loadPlan, loadState, savePlan, saveState } from "../extensions/state/manager.js";
+import { loadPlan, loadState, saveConfig, savePlan, saveState } from "../extensions/state/manager.js";
 import type { Feature, Milestone, MissionPlan, MissionState } from "../extensions/types.js";
 import { nowISO } from "../extensions/utils.js";
 import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "./helpers/index.js";
@@ -285,10 +285,13 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 	});
 
 	it("spawn_worker transitions from approved to executing and updates counters on success", async () => {
-		const successOutput = [makeReportResultLine(), JSON.stringify({
-			type: "message_end",
-			message: { role: "assistant", content: [{ type: "text", text: "Feature complete." }] },
-		})].join("\n");
+		const successOutput = [
+			makeReportResultLine(),
+			JSON.stringify({
+				type: "message_end",
+				message: { role: "assistant", content: [{ type: "text", text: "Feature complete." }] },
+			}),
+		].join("\n");
 
 		const mockSpawn = (_cmd: string, _args: string[], _opts: object) => {
 			const stdoutHandlers: Array<(data: Buffer) => void> = [];
@@ -349,6 +352,7 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 				milestones: [makeMilestone("m1", [makeFeature("f1")])],
 			});
 			savePlan(basePath, plan);
+			saveConfig(basePath, { validatorStrictness: "lenient" });
 
 			const result = await invokeTool(mockPi.tools, "spawn_worker", { featureId: "f1" });
 			expect(result.content[0].text).not.toContain("Error");
@@ -843,10 +847,13 @@ describe("VAL-CROSS-013 / VAL-CROSS-005: worker attempt status transitions", () 
 	}
 
 	it("successful attempt has status success, exit code 0, completedAt, durationMs > 0", async () => {
-		const output = [makeReportResultLine(), JSON.stringify({
-			type: "message_end",
-			message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
-		})].join("\n");
+		const output = [
+			makeReportResultLine(),
+			JSON.stringify({
+				type: "message_end",
+				message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
+			}),
+		].join("\n");
 		const { registerSpawnWorkerTool } = await import("../extensions/tools/spawn-worker.js");
 		const mockPi = buildMockPi();
 		registerSpawnWorkerTool(mockPi.pi, {

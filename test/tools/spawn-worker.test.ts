@@ -40,9 +40,10 @@ interface MockSpawnOptions {
 function makeMockSpawn(opts: MockSpawnOptions = {}) {
 	const { stdoutLines = [], stderr = "", exitCode = 0, signal = null, error } = opts;
 
-	const finalLines = exitCode === 0 && stdoutLines.length > 0
-		? [...stdoutLines.slice(0, -1), makeReportResultLine(), stdoutLines[stdoutLines.length - 1]]
-		: stdoutLines;
+	const finalLines =
+		exitCode === 0 && stdoutLines.length > 0
+			? [...stdoutLines.slice(0, -1), makeReportResultLine(), stdoutLines[stdoutLines.length - 1]]
+			: stdoutLines;
 
 	return (_command: string, _args: string[], _options: object) => {
 		const stdoutHandlers: Array<(data: Buffer) => void> = [];
@@ -98,9 +99,10 @@ function makeMockSpawn(opts: MockSpawnOptions = {}) {
 function makeMockSpawnDelayed(delayMs: number, opts: MockSpawnOptions = {}) {
 	const { stdoutLines = [], stderr = "", exitCode = 0, signal = null, error } = opts;
 
-	const finalLines = exitCode === 0 && stdoutLines.length > 0
-		? [...stdoutLines.slice(0, -1), makeReportResultLine(), stdoutLines[stdoutLines.length - 1]]
-		: stdoutLines;
+	const finalLines =
+		exitCode === 0 && stdoutLines.length > 0
+			? [...stdoutLines.slice(0, -1), makeReportResultLine(), stdoutLines[stdoutLines.length - 1]]
+			: stdoutLines;
 
 	return (_command: string, _args: string[], _options: object) => {
 		const stdoutHandlers: Array<(data: Buffer) => void> = [];
@@ -740,6 +742,7 @@ describe("registerSpawnWorkerTool", () => {
 			const feature = localMakeFeature();
 			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
+			saveConfig(testDir, { validatorStrictness: "lenient" });
 			registerTool(successMock);
 			await executeFn!("id", { featureId: "feat-1" });
 			const { loadState, loadPlan } = await import("../../extensions/state/manager.js");
@@ -951,6 +954,7 @@ describe("registerSpawnWorkerTool", () => {
 			const feature = localMakeFeature({ status: "pending" });
 			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
+			saveConfig(testDir, { validatorStrictness: "lenient" });
 			registerTool(mockSpawnFn);
 			await executeFn!("id", { featureId: "feat-1" });
 			const { loadPlan } = await import("../../extensions/state/manager.js");
@@ -1242,6 +1246,7 @@ describe("registerSpawnWorkerTool", () => {
 			const feat1 = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
 			const plan = localMakePlan([localMakeMilestone([feat1])]);
 			savePlan(testDir, plan);
+			saveConfig(testDir, { validatorStrictness: "lenient" });
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
 			expect(result.content[0].text).toContain("ALL FEATURES DONE");
@@ -1307,6 +1312,7 @@ describe("registerSpawnWorkerTool", () => {
 
 			saveState(testDir, state);
 			savePlan(testDir, plan);
+			saveConfig(testDir, { models: {}, validatorStrictness: "lenient" });
 
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
@@ -1324,7 +1330,9 @@ describe("registerSpawnWorkerTool", () => {
 			saveConfig(testDir, { models: { validator: "test-model" } });
 
 			const validatorSpawn = makeMockSpawn({
-				stdoutLines: [makeMessageEndLine("assistant", "VERDICT: FIX\nFEEDBACK: Missing test script in package.json")],
+				stdoutLines: [
+					makeMessageEndLine("assistant", "VERDICT: FIX\nFEEDBACK: Missing test script in package.json"),
+				],
 				exitCode: 0,
 			});
 			const combinedSpawn = (cmd: string, args: string[], opts: object) => {
@@ -1448,6 +1456,7 @@ describe("registerSpawnWorkerTool", () => {
 
 			saveState(testDir, state);
 			savePlan(testDir, plan);
+			saveConfig(testDir, { validatorStrictness: "lenient" });
 			registerTool(mockSpawnFn);
 
 			await executeFn!("id", { featureId: "feat-1" });
@@ -1485,6 +1494,7 @@ describe("registerSpawnWorkerTool", () => {
 
 			saveState(testDir, state);
 			savePlan(testDir, plan);
+			saveConfig(testDir, { validatorStrictness: "lenient" });
 			registerTool(mockSpawnFn);
 
 			await executeFn!("id", { featureId: "feat-1" });
@@ -1507,6 +1517,7 @@ describe("registerSpawnWorkerTool", () => {
 
 			saveState(testDir, state);
 			savePlan(testDir, plan);
+			saveConfig(testDir, { validatorStrictness: "lenient" });
 
 			let commitCalled = false;
 			const pi = makePiMock();
@@ -1827,10 +1838,7 @@ describe("registerSpawnWorkerTool", () => {
 
 		it("medium autonomy: auto-creates fix feature", async () => {
 			const spawnWithUndone = makeMockSpawn({
-				stdoutLines: [
-					makeReportResultWithUndone("Missing tests"),
-					makeMessageEndLine("assistant", "Partial."),
-				],
+				stdoutLines: [makeReportResultWithUndone("Missing tests"), makeMessageEndLine("assistant", "Partial.")],
 				exitCode: 0,
 			});
 			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
@@ -1921,10 +1929,7 @@ describe("registerSpawnWorkerTool", () => {
 
 		it("fix feature has correct fixOrigin fields", async () => {
 			const spawnWithIssue = makeMockSpawn({
-				stdoutLines: [
-					makeReportResultWithHighIssue(),
-					makeMessageEndLine("assistant", "Done."),
-				],
+				stdoutLines: [makeReportResultWithHighIssue(), makeMessageEndLine("assistant", "Done.")],
 				exitCode: 0,
 			});
 			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
@@ -1940,7 +1945,9 @@ describe("registerSpawnWorkerTool", () => {
 
 			const { loadPlan } = await import("../../extensions/state/manager.js");
 			const savedPlan = loadPlan(testDir)!;
-			const fixFeature = savedPlan.milestones[0].features.find((f) => f.fixOrigin !== undefined && f.id !== "feat-1");
+			const fixFeature = savedPlan.milestones[0].features.find(
+				(f) => f.fixOrigin !== undefined && f.id !== "feat-1",
+			);
 			expect(fixFeature).toBeDefined();
 			expect(fixFeature!.fixOrigin!.sourceKind).toBe("worker-failure");
 			expect(fixFeature!.fixOrigin!.sourceFeatureId).toBe("feat-1");
@@ -1949,10 +1956,7 @@ describe("registerSpawnWorkerTool", () => {
 
 		it("fix feature description references the undone work and issues", async () => {
 			const spawnWithIssue = makeMockSpawn({
-				stdoutLines: [
-					makeReportResultWithHighIssue(),
-					makeMessageEndLine("assistant", "Done."),
-				],
+				stdoutLines: [makeReportResultWithHighIssue(), makeMessageEndLine("assistant", "Done.")],
 				exitCode: 0,
 			});
 			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
@@ -1968,7 +1972,9 @@ describe("registerSpawnWorkerTool", () => {
 
 			const { loadPlan } = await import("../../extensions/state/manager.js");
 			const savedPlan = loadPlan(testDir)!;
-			const fixFeature = savedPlan.milestones[0].features.find((f) => f.fixOrigin !== undefined && f.id !== "feat-1");
+			const fixFeature = savedPlan.milestones[0].features.find(
+				(f) => f.fixOrigin !== undefined && f.id !== "feat-1",
+			);
 			expect(fixFeature).toBeDefined();
 			expect(fixFeature!.description).toContain("Missing error handling");
 			expect(fixFeature!.description).toContain("Race condition in cache");
@@ -1976,10 +1982,7 @@ describe("registerSpawnWorkerTool", () => {
 
 		it("fix feature increments totalFixFeaturesCreated in state", async () => {
 			const spawnWithIssue = makeMockSpawn({
-				stdoutLines: [
-					makeReportResultWithHighIssue(),
-					makeMessageEndLine("assistant", "Done."),
-				],
+				stdoutLines: [makeReportResultWithHighIssue(), makeMessageEndLine("assistant", "Done.")],
 				exitCode: 0,
 			});
 			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
@@ -2000,10 +2003,7 @@ describe("registerSpawnWorkerTool", () => {
 
 		it("fix feature respects maxRetries config - no fix created when retries exhausted for source feature", async () => {
 			const spawnWithIssue = makeMockSpawn({
-				stdoutLines: [
-					makeReportResultWithHighIssue(),
-					makeMessageEndLine("assistant", "Done."),
-				],
+				stdoutLines: [makeReportResultWithHighIssue(), makeMessageEndLine("assistant", "Done.")],
 				exitCode: 0,
 			});
 			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
@@ -2011,8 +2011,22 @@ describe("registerSpawnWorkerTool", () => {
 				id: "feat-1",
 				status: "active",
 				attempts: [
-					{ attemptNumber: 1, startedAt: "2025-01-01T00:00:00Z", resultPath: "", stdoutPath: "", stderrPath: "", status: "failure" },
-					{ attemptNumber: 2, startedAt: "2025-01-01T00:00:00Z", resultPath: "", stdoutPath: "", stderrPath: "", status: "failure" },
+					{
+						attemptNumber: 1,
+						startedAt: "2025-01-01T00:00:00Z",
+						resultPath: "",
+						stdoutPath: "",
+						stderrPath: "",
+						status: "failure",
+					},
+					{
+						attemptNumber: 2,
+						startedAt: "2025-01-01T00:00:00Z",
+						resultPath: "",
+						stdoutPath: "",
+						stderrPath: "",
+						status: "failure",
+					},
 				],
 			});
 			const milestone = localMakeMilestone([feature], { id: "milestone-1", status: "active" });
@@ -2026,7 +2040,9 @@ describe("registerSpawnWorkerTool", () => {
 
 			const { loadPlan } = await import("../../extensions/state/manager.js");
 			const savedPlan = loadPlan(testDir)!;
-			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined && f.id !== "feat-1");
+			const fixFeatures = savedPlan.milestones[0].features.filter(
+				(f) => f.fixOrigin !== undefined && f.id !== "feat-1",
+			);
 			expect(fixFeatures.length).toBe(0);
 		});
 	});

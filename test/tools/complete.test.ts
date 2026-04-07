@@ -374,10 +374,7 @@ describe("registerCompleteMissionTool", () => {
 			const plan = makeCompletePlan({
 				milestones: [
 					makeMilestone({
-						features: [
-							makeFeature({ id: "f1", status: "active" }),
-							makeFeature({ id: "f2", status: "pending" }),
-						],
+						features: [makeFeature({ id: "f1", status: "active" }), makeFeature({ id: "f2", status: "pending" })],
 					}),
 				],
 			});

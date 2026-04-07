@@ -103,21 +103,25 @@ describe("synthesizeWorkerResult", () => {
 		});
 
 		it("bash tool errors are non-fatal — worker can recover from failed commands", () => {
-			const stdout = makeStdout(withReportResult([
-				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 1 }, true),
-				makeToolExecutionEnd("edit", { path: "/fix.ts", edits: [] }),
-				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
-				makeMessageEnd("assistant", "Fixed the tests."),
-			]));
+			const stdout = makeStdout(
+				withReportResult([
+					makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 1 }, true),
+					makeToolExecutionEnd("edit", { path: "/fix.ts", edits: [] }),
+					makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
+					makeMessageEnd("assistant", "Fixed the tests."),
+				]),
+			);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
 
 		it("bash tool error as only tool event is still non-fatal with exit code 0", () => {
-			const stdout = makeStdout(withReportResult([
-				makeToolExecutionEnd("bash", { command: "rm -rf /" }, { exitCode: 1 }, true),
-				makeMessageEnd("assistant", "Task done."),
-			]));
+			const stdout = makeStdout(
+				withReportResult([
+					makeToolExecutionEnd("bash", { command: "rm -rf /" }, { exitCode: 1 }, true),
+					makeMessageEnd("assistant", "Task done."),
+				]),
+			);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
@@ -133,55 +137,65 @@ describe("synthesizeWorkerResult", () => {
 		});
 
 		it("treats commit_changes tool errors as non-fatal", () => {
-			const stdout = makeStdout(withReportResult([
-				makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
-				makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
-				makeToolExecutionEnd("commit_changes", { message: "feat: add feature" }, {}, true),
-				makeMessageEnd("assistant", "Feature implemented, commit failed."),
-			]));
+			const stdout = makeStdout(
+				withReportResult([
+					makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
+					makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
+					makeToolExecutionEnd("commit_changes", { message: "feat: add feature" }, {}, true),
+					makeMessageEnd("assistant", "Feature implemented, commit failed."),
+				]),
+			);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 			expect(result.error).toBeUndefined();
 		});
 
 		it("read ENOENT errors are non-fatal — worker can adapt when file missing", () => {
-			const stdout = makeStdout(withReportResult([
-				makeToolExecutionEnd("read", { path: "/src/fizzbuzz.ts" }, {}, true),
-				makeToolExecutionEnd("read", { path: "/src/index.ts" }, {}),
-				makeToolExecutionEnd("write", { path: "/src/fizzbuzz.test.ts" }, {}),
-				makeMessageEnd("assistant", "Tests written and passing."),
-			]));
+			const stdout = makeStdout(
+				withReportResult([
+					makeToolExecutionEnd("read", { path: "/src/fizzbuzz.ts" }, {}, true),
+					makeToolExecutionEnd("read", { path: "/src/index.ts" }, {}),
+					makeToolExecutionEnd("write", { path: "/src/fizzbuzz.test.ts" }, {}),
+					makeMessageEnd("assistant", "Tests written and passing."),
+				]),
+			);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 			expect(result.error).toBeUndefined();
 		});
 
 		it("read error as last tool event is still non-fatal", () => {
-			const stdout = makeStdout(withReportResult([
-				makeToolExecutionEnd("read", { path: "/missing.ts" }, {}, true),
-				makeMessageEnd("assistant", "File not found, adapted."),
-			]));
+			const stdout = makeStdout(
+				withReportResult([
+					makeToolExecutionEnd("read", { path: "/missing.ts" }, {}, true),
+					makeMessageEnd("assistant", "File not found, adapted."),
+				]),
+			);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
 
 		it("grep and find errors are non-fatal", () => {
-			const stdout = makeStdout(withReportResult([
-				makeToolExecutionEnd("grep", { pattern: "foo" }, {}, true),
-				makeToolExecutionEnd("find", { glob: "*.ts" }, {}, true),
-				makeToolExecutionEnd("write", { path: "/src/out.ts" }, {}),
-				makeMessageEnd("assistant", "Done."),
-			]));
+			const stdout = makeStdout(
+				withReportResult([
+					makeToolExecutionEnd("grep", { pattern: "foo" }, {}, true),
+					makeToolExecutionEnd("find", { glob: "*.ts" }, {}, true),
+					makeToolExecutionEnd("write", { path: "/src/out.ts" }, {}),
+					makeMessageEnd("assistant", "Done."),
+				]),
+			);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
 
 		it("treats git_commit tool errors as non-fatal", () => {
-			const stdout = makeStdout(withReportResult([
-				makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
-				makeToolExecutionEnd("git_commit", { message: "feat: add feature" }, {}, true),
-				makeMessageEnd("assistant", "Feature implemented, git commit failed."),
-			]));
+			const stdout = makeStdout(
+				withReportResult([
+					makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
+					makeToolExecutionEnd("git_commit", { message: "feat: add feature" }, {}, true),
+					makeMessageEnd("assistant", "Feature implemented, git commit failed."),
+				]),
+			);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 			expect(result.error).toBeUndefined();
@@ -197,10 +211,12 @@ describe("synthesizeWorkerResult", () => {
 		});
 
 		it("non-error tool calls do not trigger failure", () => {
-			const stdout = makeStdout(withReportResult([
-				makeToolExecutionEnd("bash", { command: "echo hi" }, { exitCode: 0 }, false),
-				makeMessageEnd("assistant", "Done."),
-			]));
+			const stdout = makeStdout(
+				withReportResult([
+					makeToolExecutionEnd("bash", { command: "echo hi" }, { exitCode: 0 }, false),
+					makeMessageEnd("assistant", "Done."),
+				]),
+			);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
@@ -213,7 +229,13 @@ describe("synthesizeWorkerResult", () => {
 
 		it("includes stderr in summary when worker fails with non-zero exit code", () => {
 			const stdout = makeStdout([]);
-			const result = synthesizeWorkerResult(stdout, "No API key found for opencode.\nUse /login or set an API key.", 1, null, Date.now() - 100);
+			const result = synthesizeWorkerResult(
+				stdout,
+				"No API key found for opencode.\nUse /login or set an API key.",
+				1,
+				null,
+				Date.now() - 100,
+			);
 			expect(result.status).toBe("failure");
 			expect(result.summary).toContain("No API key found for opencode");
 		});
@@ -274,7 +296,11 @@ describe("synthesizeWorkerResult", () => {
 				timestamp: new Date().toISOString(),
 				cwd: "/project",
 			});
-			const stdout = makeStdout([header, makeReportResultEnd(MINIMAL_HANDOFF_DATA), makeMessageEnd("assistant", "Done.")]);
+			const stdout = makeStdout([
+				header,
+				makeReportResultEnd(MINIMAL_HANDOFF_DATA),
+				makeMessageEnd("assistant", "Done."),
+			]);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
@@ -799,7 +825,10 @@ describe("synthesizeWorkerResult", () => {
 		it("returns success when exit code 0 and structured summary says tests passed", () => {
 			const summaryText =
 				"Done.\n- Files changed: src/index.ts\n- Tests: passed\n- Lint: clean\n- Remaining issues: none";
-			const stdout = makeStdout([makeReportResultEnd(MINIMAL_HANDOFF_DATA), makeMessageEnd("assistant", summaryText)]);
+			const stdout = makeStdout([
+				makeReportResultEnd(MINIMAL_HANDOFF_DATA),
+				makeMessageEnd("assistant", summaryText),
+			]);
 			const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 			expect(result.status).toBe("success");
 		});
@@ -949,10 +978,7 @@ describe("VAL-HANDOFF-005: discoveredIssues extracted with severity levels", () 
 				{ severity: "low", description: "Minor typo in log" },
 			],
 		};
-		const stdout = makeStdout([
-			makeReportResultEnd(handoffData),
-			makeMessageEnd("assistant", "Done."),
-		]);
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
 		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 		expect(result.handoff?.discoveredIssues).toHaveLength(2);
 		expect(result.handoff?.discoveredIssues[0].severity).toBe("high");
@@ -976,14 +1002,19 @@ describe("VAL-HANDOFF-006: commandsRun includes exit codes and observations", ()
 			testsAdded: [] as Array<{ file: string; cases: string[] }>,
 			discoveredIssues: [] as Array<{ severity: string; description: string }>,
 		};
-		const stdout = makeStdout([
-			makeReportResultEnd(handoffData),
-			makeMessageEnd("assistant", "Done."),
-		]);
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
 		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 		expect(result.handoff?.commandsRun).toHaveLength(2);
-		expect(result.handoff?.commandsRun[0]).toEqual({ command: "bun test", exitCode: 0, observation: "47 tests pass" });
-		expect(result.handoff?.commandsRun[1]).toEqual({ command: "bun run lint", exitCode: 1, observation: "2 lint errors in utils.ts" });
+		expect(result.handoff?.commandsRun[0]).toEqual({
+			command: "bun test",
+			exitCode: 0,
+			observation: "47 tests pass",
+		});
+		expect(result.handoff?.commandsRun[1]).toEqual({
+			command: "bun run lint",
+			exitCode: 1,
+			observation: "2 lint errors in utils.ts",
+		});
 	});
 });
 
@@ -999,10 +1030,7 @@ describe("VAL-HANDOFF-007: testsAdded includes file paths and case names", () =>
 			],
 			discoveredIssues: [] as Array<{ severity: string; description: string }>,
 		};
-		const stdout = makeStdout([
-			makeReportResultEnd(handoffData),
-			makeMessageEnd("assistant", "Done."),
-		]);
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
 		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 		expect(result.handoff?.testsAdded).toHaveLength(2);
 		expect(result.handoff?.testsAdded[0]).toEqual({ file: "state.test.ts", cases: ["saves state", "loads state"] });
@@ -1108,10 +1136,7 @@ describe("existing synthesis behavior preserved with handoff", () => {
 			testsAdded: [] as Array<{ file: string; cases: string[] }>,
 			discoveredIssues: [] as Array<{ severity: string; description: string }>,
 		};
-		const stdout = makeStdout([
-			makeReportResultEnd(handoffData),
-			makeMessageEnd("assistant", "Done.", usage),
-		]);
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.", usage)]);
 		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 500);
 		expect(result.metrics.tokensUsed).toBe(2000);
 		expect(result.metrics.durationMs).toBeGreaterThan(0);

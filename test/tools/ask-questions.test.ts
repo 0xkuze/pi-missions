@@ -173,9 +173,7 @@ describe("registerAskQuestionsTool", () => {
 		it("returns declined message when all answers are skipped", async () => {
 			const questions = makeQuestions(2);
 			const showQuestions = () =>
-				Promise.resolve(
-					questions.map((q) => ({ question: q.question, answer: "(skipped)", isCustom: false })),
-				);
+				Promise.resolve(questions.map((q) => ({ question: q.question, answer: "(skipped)", isCustom: false })));
 			const result = await callTool(tmpDir, { questions }, makePlanningState(), showQuestions);
 			const text = result.content[0].text;
 			expect(text).toContain("declined");

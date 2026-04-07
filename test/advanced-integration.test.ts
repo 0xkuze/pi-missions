@@ -150,9 +150,7 @@ function makeReportResultLine(): string {
 }
 
 function makeMockSpawnFn(exitCode: number, output: string): (cmd: string, args: string[], opts: object) => object {
-	const finalOutput = exitCode === 0 && output
-		? [makeReportResultLine(), output].join("\n")
-		: output;
+	const finalOutput = exitCode === 0 && output ? [makeReportResultLine(), output].join("\n") : output;
 	return (_cmd, _args, _opts) => {
 		const stdoutHandlers: Array<(data: Buffer) => void> = [];
 		const closeHandlers: Array<(code: number | null, sig: string | null) => void> = [];
@@ -219,6 +217,7 @@ describe("advanced integration: full lifecycle with report generation", () => {
 
 		// 1. Submit plan from planning state
 		saveState(basePath, makeState("planning"));
+		saveConfig(basePath, { validatorStrictness: "lenient" });
 		const planResult = await invokeTool(tools, "submit_plan", {
 			description: "Build a scalable auth system",
 			milestones: [
@@ -624,6 +623,8 @@ describe("advanced integration: fix feature flow with validation failure (VAL-CR
 			updateWidget: () => {},
 			_spawnOverride: makeMockSpawnFn(0, workerOutputData) as never,
 		});
+
+		saveConfig(basePath, { validatorStrictness: "lenient" });
 
 		const fixFeature = makeFeature("fix-1", "pending", {
 			name: "Fix validation failure",
