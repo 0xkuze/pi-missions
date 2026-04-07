@@ -634,10 +634,9 @@ export default function (pi: ExtensionAPI): void {
 									const newState = transitionState(state, "approved");
 									saveState(basePath, newState);
 									updateWidget(newState, updatedPlan);
-									pi.sendUserMessage(
-										"Plan approved. Call spawn_worker for the first feature.",
-										{ deliverAs: "followUp" },
-									);
+									pi.sendUserMessage("Plan approved. Call spawn_worker for the first feature.", {
+										deliverAs: "followUp",
+									});
 								}
 							},
 						},

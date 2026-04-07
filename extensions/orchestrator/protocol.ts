@@ -103,9 +103,7 @@ function gitWarnings(state: MissionState): string {
 	if (!state.gitSnapshot) return "";
 	const warnings: string[] = [];
 	if (!state.gitSnapshot.autoCommitEnabled) {
-		warnings.push(
-			"WARNING: Dirty repo detected \u2014 auto-commit is disabled.",
-		);
+		warnings.push("WARNING: Dirty repo detected \u2014 auto-commit is disabled.");
 	}
 	if (warnings.length === 0) return "";
 	return `\n${warnings.join("\n")}`;

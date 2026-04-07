@@ -10,6 +10,7 @@ export const DEFAULT_VALIDATOR_MODEL = "openaicodex/gpt-5.4";
 
 const DEFAULT_CONFIG: Required<MissionConfig> = {
 	models: {},
+	modelByComplexity: {},
 	promptingMode: "caveman",
 	spawnAndLearn: true,
 	validation: {
@@ -22,6 +23,7 @@ const DEFAULT_CONFIG: Required<MissionConfig> = {
 	},
 	maxRetries: 3,
 	workerTimeoutMs: 600_000,
+	validatorStrictness: "strict",
 };
 
 export function getDefaultConfig(): MissionConfig {

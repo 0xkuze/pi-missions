@@ -54,7 +54,9 @@ export function getChangedFiles(cwd: string, baseCommit?: string): string[] {
 			const trimmed = line.trim();
 			if (trimmed && !isExcluded(trimmed)) files.add(trimmed);
 		}
-	} catch { /* no tracked changes */ }
+	} catch {
+		/* no tracked changes */
+	}
 	try {
 		const status = execFileSync("git", ["status", "--porcelain", "-uall"], { cwd }).toString();
 		for (const line of status.split("\n")) {
@@ -69,7 +71,9 @@ export function getChangedFiles(cwd: string, baseCommit?: string): string[] {
 				files.add(filePath);
 			}
 		}
-	} catch { /* no git */ }
+	} catch {
+		/* no git */
+	}
 	return [...files];
 }
 

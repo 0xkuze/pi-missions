@@ -133,6 +133,8 @@ export interface MissionState {
 	totalFixFeaturesCreated: number;
 	gitSnapshot?: GitSnapshot;
 	missionStartedAtMs?: number;
+	protocolVersion?: number;
+	turnCount?: number;
 }
 
 export type PromptingMode = "default" | "caveman" | "caveman-full";
@@ -163,6 +165,7 @@ export interface MissionConfig {
 	};
 	maxRetries?: number;
 	workerTimeoutMs?: number;
+	validatorStrictness?: "strict" | "lenient";
 }
 
 export interface ActiveSession {
@@ -197,6 +200,25 @@ export interface PlanMutation {
 	payload: Record<string, unknown>;
 }
 
+export interface WorkerHandoff {
+	whatWasImplemented: string;
+	whatWasLeftUndone: string;
+	commandsRun: Array<{
+		command: string;
+		exitCode: number;
+		observation: string;
+	}>;
+	testsAdded: Array<{
+		file: string;
+		cases: string[];
+	}>;
+	discoveredIssues: Array<{
+		severity: "low" | "medium" | "high";
+		description: string;
+		suggestedFix?: string;
+	}>;
+}
+
 export interface WorkerResult {
 	status: "success" | "failure" | "blocked";
 	summary: string;
@@ -206,6 +228,7 @@ export interface WorkerResult {
 		exitCode: number | null;
 	}>;
 	notes?: string[];
+	handoff?: WorkerHandoff;
 	error?: {
 		kind: "tool" | "validation" | "environment" | "unknown";
 		message: string;
@@ -436,6 +459,8 @@ export const MissionStateSchema = Type.Object({
 	totalFixFeaturesCreated: Type.Number(),
 	gitSnapshot: Type.Optional(GitSnapshotSchema),
 	missionStartedAtMs: Type.Optional(Type.Number()),
+	protocolVersion: Type.Optional(Type.Number()),
+	turnCount: Type.Optional(Type.Number()),
 });
 
 const PromptingModeSchema = Type.Optional(
@@ -474,6 +499,32 @@ export const MissionConfigSchema = Type.Object({
 	),
 	maxRetries: Type.Optional(Type.Number()),
 	workerTimeoutMs: Type.Optional(Type.Number()),
+	validatorStrictness: Type.Optional(Type.Union([Type.Literal("strict"), Type.Literal("lenient")])),
+});
+
+export const ReportResultSchema = Type.Object({
+	whatWasImplemented: Type.String(),
+	whatWasLeftUndone: Type.String(),
+	commandsRun: Type.Array(
+		Type.Object({
+			command: Type.String(),
+			exitCode: Type.Number(),
+			observation: Type.String(),
+		}),
+	),
+	testsAdded: Type.Array(
+		Type.Object({
+			file: Type.String(),
+			cases: Type.Array(Type.String()),
+		}),
+	),
+	discoveredIssues: Type.Array(
+		Type.Object({
+			severity: Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]),
+			description: Type.String(),
+			suggestedFix: Type.Optional(Type.String()),
+		}),
+	),
 });
 
 export const WorkerResultSchema = Type.Object({
@@ -487,6 +538,7 @@ export const WorkerResultSchema = Type.Object({
 		}),
 	),
 	notes: Type.Optional(Type.Array(Type.String())),
+	handoff: Type.Optional(ReportResultSchema),
 	error: Type.Optional(
 		Type.Object({
 			kind: Type.Union([

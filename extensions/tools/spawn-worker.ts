@@ -115,7 +115,11 @@ function findMilestoneForFeature(plan: MissionPlan, featureId: string): MissionP
 
 const RESOLVED_FEATURE_STATUSES = new Set(["done", "skipped", "failed", "blocked"]);
 
-function autoStartMilestone(plan: MissionPlan, state: MissionState, featureId: string): { plan: MissionPlan; state: MissionState } {
+function autoStartMilestone(
+	plan: MissionPlan,
+	state: MissionState,
+	featureId: string,
+): { plan: MissionPlan; state: MissionState } {
 	const milestone = findMilestoneForFeature(plan, featureId);
 	if (!milestone || milestone.status !== "pending") return { plan, state };
 	const now = nowISO();
@@ -137,7 +141,11 @@ function autoStartMilestone(plan: MissionPlan, state: MissionState, featureId: s
 	};
 }
 
-function autoCompleteMilestone(plan: MissionPlan, state: MissionState, featureId: string): { plan: MissionPlan; state: MissionState } {
+function autoCompleteMilestone(
+	plan: MissionPlan,
+	state: MissionState,
+	featureId: string,
+): { plan: MissionPlan; state: MissionState } {
 	const milestone = findMilestoneForFeature(plan, featureId);
 	if (!milestone || milestone.status !== "active") return { plan, state };
 	const allResolved = milestone.features.every((f) => RESOLVED_FEATURE_STATUSES.has(f.status));
@@ -706,7 +714,11 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 						...result,
 						status: "failure",
 						summary: `${result.summary}\n\nValidator: ${validatorResult.feedback}`,
-						error: { kind: "validation", message: `Validator: ${validatorResult.verdict}`, details: validatorResult.feedback },
+						error: {
+							kind: "validation",
+							message: `Validator: ${validatorResult.verdict}`,
+							details: validatorResult.feedback,
+						},
 					};
 				}
 			}
