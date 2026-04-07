@@ -29,6 +29,7 @@ interface MockChildProcess {
 	stdout: { on: (event: string, handler: (data: Buffer) => void) => void };
 	stderr: { on: (event: string, handler: (data: Buffer) => void) => void };
 	killed: boolean;
+	kill: (signal: string) => void;
 	on: (event: string, handler: (...args: unknown[]) => void) => void;
 }
 
@@ -53,6 +54,9 @@ function createMockSpawn(opts: MockSpawnOptions = {}): SpawnFn {
 				},
 			},
 			killed: false,
+			kill: (_signal: string) => {
+				proc.killed = true;
+			},
 			on: (event: string, handler: (...args: unknown[]) => void) => {
 				if (event === "close") closeHandlers.push(handler as (code: number | null, signal: string | null) => void);
 				if (event === "error") errorHandlers.push(handler as (err: Error) => void);

@@ -32,6 +32,7 @@ interface StreamLike {
 interface ProcLike {
 	stdout: StreamLike | null;
 	stderr: StreamLike | null;
+	kill?: (signal: string) => void;
 	on(event: string, handler: (...args: unknown[]) => void): unknown;
 }
 
@@ -339,6 +340,7 @@ function spawnScrutinyProcess(
 			timeoutId = setTimeout(() => {
 				timedOut = true;
 				killed = true;
+				proc.kill?.("SIGTERM");
 				doResolve({
 					stdout: stdoutBuf,
 					stderr: stderrBuf,

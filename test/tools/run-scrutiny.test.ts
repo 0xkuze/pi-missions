@@ -423,6 +423,48 @@ describe("registerRunScrutinyTool", () => {
 			const text = result.content[0].text;
 			expect(text).toMatch(/timeout|timed out/i);
 		});
+
+		it("calls proc.kill('SIGTERM') on timeout to prevent orphaned processes", async () => {
+			const killCalls: string[] = [];
+
+			const mockSpawn: SpawnFn = () => {
+				const proc = {
+					stdout: {
+						on: () => {},
+					},
+					stderr: {
+						on: () => {},
+					},
+					killed: false,
+					kill: (signal: string) => {
+						proc.killed = true;
+						killCalls.push(signal);
+					},
+					on: () => {},
+				};
+
+				return proc as unknown as ReturnType<SpawnFn>;
+			};
+
+			const state = makeState();
+			const plan = localMakePlan();
+			saveState(tmpDir, state);
+			savePlan(tmpDir, plan);
+
+			const { pi, getRegisteredTool } = createMockPi();
+			registerRunScrutinyTool(pi, {
+				basePath: tmpDir,
+				projectDir: tmpDir,
+				updateWidget: () => {},
+				spawnFn: mockSpawn,
+				_timeoutMs: 50,
+			});
+			const tool = getRegisteredTool("run_scrutiny")!;
+			await tool.execute("tool-call-id", { milestoneId: "ms-1" }, undefined, undefined, createMockContext());
+
+			expect(killCalls.length).toBeGreaterThanOrEqual(1);
+			expect(killCalls[0]).toBe("SIGTERM");
+		});
 	})
 
 	describe("VAL-SCRUTINY-010: parses empty/no-issues output", () => {
