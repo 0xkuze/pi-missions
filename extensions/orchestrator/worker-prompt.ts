@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readLibraryTopic } from "../state/library.js";
 import { loadEnvironment } from "../state/manager.js";
@@ -85,10 +85,89 @@ function buildEnvironmentSection(basePath: string): string {
 	return `## Environment\n\n${parts.join("\n\n")}`;
 }
 
+const TSCONFIG_KEYS = [
+	"strict",
+	"module",
+	"target",
+	"moduleResolution",
+	"verbatimModuleSyntax",
+	"isolatedModules",
+] as const;
+
+function buildTsConfigSection(projectDir: string): string {
+	const tsconfigPath = join(projectDir, "tsconfig.json");
+	if (!existsSync(tsconfigPath)) return "";
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(readFileSync(tsconfigPath, "utf8"));
+	} catch {
+		return "";
+	}
+	if (typeof parsed !== "object" || parsed === null || !("compilerOptions" in parsed)) return "";
+	const opts = (parsed as { compilerOptions: Record<string, unknown> }).compilerOptions;
+	if (typeof opts !== "object" || opts === null) return "";
+	const lines: string[] = [];
+	for (const key of TSCONFIG_KEYS) {
+		if (key in opts) {
+			lines.push(`- ${key}: ${String(opts[key])}`);
+		}
+	}
+	if (lines.length === 0) return "";
+	return `## TypeScript Configuration\n\n${lines.join("\n")}`;
+}
+
+function buildPackageInfoSection(projectDir: string): string {
+	const pkgPath = join(projectDir, "package.json");
+	if (!existsSync(pkgPath)) return "";
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(readFileSync(pkgPath, "utf8"));
+	} catch {
+		return "";
+	}
+	if (typeof parsed !== "object" || parsed === null) return "";
+	const pkg = parsed as Record<string, unknown>;
+	const parts: string[] = [];
+	if ("type" in pkg && typeof pkg.type === "string") {
+		parts.push(`- type: ${pkg.type}`);
+	}
+	if ("scripts" in pkg && typeof pkg.scripts === "object" && pkg.scripts !== null) {
+		const scripts = Object.keys(pkg.scripts as Record<string, unknown>);
+		if (scripts.length > 0) {
+			parts.push(`- scripts: ${scripts.join(", ")}`);
+		}
+	}
+	const allDeps: string[] = [];
+	for (const depField of ["dependencies", "devDependencies"] as const) {
+		if (depField in pkg && typeof pkg[depField] === "object" && pkg[depField] !== null) {
+			allDeps.push(...Object.keys(pkg[depField] as Record<string, unknown>));
+		}
+	}
+	if (allDeps.length > 0) {
+		parts.push(`- deps: ${allDeps.join(", ")}`);
+	}
+	if (parts.length === 0) return "";
+	return `## Project Info\n\n${parts.join("\n")}`;
+}
+
+function buildProjectStructureSection(projectDir: string): string {
+	for (const dir of ["src", "extensions", "lib"]) {
+		const dirPath = join(projectDir, dir);
+		if (existsSync(dirPath) && statSync(dirPath).isDirectory()) {
+			const entries = readdirSync(dirPath).sort();
+			if (entries.length === 0) continue;
+			const lines = entries.map((e) => `- ${e}`).join("\n");
+			return `## Project Structure\n\n${dir}/\n${lines}`;
+		}
+	}
+	return "";
+}
+
 export function generateWorkerContext(
 	agentsMdContent?: string,
 	completedFeatures?: CompletedFeatureSummary[],
 	basePath?: string,
+	projectDir?: string,
 ): string {
 	const parts: string[] = [];
 	if (agentsMdContent) {
@@ -103,6 +182,14 @@ export function generateWorkerContext(
 		if (envSection) {
 			parts.push(envSection);
 		}
+	}
+	if (projectDir) {
+		const tsSection = buildTsConfigSection(projectDir);
+		if (tsSection) parts.push(tsSection);
+		const pkgSection = buildPackageInfoSection(projectDir);
+		if (pkgSection) parts.push(pkgSection);
+		const structSection = buildProjectStructureSection(projectDir);
+		if (structSection) parts.push(structSection);
 	}
 	if (completedFeatures && completedFeatures.length > 0) {
 		const featureLines = completedFeatures.map(

@@ -709,7 +709,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			const completedFeatures = collectCompletedFeatures(plan, feature.id);
 			const skill = generateWorkerSkill(feature, agentsMd, config.promptingMode);
 			const prompt = generateWorkerPrompt(feature, params.additionalContext);
-			const context = generateWorkerContext(agentsMd, completedFeatures, deps.basePath);
+			const context = generateWorkerContext(agentsMd, completedFeatures, deps.basePath, deps.projectDir);
 			writeWorkerFiles(deps.basePath, feature.id, attemptNumber, { skill, prompt, context });
 
 			const skillPath = join(runtimeDir, "worker-skill.md");

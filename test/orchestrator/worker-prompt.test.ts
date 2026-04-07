@@ -299,6 +299,208 @@ describe("generateWorkerContext", () => {
 	});
 });
 
+describe("generateWorkerContext with project info", () => {
+	let tmp: ReturnType<typeof createTempDir>;
+
+	beforeEach(() => {
+		tmp = createTempDir("worker-context-project-");
+	});
+
+	afterEach(() => {
+		tmp.cleanup();
+	});
+
+	it("includes TypeScript config section when tsconfig.json exists", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: {
+					strict: true,
+					module: "ESNext",
+					target: "ES2022",
+					moduleResolution: "bundler",
+					verbatimModuleSyntax: true,
+					isolatedModules: true,
+				},
+			}),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("TypeScript Configuration");
+		expect(ctx).toContain("strict: true");
+		expect(ctx).toContain("module: ESNext");
+	});
+
+	it("includes only present tsconfig settings", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, target: "ES2020" },
+			}),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("TypeScript Configuration");
+		expect(ctx).toContain("strict: true");
+		expect(ctx).toContain("target: ES2020");
+		expect(ctx).not.toContain("module:");
+	});
+
+	it("includes Project Info section when package.json exists", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({
+				name: "my-app",
+				type: "module",
+				scripts: { build: "tsc", test: "bun test" },
+				dependencies: { lodash: "^4.0.0" },
+			}),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Info");
+		expect(ctx).toContain("type: module");
+		expect(ctx).toContain("build");
+		expect(ctx).toContain("test");
+		expect(ctx).toContain("lodash");
+	});
+
+	it("includes Project Info with commonjs type", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({ name: "cjs-app", type: "commonjs" }),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("type: commonjs");
+	});
+
+	it("includes Project Structure section when src/ directory exists", () => {
+		const projectDir = tmp.path;
+		mkdirSync(join(projectDir, "src"));
+		writeFileSync(join(projectDir, "src", "index.ts"), "");
+		writeFileSync(join(projectDir, "src", "utils.ts"), "");
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Structure");
+		expect(ctx).toContain("index.ts");
+		expect(ctx).toContain("utils.ts");
+	});
+
+	it("includes Project Structure for extensions/ directory when src/ does not exist", () => {
+		const projectDir = tmp.path;
+		mkdirSync(join(projectDir, "extensions"));
+		writeFileSync(join(projectDir, "extensions", "index.ts"), "");
+		writeFileSync(join(projectDir, "extensions", "types.ts"), "");
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Structure");
+		expect(ctx).toContain("index.ts");
+		expect(ctx).toContain("types.ts");
+	});
+
+	it("omits TypeScript config when no tsconfig.json", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({ name: "no-ts" }),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("TypeScript Configuration");
+	});
+
+	it("omits Project Info when no package.json", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "tsconfig.json"),
+			JSON.stringify({ compilerOptions: { strict: true } }),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("Project Info");
+	});
+
+	it("omits Project Structure when no src/ or extensions/ directories", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({ name: "minimal" }),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("Project Structure");
+	});
+
+	it("combines all sections with AGENTS.md and library content", () => {
+		const projectDir = tmp.path;
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\nAvoid global state");
+		writeFileSync(
+			join(projectDir, "tsconfig.json"),
+			JSON.stringify({ compilerOptions: { strict: true } }),
+		);
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({ name: "combo", type: "module" }),
+		);
+		mkdirSync(join(projectDir, "src"));
+		writeFileSync(join(projectDir, "src", "main.ts"), "");
+		const agentsMd = "## Conventions\n\nUse strict mode.";
+		const ctx = generateWorkerContext(agentsMd, [], basePath, projectDir);
+		expect(ctx).toContain("Use strict mode.");
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("TypeScript Configuration");
+		expect(ctx).toContain("Project Info");
+		expect(ctx).toContain("Project Structure");
+	});
+
+	it("handles malformed tsconfig.json gracefully", () => {
+		const projectDir = tmp.path;
+		writeFileSync(join(projectDir, "tsconfig.json"), "not json {{{");
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("TypeScript Configuration");
+	});
+
+	it("handles malformed package.json gracefully", () => {
+		const projectDir = tmp.path;
+		writeFileSync(join(projectDir, "package.json"), "not json {{{");
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("Project Info");
+	});
+
+	it("works without projectDir — backward compat", () => {
+		const ctx = generateWorkerContext(undefined, []);
+		expect(ctx).toBe("");
+		expect(ctx).not.toContain("TypeScript Configuration");
+		expect(ctx).not.toContain("Project Info");
+		expect(ctx).not.toContain("Project Structure");
+	});
+
+	it("devDependencies included in Project Info", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({
+				name: "with-dev",
+				devDependencies: { typescript: "^5.0.0", vitest: "^1.0.0" },
+			}),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Info");
+		expect(ctx).toContain("typescript");
+		expect(ctx).toContain("vitest");
+	});
+
+	it("omits scripts section when no scripts in package.json", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({ name: "no-scripts", dependencies: { lodash: "^4.0.0" } }),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Info");
+		expect(ctx).toContain("lodash");
+		expect(ctx).not.toContain("Scripts:");
+	});
+});
+
 describe("writeWorkerFiles", () => {
 	let tmp: ReturnType<typeof createTempDir>;
 
