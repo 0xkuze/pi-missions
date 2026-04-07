@@ -4,6 +4,7 @@ import {
 	MissionConfigSchema,
 	MissionStateSchema,
 	ReportResultSchema,
+	type WorkerHandoff,
 	WorkerResultSchema,
 } from "../../extensions/types.js";
 
@@ -311,5 +312,29 @@ describe("VAL-MIGRATION-001: existing state without protocolVersion loads correc
 			totalFixFeaturesCreated: 0,
 		};
 		expect(Value.Check(MissionStateSchema, state)).toBe(true);
+	});
+});
+
+describe("WorkerHandoff derived from ReportResultSchema", () => {
+	it("WorkerHandoff type accepts valid ReportResult data", () => {
+		const handoff: WorkerHandoff = {
+			whatWasImplemented: VALID_REPORT_RESULT.whatWasImplemented,
+			whatWasLeftUndone: VALID_REPORT_RESULT.whatWasLeftUndone,
+			commandsRun: VALID_REPORT_RESULT.commandsRun,
+			testsAdded: VALID_REPORT_RESULT.testsAdded,
+			discoveredIssues: VALID_REPORT_RESULT.discoveredIssues as WorkerHandoff["discoveredIssues"],
+		};
+		expect(Value.Check(ReportResultSchema, handoff)).toBe(true);
+	});
+
+	it("WorkerHandoff type round-trips through ReportResultSchema validation", () => {
+		const handoff: WorkerHandoff = {
+			whatWasImplemented: "Built feature",
+			whatWasLeftUndone: "",
+			commandsRun: [{ command: "bun test", exitCode: 0, observation: "pass" }],
+			testsAdded: [{ file: "test.ts", cases: ["works"] }],
+			discoveredIssues: [],
+		};
+		expect(Value.Check(ReportResultSchema, handoff)).toBe(true);
 	});
 });

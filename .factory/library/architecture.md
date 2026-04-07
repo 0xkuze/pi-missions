@@ -51,7 +51,7 @@ pi-missions is a pi extension providing Factory AI Missions-inspired orchestrati
 ## Protocol Injection Details
 
 - Progressive injection: first turn gets full static + dynamic protocol; subsequent turns get dynamic-only (compact mode).
-- Two compact-mode triggers: (1) `contextUsagePercent > 60%` in ProtocolOptions, (2) legacy `isHighUsage` boolean at >70% in index.ts. The 60% threshold effectively supersedes the 70% one.
+- Single compact-mode threshold: `contextUsagePercent > 60%` in ProtocolOptions. The legacy `isHighUsage` boolean was removed.
 - Dynamic section uses `## MILESTONES`, `## {name} FEATURES`, and `## CURRENT FEATURE` markdown headers.
 - Cache key includes `protocolVersion`, `turnCount` range, and `contextUsagePercent`.
 
@@ -62,8 +62,12 @@ pi-missions is a pi extension providing Factory AI Missions-inspired orchestrati
 
 ## Self-Correction
 
-- `performSelfCorrection()` in spawn-worker.ts creates fix features inline (duplicates create-fix.ts logic). Changes to create_fix_feature tool must be mirrored in performSelfCorrection.
-- autoCompleteMilestone runs before performSelfCorrection, which can result in a 'done' milestone containing a new 'pending' fix feature.
+- `performSelfCorrection()` in spawn-worker.ts uses `addFixFeatureToPlan()` from create-fix.ts as the shared fix-feature creation helper. Changes to `addFixFeatureToPlan` affect both self-correction and the create_fix_feature tool.
+- `performSelfCorrection` runs BEFORE `autoCompleteMilestone`, so a 'done' milestone is never left with a new 'pending' fix feature.
+
+## Type Derivation
+
+- `WorkerHandoff` is derived from `ReportResultSchema` via `type WorkerHandoff = Static<typeof ReportResultSchema>`. This prevents drift between the TypeBox schema and the TypeScript type.
 
 ## Extension API Surface Used
 

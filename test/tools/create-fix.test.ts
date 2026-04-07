@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadPlan, savePlan, saveState } from "../../extensions/state/manager.js";
+import { loadPlan, loadState, savePlan, saveState } from "../../extensions/state/manager.js";
 import { readHistory } from "../../extensions/state/plan-history.js";
-import { registerCreateFixTool } from "../../extensions/tools/create-fix.js";
+import { addFixFeatureToPlan, registerCreateFixTool } from "../../extensions/tools/create-fix.js";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
 import { nowISO } from "../../extensions/utils.js";
 import {
@@ -571,5 +571,179 @@ describe("registerCreateFixTool", () => {
 
 			expect(result.content[0]!.text).toContain("planVersion: 2");
 		});
+	});
+});
+
+describe("addFixFeatureToPlan", () => {
+	let tmpDir: string;
+
+	beforeEach(() => {
+		tmpDir = mkdtempSync(join(tmpdir(), "add-fix-helper-"));
+		writeFileSync(join(tmpDir, "AGENTS.md"), "# Test", "utf8");
+	});
+
+	afterEach(() => {
+		try {
+			rmSync(tmpDir, { recursive: true, force: true });
+		} catch {
+			// ignore
+		}
+	});
+
+	it("creates fix feature with correct fixOrigin fields", () => {
+		const feature = makeFeature({ id: "src-feat", status: "done" });
+		const plan = localMakePlan({
+			milestones: [
+				makeMilestone({
+					id: "ms-1",
+					name: "Core",
+					description: "Core milestone",
+					features: [feature],
+					status: "active",
+				}),
+			],
+		});
+		const state = makeState();
+
+		const result = addFixFeatureToPlan(tmpDir, plan, state, {
+			milestoneId: "ms-1",
+			name: "fix-src-feat",
+			description: "Fix something",
+			acceptanceCriteria: ["Fixed"],
+			relevantFiles: ["src/a.ts"],
+			sourceKind: "worker-failure",
+			sourceFeatureId: "src-feat",
+		});
+
+		expect(result.featureId).toBeTruthy();
+		expect(result.updatedPlan.planVersion).toBe(2);
+		const ms = result.updatedPlan.milestones[0];
+		expect(ms.features.length).toBe(2);
+		const fixFeature = ms.features[1];
+		expect(fixFeature!.name).toBe("fix-src-feat");
+		expect(fixFeature!.fixOrigin!.sourceKind).toBe("worker-failure");
+		expect(fixFeature!.fixOrigin!.sourceFeatureId).toBe("src-feat");
+		expect(fixFeature!.fixOrigin!.sourceMilestoneId).toBe("ms-1");
+	});
+
+	it("increments totalFixFeaturesCreated in returned state", () => {
+		const feature = makeFeature({ id: "src-feat", status: "done" });
+		const plan = localMakePlan({
+			milestones: [
+				makeMilestone({
+					id: "ms-1",
+					features: [feature],
+					status: "active",
+				}),
+			],
+		});
+		const state = makeState({ totalFixFeaturesCreated: 2 });
+
+		const result = addFixFeatureToPlan(tmpDir, plan, state, {
+			milestoneId: "ms-1",
+			name: "fix-test",
+			description: "Fix",
+			acceptanceCriteria: ["Works"],
+			relevantFiles: [],
+			sourceKind: "validation-failure",
+		});
+
+		expect(result.updatedState.totalFixFeaturesCreated).toBe(3);
+	});
+
+	it("appends progress log entry", () => {
+		const feature = makeFeature({ id: "src-feat", status: "done" });
+		const plan = localMakePlan({
+			milestones: [
+				makeMilestone({
+					id: "ms-1",
+					features: [feature],
+					status: "active",
+				}),
+			],
+		});
+		const state = makeState();
+
+		const result = addFixFeatureToPlan(tmpDir, plan, state, {
+			milestoneId: "ms-1",
+			name: "fix-test",
+			description: "Fix",
+			acceptanceCriteria: ["Works"],
+			relevantFiles: [],
+			sourceKind: "worker-failure",
+		});
+
+		const log = result.updatedState.progressLog;
+		const fixEvent = log.find((e) => e.type === "fix_feature_created");
+		expect(fixEvent).toBeDefined();
+		expect(fixEvent!.detail).toContain("fix-test");
+	});
+
+	it("appends plan history mutation", async () => {
+		const feature = makeFeature({ id: "src-feat", status: "done" });
+		const plan = localMakePlan({
+			milestones: [
+				makeMilestone({
+					id: "ms-1",
+					features: [feature],
+					status: "active",
+				}),
+			],
+		});
+		const state = makeState();
+
+		const { appendMutation } = await import("../../extensions/state/plan-history.js");
+		if (!existsSync(join(tmpDir, "plan-history.jsonl"))) {
+			appendMutation(tmpDir, {
+				planVersion: 1,
+				timestamp: nowISO(),
+				actor: "orchestrator",
+				kind: "plan-created",
+				summary: "Plan created",
+				payload: {},
+			});
+		}
+
+		addFixFeatureToPlan(tmpDir, plan, state, {
+			milestoneId: "ms-1",
+			name: "fix-test",
+			description: "Fix",
+			acceptanceCriteria: ["Works"],
+			relevantFiles: [],
+			sourceKind: "worker-failure",
+		});
+
+		const history = readHistory(tmpDir);
+		const fixMutation = history.find((m) => m.kind === "add-fix-feature");
+		expect(fixMutation).toBeDefined();
+		expect(fixMutation!.summary).toContain("fix-test");
+	});
+
+	it("does not modify original plan or state objects", () => {
+		const feature = makeFeature({ id: "src-feat", status: "done" });
+		const plan = localMakePlan({
+			milestones: [
+				makeMilestone({
+					id: "ms-1",
+					features: [feature],
+					status: "active",
+				}),
+			],
+		});
+		const state = makeState();
+		const originalPlanVersion = plan.planVersion;
+		const originalFixCount = state.totalFixFeaturesCreated;
+
+		addFixFeatureToPlan(tmpDir, plan, state, {
+			milestoneId: "ms-1",
+			name: "fix-test",
+			description: "Fix",
+			acceptanceCriteria: ["Works"],
+			relevantFiles: [],
+			sourceKind: "worker-failure",
+		});
+
+		expect(plan.planVersion).toBe(originalPlanVersion);
+		expect(state.totalFixFeaturesCreated).toBe(originalFixCount);
 	});
 });

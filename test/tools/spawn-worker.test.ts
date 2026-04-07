@@ -2046,4 +2046,67 @@ describe("registerSpawnWorkerTool", () => {
 			expect(fixFeatures.length).toBe(0);
 		});
 	});
+
+	describe("self-correction ordering: performSelfCorrection before autoCompleteMilestone", () => {
+		function makeReportResultWithUndone(whatWasLeftUndone: string): string {
+			return JSON.stringify({
+				type: "tool_execution_end",
+				toolName: "report_result",
+				args: {
+					whatWasImplemented: "Partial implementation",
+					whatWasLeftUndone,
+					commandsRun: [],
+					testsAdded: [],
+					discoveredIssues: [],
+				},
+				result: { content: [{ type: "text", text: "Report submitted." }] },
+				isError: false,
+			});
+		}
+
+		it("milestone is NOT auto-completed when self-correction creates a fix feature (pending fix feature remains)", async () => {
+			const spawnWithUndone = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithUndone("Error logging not implemented"),
+					makeMessageEndLine("assistant", "Worker completed with partial work."),
+				],
+				exitCode: 0,
+			});
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high" });
+			registerTool(spawnWithUndone);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const milestoneResult = savedPlan.milestones[0];
+			expect(milestoneResult.status).toBe("active");
+			const fixFeatures = milestoneResult.features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(1);
+			expect(fixFeatures[0].status).toBe("pending");
+		});
+
+		it("milestone IS auto-completed when no self-correction is triggered (all features done)", async () => {
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { validatorStrictness: "lenient" });
+			registerTool(mockSpawnFn);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			expect(savedPlan.milestones[0].status).toBe("done");
+		});
+	});
 });

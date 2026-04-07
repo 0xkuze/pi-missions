@@ -573,9 +573,8 @@ export default function (pi: ExtensionAPI): void {
 
 		const plan = loadPlan(basePath);
 		const config = loadConfig(basePath);
-		const isHighUsage = lastContextPercent !== null && lastContextPercent > 70;
 		const turnCount = state.turnCount ?? 1;
-		const protocol = buildOrchestratorProtocol(state, plan ?? undefined, config, isHighUsage, {
+		const protocol = buildOrchestratorProtocol(state, plan ?? undefined, config, false, {
 			turnCount,
 			contextUsagePercent: lastContextPercent ?? undefined,
 		});

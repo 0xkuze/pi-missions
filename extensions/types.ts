@@ -201,24 +201,7 @@ export interface PlanMutation {
 	payload: Record<string, unknown>;
 }
 
-export interface WorkerHandoff {
-	whatWasImplemented: string;
-	whatWasLeftUndone: string;
-	commandsRun: Array<{
-		command: string;
-		exitCode: number;
-		observation: string;
-	}>;
-	testsAdded: Array<{
-		file: string;
-		cases: string[];
-	}>;
-	discoveredIssues: Array<{
-		severity: "low" | "medium" | "high";
-		description: string;
-		suggestedFix?: string;
-	}>;
-}
+export type WorkerHandoff = Static<typeof ReportResultSchema>;
 
 export interface WorkerResult {
 	status: "success" | "failure" | "blocked";
