@@ -1,0 +1,22 @@
+{
+	"featureId": "misc-scrutiny-fixes-1",
+	"reviewedAt": "2026-04-07T19:10:00.000Z",
+	"commitId": "ce54e4a",
+	"transcriptSkeletonReviewed": true,
+	"diffReviewed": true,
+	"status": "pass",
+	"codeReview": {
+		"summary": "All four fixes are correctly implemented. (1) Self-correction ordering: performSelfCorrection now runs before autoCompleteMilestone in spawn-worker.ts, preventing done milestones with pending fix features. (2) Shared helper: addFixFeatureToPlan extracted into create-fix.ts with clean interfaces, used by both performSelfCorrection and registerCreateFixTool. (3) Threshold alignment: legacy 70% isHighUsage removed from index.ts; false is passed for the compact parameter, leaving the 60% contextUsagePercent as the single threshold. (4) Type derivation: WorkerHandoff is now Static<typeof ReportResultSchema>, preventing drift. Tests are thorough: 9 new tests covering ordering, helper behavior, and type round-tripping. Architecture docs updated to reflect all changes.",
+		"issues": [
+			{
+				"file": "extensions/index.ts",
+				"line": 576,
+				"severity": "non_blocking",
+				"description": "The compact parameter in buildOrchestratorProtocol is now always passed as false from index.ts. The parameter still exists in the function signature and affects the isCompact OR condition. Consider removing the compact parameter entirely (or defaulting it) in a future cleanup since contextUsagePercent and turnCount are the sole effective triggers."
+			}
+		]
+	},
+	"sharedStateObservations": [],
+	"addressesFailureFrom": null,
+	"summary": "All four M1 scrutiny fixes are correctly implemented with good test coverage. Self-correction ordering prevents state inconsistency, the shared helper eliminates code duplication between self-correction and create_fix_feature, the compact-mode threshold is unified at 60%, and WorkerHandoff is derived from the schema. One non-blocking observation: the compact boolean parameter in buildOrchestratorProtocol is now effectively dead (always false) and could be cleaned up."
+}
