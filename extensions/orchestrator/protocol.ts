@@ -197,6 +197,8 @@ CODE REVIEW: For complex features that touch many files or introduce architectur
 
 SCRUTINY: After run_validation returns status "pass" for a milestone, call run_scrutiny for that milestone. The scrutiny reviewer checks for architectural issues, cross-feature gaps, duplication, and convention violations. If scrutiny finds error-severity issues, create fix features addressing them. Warning/info issues can be noted but do not require fixes. If validation fails, skip scrutiny — fix validation failures first.
 
+VERIFIED WORK COMPLETION: When a worker fails (e.g., didn't call report_result) but you verify the work was actually done (files changed, tests pass, correct behavior via bash/read checks), use \`update_mission_state\` with action \`complete_feature\` (NOT \`skip_feature\`) to mark the feature as completed. This ensures totalFeaturesCompleted is accurate. Use \`skip_feature\` only for features that should genuinely be skipped (not needed, out of scope).
+
 INTERVENTION PATTERNS:
 - Feature fails twice \u2192 create a targeted fix feature addressing the specific failure.
 - Feature exhausts retries (3x) \u2192 mark blocked, inform user clearly what went wrong and why.

@@ -374,6 +374,21 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result.toLowerCase()).toContain("never read implementation files");
 		});
 
+		it("instructs using complete_feature for verified work", () => {
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result).toContain("complete_feature");
+			expect(result).toContain("VERIFIED WORK COMPLETION");
+		});
+
+		it("distinguishes complete_feature from skip_feature in protocol", () => {
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			const verifiedSection = result.indexOf("VERIFIED WORK COMPLETION");
+			expect(verifiedSection).toBeGreaterThan(-1);
+			const afterSection = result.slice(verifiedSection);
+			expect(afterSection).toContain("NOT");
+			expect(afterSection).toContain("skip_feature");
+		});
+
 		it("includes dirty repo warning when autoCommitEnabled is false", () => {
 			const dirtyState = makeState({
 				status: "executing",

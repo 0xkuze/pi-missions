@@ -8,6 +8,7 @@ import { nowISO } from "../utils.js";
 const VALID_STATES_FOR_ACTION: Record<string, ReadonlySet<MissionStatus>> = {
 	skip_feature: new Set(["executing"]),
 	block_feature: new Set(["executing"]),
+	complete_feature: new Set(["executing"]),
 	add_feature: new Set(["planning", "draft_review", "executing"]),
 	remove_feature: new Set(["planning", "draft_review", "executing"]),
 };
@@ -64,6 +65,44 @@ function skipFeature(
 				timestamp: now,
 				type: "feature_skipped" as const,
 				detail: `Feature '${found.feature.name}' skipped`,
+				metadata: reason ? { reason } : undefined,
+			},
+		],
+	};
+	return { plan: updatedPlan, state: updatedState };
+}
+
+function completeFeature(
+	plan: MissionPlan,
+	state: MissionState,
+	featureId: string,
+	reason: string | undefined,
+): string | { plan: MissionPlan; state: MissionState } {
+	const found = findFeatureInPlan(plan, featureId);
+	if (!found) return `Feature '${featureId}' not found in plan.`;
+	if (found.feature.status === "done") {
+		return `Cannot complete feature '${featureId}': feature is already completed.`;
+	}
+
+	const now = nowISO();
+	const updatedPlan: MissionPlan = {
+		...plan,
+		milestones: plan.milestones.map((m) => ({
+			...m,
+			features: m.features.map((f) =>
+				f.id === featureId ? { ...f, status: "done" as const, completedAt: now } : f,
+			),
+		})),
+	};
+	const updatedState: MissionState = {
+		...state,
+		totalFeaturesCompleted: state.totalFeaturesCompleted + 1,
+		progressLog: [
+			...state.progressLog,
+			{
+				timestamp: now,
+				type: "feature_complete" as const,
+				detail: `Feature '${found.feature.name}' manually completed`,
 				metadata: reason ? { reason } : undefined,
 			},
 		],
@@ -198,13 +237,14 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 		name: "update_mission_state",
 		label: "Update Mission State",
 		description:
-			"Update feature status or manage plan. Actions: skip_feature, block_feature, note, add_feature, remove_feature. Milestones are auto-managed.",
-		promptSnippet: "Update mission state: skip/block features, add/remove features, notes.",
+			"Update feature status or manage plan. Actions: skip_feature, block_feature, complete_feature, note, add_feature, remove_feature. Milestones are auto-managed.",
+		promptSnippet: "Update mission state: skip/block/complete features, add/remove features, notes.",
 		parameters: Type.Object({
 			action: Type.Union(
 				[
 					Type.Literal("skip_feature"),
 					Type.Literal("block_feature"),
+					Type.Literal("complete_feature"),
 					Type.Literal("note"),
 					Type.Literal("add_feature"),
 					Type.Literal("remove_feature"),
@@ -280,6 +320,17 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				saveState(deps.basePath, result.state);
 				deps.updateWidget(result.state, result.plan);
 				return { content: [{ type: "text", text: `Feature '${targetId}' skipped.` }], details: {} };
+			}
+
+			if (action === "complete_feature") {
+				const result = completeFeature(plan, state, targetId, reason);
+				if (typeof result === "string") {
+					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
+				}
+				savePlan(deps.basePath, result.plan);
+				saveState(deps.basePath, result.state);
+				deps.updateWidget(result.state, result.plan);
+				return { content: [{ type: "text", text: `Feature '${targetId}' manually completed.` }], details: {} };
 			}
 
 			if (action === "block_feature") {

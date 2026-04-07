@@ -609,6 +609,199 @@ describe("registerUpdateStateTool", () => {
 		});
 	});
 
+	describe("complete_feature action", () => {
+		it("sets feature status to done", async () => {
+			const state = makeExecutingState();
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "feature-1", name: "Feature One", status: "active" })],
+					}),
+				],
+			});
+			await callTool(tmpDir, { action: "complete_feature", targetId: "feature-1", reason: "work verified" }, state, plan);
+
+			const savedPlan = loadPlan(tmpDir)!;
+			expect(savedPlan.milestones[0]!.features[0]!.status).toBe("done");
+		});
+
+		it("increments totalFeaturesCompleted", async () => {
+			const state = makeState({ totalFeaturesCompleted: 2 });
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "feature-1", status: "active" })],
+					}),
+				],
+			});
+			await callTool(tmpDir, { action: "complete_feature", targetId: "feature-1" }, state, plan);
+
+			const savedState = loadState(tmpDir)!;
+			expect(savedState.totalFeaturesCompleted).toBe(3);
+		});
+
+		it("does NOT increment totalFeaturesSkipped", async () => {
+			const state = makeState({ totalFeaturesSkipped: 0 });
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "feature-1", status: "active" })],
+					}),
+				],
+			});
+			await callTool(tmpDir, { action: "complete_feature", targetId: "feature-1" }, state, plan);
+
+			const savedState = loadState(tmpDir)!;
+			expect(savedState.totalFeaturesSkipped).toBe(0);
+		});
+
+		it("appends feature_complete progress event with reason", async () => {
+			const state = makeExecutingState();
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "feature-1", name: "Feature One", status: "active" })],
+					}),
+				],
+			});
+			await callTool(
+				tmpDir,
+				{ action: "complete_feature", targetId: "feature-1", reason: "work verified via bash" },
+				state,
+				plan,
+			);
+
+			const savedState = loadState(tmpDir)!;
+			const events = savedState.progressLog.filter((e) => e.type === "feature_complete");
+			expect(events).toHaveLength(1);
+			expect(events[0]!.detail).toContain("Feature One");
+			expect(events[0]!.metadata?.reason).toBe("work verified via bash");
+		});
+
+		it("calls updateWidget", async () => {
+			const state = makeExecutingState();
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "feature-1", status: "active" })],
+					}),
+				],
+			});
+			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
+			await callTool(
+				tmpDir,
+				{ action: "complete_feature", targetId: "feature-1" },
+				state,
+				plan,
+				updateWidget,
+			);
+
+			expect(updateWidget).toHaveBeenCalledTimes(1);
+		});
+
+		it("returns error for unknown featureId", async () => {
+			const state = makeExecutingState();
+			const plan = localMakePlan();
+			const result = await callTool(
+				tmpDir,
+				{ action: "complete_feature", targetId: "nonexistent" },
+				state,
+				plan,
+			);
+
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("nonexistent");
+		});
+
+		it("returns error if feature is already done", async () => {
+			const state = makeExecutingState();
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "feature-1", status: "done" })],
+					}),
+				],
+			});
+			const result = await callTool(
+				tmpDir,
+				{ action: "complete_feature", targetId: "feature-1" },
+				state,
+				plan,
+			);
+
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("already completed");
+		});
+
+		it("returns success message", async () => {
+			const state = makeExecutingState();
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "feature-1", name: "My Feature", status: "active" })],
+					}),
+				],
+			});
+			const result = await callTool(
+				tmpDir,
+				{ action: "complete_feature", targetId: "feature-1", reason: "verified" },
+				state,
+				plan,
+			);
+
+			expect(result.content[0].text).toContain("completed");
+			expect(result.content[0].text).toContain("feature-1");
+		});
+
+		it("is allowed only in executing state", async () => {
+			const invalidStatuses = [
+				"planning",
+				"draft_review",
+				"approved",
+				"validating",
+				"paused",
+				"completed",
+				"failed",
+				"aborted",
+			];
+			for (const status of invalidStatuses) {
+				const state = makeState({ status: status as any });
+				const plan = localMakePlan({
+					milestones: [
+						makeMilestone({
+							features: [makeFeature({ id: "feature-1", status: "active" })],
+						}),
+					],
+				});
+				const result = await callTool(
+					tmpDir,
+					{ action: "complete_feature", targetId: "feature-1" },
+					state,
+					plan,
+				);
+				expect(result.content[0].text).toContain("Error");
+				expect(result.content[0].text).toContain(status);
+			}
+		});
+
+		it("sets completedAt timestamp on the feature", async () => {
+			const state = makeExecutingState();
+			const plan = localMakePlan({
+				milestones: [
+					makeMilestone({
+						features: [makeFeature({ id: "feature-1", status: "active" })],
+					}),
+				],
+			});
+			await callTool(tmpDir, { action: "complete_feature", targetId: "feature-1" }, state, plan);
+
+			const savedPlan = loadPlan(tmpDir)!;
+			const feature = savedPlan.milestones[0]!.features[0]!;
+			expect(feature.completedAt).toBeDefined();
+			expect(feature.completedAt).not.toBe("");
+		});
+	});
+
 	describe("VAL-SCOPE-002: remove_feature", () => {
 		it("removes a pending feature from the plan", async () => {
 			const state = makeExecutingState();

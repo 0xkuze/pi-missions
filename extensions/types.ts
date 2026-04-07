@@ -300,7 +300,7 @@ export interface CreateFixFeatureParams {
 }
 
 export interface UpdateMissionStateParams {
-	action: "start_milestone" | "complete_milestone" | "skip_feature" | "block_feature" | "note";
+	action: "start_milestone" | "complete_milestone" | "skip_feature" | "block_feature" | "complete_feature" | "note";
 	targetId: string;
 	reason?: string;
 }
