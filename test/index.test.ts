@@ -131,7 +131,7 @@ function buildMockCtx(cacheEntries: SessionCacheEntry[] = [], sessionId = "test-
 			getTree: () => [],
 			getSessionName: () => undefined,
 		} as never,
-		modelRegistry: {} as never,
+		modelRegistry: { getAll: () => [] } as never,
 		model: undefined,
 		isIdle: () => true,
 		signal: undefined,
@@ -225,7 +225,6 @@ describe("extension entry point (index.ts)", () => {
 			"update_mission_state",
 			"complete_mission",
 			"run_validation",
-			"commit_changes",
 			"create_fix_feature",
 			"ask_questions",
 		];
@@ -470,7 +469,7 @@ describe("extension entry point (index.ts)", () => {
 	});
 
 	describe("session_start handler u2014 VAL-STATE-011", () => {
-		it("loads state from filesystem when it exists (filesystem takes priority)", () => {
+		it("loads state from filesystem when it exists (filesystem takes priority)", async () => {
 			const state = makePlanningState();
 			saveState(basePath, state);
 
@@ -483,14 +482,14 @@ describe("extension entry point (index.ts)", () => {
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
-			handler({ type: "session_start", reason: "startup" }, ctx);
+			await handler({ type: "session_start", reason: "startup" }, ctx);
 
 			// Widget should be set with content (component factory function from themed rendering)
 			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
 			expect(contentCalls.length).toBeGreaterThan(0);
 		});
 
-		it("falls back to session entries when filesystem state is absent", () => {
+		it("falls back to session entries when filesystem state is absent", async () => {
 			// No filesystem state u2014 only session entry cache
 			const cachedState = makePlanningState();
 			const cacheEntry = makeCacheEntry(cachedState);
@@ -500,7 +499,7 @@ describe("extension entry point (index.ts)", () => {
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
-			handler({ type: "session_start", reason: "startup" }, ctx);
+			await handler({ type: "session_start", reason: "startup" }, ctx);
 
 			// Widget should be set from the cached state
 			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
@@ -536,7 +535,7 @@ describe("extension entry point (index.ts)", () => {
 			expect(contentCalls.length).toBe(0);
 		});
 
-		it("uses the last cache entry when multiple exist", () => {
+		it("uses the last cache entry when multiple exist", async () => {
 			// Two entries: first has planning state, last has executing state
 			const oldEntry = makeCacheEntry(makePlanningState());
 			const newerEntry = makeCacheEntry(makeExecutingState());
@@ -546,7 +545,7 @@ describe("extension entry point (index.ts)", () => {
 
 			const { handlers } = registerExtension(tmpDir);
 			const handler = handlers.get("session_start")!;
-			handler({ type: "session_start", reason: "startup" }, ctx);
+			await handler({ type: "session_start", reason: "startup" }, ctx);
 
 			// Widget should be set with content (component factory)
 			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
@@ -971,6 +970,48 @@ describe("extension entry point (index.ts)", () => {
 			expect(lastEntry.data).not.toBeNull();
 			const cached = lastEntry.data as MissionState;
 			expect(cached.status).toBe("planning");
+		});
+
+		it("cache entries strip progressLog to save tokens", () => {
+			const state = makePlanningState();
+			state.progressLog = [
+				{ timestamp: "2025-01-01T00:00:00Z", type: "mission_started", detail: "Started" },
+				{ timestamp: "2025-01-01T00:01:00Z", type: "feature_start", detail: "Feature started" },
+				{ timestamp: "2025-01-01T00:02:00Z", type: "worker_spawn", detail: "Worker spawned" },
+			];
+			saveState(basePath, state);
+
+			const ctx = buildMockCtx([]);
+			const { handlers, appendedEntries } = registerExtension(tmpDir);
+			handlers.get("session_start")!({ type: "session_start" }, ctx);
+
+			// session_compact triggers appendEntry
+			handlers.get("session_compact")!(
+				{ type: "session_compact", compactionEntry: {}, fromExtension: false },
+				ctx,
+			);
+
+			const cacheEntries = appendedEntries.filter((e) => e.type === "mission-state-cache");
+			expect(cacheEntries.length).toBeGreaterThan(0);
+			const cached2 = cacheEntries[cacheEntries.length - 1].data as MissionState;
+			expect(cached2.progressLog).toEqual([]);
+			expect(cached2.status).toBe("planning");
+			expect(cached2.missionId).toBe(state.missionId);
+		});
+
+		it("session_start restores from stripped cache entry (no progressLog)", async () => {
+			const cachedState = makeExecutingState();
+			cachedState.progressLog = [];
+			const cacheEntry = makeCacheEntry(cachedState);
+			const ctx = buildMockCtx([cacheEntry]);
+			const setWidgetCalls: Array<[string, unknown]> = [];
+			ctx.ui.setWidget = (_key: string, content: unknown) => setWidgetCalls.push([_key as string, content]);
+
+			const { handlers } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+
+			const contentCalls = setWidgetCalls.filter(([, content]) => typeof content === "function");
+			expect(contentCalls.length).toBeGreaterThan(0);
 		});
 	});
 

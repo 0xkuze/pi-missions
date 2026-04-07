@@ -4,7 +4,8 @@ import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Container, Text } from "@mariozechner/pi-tui";
 import { registerCommands } from "./commands.js";
-import { captureGitSnapshot, isGitAvailable } from "./git.js";
+import { resolveModel } from "./config.js";
+import { captureGitSnapshot, ensureGitRepo, isGitAvailable } from "./git.js";
 import { handleMissionInput } from "./input-handler.js";
 import { buildCompactMissionSummary, buildOrchestratorProtocol, clearProtocolCache } from "./orchestrator/protocol.js";
 import { isOnboardingCompleted, saveGlobalConfig } from "./state/global-config.js";
@@ -33,6 +34,10 @@ import { checkOrphanedWorker, killOrphanedWorker } from "./worker-pid.js";
 
 const SESSION_CACHE_KEY = "mission-state-cache";
 const TERMINAL_STATUSES = new Set(["completed", "failed", "aborted"]);
+
+function cachePayload(state: MissionState): MissionState {
+	return { ...state, progressLog: [] };
+}
 
 function hasPendingFeatures(basePath: string): boolean {
 	const plan = loadPlan(basePath);
@@ -305,13 +310,16 @@ export default function (pi: ExtensionAPI): void {
 	// Auto-activates if filesystem state exists on session start.
 	let missionModeActive = false;
 
+	// Tracks the user's model before mission mode was activated so it can be restored on deactivation.
+	let preMissionModelId: string | undefined;
+	let preMissionModelProvider: string | undefined;
+
 	const MISSION_TOOL_NAMES = [
 		"submit_plan",
 		"spawn_worker",
 		"update_mission_state",
 		"complete_mission",
 		"run_validation",
-		"commit_changes",
 		"create_fix_feature",
 		"ask_questions",
 	] as const;
@@ -386,7 +394,7 @@ export default function (pi: ExtensionAPI): void {
 		}
 		// Mirror every state change to the session entry cache so the widget
 		// can be restored after /compact or a fresh session start.
-		pi.appendEntry(SESSION_CACHE_KEY, state);
+		pi.appendEntry(SESSION_CACHE_KEY, cachePayload(state));
 		updateRegistry(state, projectDir, plan);
 	}
 
@@ -425,6 +433,7 @@ export default function (pi: ExtensionAPI): void {
 
 			missionModeActive = true;
 			enableMissionTools();
+			await switchToOrchestratorModel(ctx);
 			// Capture git snapshot if not yet present and git is available.
 			const stateWithSnapshot = captureSnapshotIfNeeded(fsState, projectDir);
 			cleanupOrphanedWorker(stateWithSnapshot, basePath);
@@ -451,8 +460,8 @@ export default function (pi: ExtensionAPI): void {
 			}
 
 			if (recoveryContext || activeState !== recoveredState || stateWithSnapshot !== fsState) {
-				saveState(basePath, activeState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
-				if (recoveredPlan) savePlan(basePath, recoveredPlan, (p) => pi.appendEntry(SESSION_CACHE_KEY, p));
+				saveState(basePath, activeState, (s) => pi.appendEntry(SESSION_CACHE_KEY, cachePayload(s)));
+				if (recoveredPlan) savePlan(basePath, recoveredPlan);
 				if (recoveryContext) pendingRecoveryContext = recoveryContext;
 			}
 			renderMissionWidget(ctx, activeState, recoveredPlan ?? undefined);
@@ -486,6 +495,7 @@ export default function (pi: ExtensionAPI): void {
 		// Also capture snapshot for the restored state.
 		missionModeActive = true;
 		enableMissionTools();
+		await switchToOrchestratorModel(ctx);
 		let cachedState = captureSnapshotIfNeeded(cached, projectDir);
 
 		// Auto-resume from pause so the mission continues from the exact step.
@@ -502,7 +512,7 @@ export default function (pi: ExtensionAPI): void {
 			}
 		}
 
-		saveState(basePath, cachedState, (s) => pi.appendEntry(SESSION_CACHE_KEY, s));
+		saveState(basePath, cachedState, (s) => pi.appendEntry(SESSION_CACHE_KEY, cachePayload(s)));
 		const plan = loadPlan(basePath);
 		renderMissionWidget(ctx, cachedState, plan ?? undefined);
 		if (RESTRICTED_STATUSES.has(cachedState.status)) {
@@ -561,7 +571,7 @@ export default function (pi: ExtensionAPI): void {
 		if (!missionModeActive) return;
 		const state = loadState(basePath);
 		if (state !== null) {
-			pi.appendEntry(SESSION_CACHE_KEY, state);
+			pi.appendEntry(SESSION_CACHE_KEY, cachePayload(state));
 		}
 	});
 
@@ -625,7 +635,7 @@ export default function (pi: ExtensionAPI): void {
 									saveState(basePath, newState);
 									updateWidget(newState, updatedPlan);
 									pi.sendUserMessage(
-										"I have approved the mission plan. Please begin execution by calling spawn_worker for the first feature.",
+										"Plan approved. Call spawn_worker for the first feature.",
 										{ deliverAs: "followUp" },
 									);
 								}
@@ -650,6 +660,9 @@ export default function (pi: ExtensionAPI): void {
 		basePath,
 		projectDir,
 		updateWidget,
+		refreshWidget: (state: MissionState, plan?: MissionPlan) => {
+			if (latestCtx) renderMissionWidget(latestCtx, state, plan);
+		},
 		getThinkingLevel: () => pi.getThinkingLevel(),
 		setThinkingLevel: (level) => pi.setThinkingLevel(level),
 		availableModels: () => {
@@ -748,6 +761,39 @@ export default function (pi: ExtensionAPI): void {
 		);
 	}
 
+	async function switchToOrchestratorModel(ctx: ExtensionContext): Promise<void> {
+		const currentModel = ctx.model;
+		if (currentModel) {
+			preMissionModelId = currentModel.id;
+			preMissionModelProvider = currentModel.provider;
+		}
+		const config = loadConfig(basePath);
+		const plan = loadPlan(basePath);
+		const orchestratorModelId = resolveModel("orchestrator", config, plan);
+		if (!orchestratorModelId) return;
+		if (currentModel && currentModel.id === orchestratorModelId) return;
+		const allModels = ctx.modelRegistry.getAll();
+		const match = allModels.find(
+			(m) => m.id === orchestratorModelId || `${m.provider}/${m.id}` === orchestratorModelId,
+		);
+		if (match) {
+			await pi.setModel(match);
+		}
+	}
+
+	async function restorePreMissionModel(ctx: ExtensionContext): Promise<void> {
+		if (!preMissionModelId) return;
+		const allModels = ctx.modelRegistry.getAll();
+		const match = allModels.find(
+			(m) => m.id === preMissionModelId && (!preMissionModelProvider || m.provider === preMissionModelProvider),
+		);
+		if (match) {
+			await pi.setModel(match);
+		}
+		preMissionModelId = undefined;
+		preMissionModelProvider = undefined;
+	}
+
 	async function activateMissionMode(ctx: ExtensionContext): Promise<void> {
 		if (!isOnboardingCompleted()) {
 			const result = await showOnboarding(ctx);
@@ -761,6 +807,7 @@ export default function (pi: ExtensionAPI): void {
 		}
 		missionModeActive = true;
 		enableMissionTools();
+		await switchToOrchestratorModel(ctx);
 		let state = loadState(basePath);
 		if (state) {
 			if (state.status === "paused" && state.resumeTargetState) {
@@ -795,6 +842,11 @@ export default function (pi: ExtensionAPI): void {
 					// why: best-effort pause
 				}
 			}
+		}
+		if (latestCtx) {
+			restorePreMissionModel(latestCtx).catch(() => {
+				// why: best-effort restore — if model no longer available, don't crash
+			});
 		}
 		clearWidget();
 		missionModeActive = false;
@@ -831,8 +883,17 @@ export default function (pi: ExtensionAPI): void {
 	}
 
 	function startNewMission(description: string): void {
+		ensureGitRepo(projectDir);
 		clearStalePlanData();
 		const now = nowISO();
+		let gitSnapshot: MissionState["gitSnapshot"];
+		try {
+			if (isGitAvailable(projectDir)) {
+				gitSnapshot = captureGitSnapshot(projectDir);
+			}
+		} catch {
+			// why: git snapshot is best-effort — don't block mission start
+		}
 		const newState: MissionState = {
 			missionId: generateId(),
 			status: "planning",
@@ -843,10 +904,16 @@ export default function (pi: ExtensionAPI): void {
 			totalFeaturesFailed: 0,
 			totalFeaturesSkipped: 0,
 			totalFixFeaturesCreated: 0,
+			gitSnapshot,
 		};
 		saveState(basePath, newState);
 		missionModeActive = true;
 		enableMissionTools();
+		if (latestCtx) {
+			switchToOrchestratorModel(latestCtx).catch(() => {
+				// why: best-effort model switch — don't block mission start if model unavailable
+			});
+		}
 		updateWidget(newState);
 		pi.setSessionName(description);
 		pi.sendUserMessage(`New mission: ${description}`);
