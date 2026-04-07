@@ -14,7 +14,7 @@ import {
 	generateWorkerSkill,
 	writeWorkerFiles,
 } from "../orchestrator/worker-prompt.js";
-import { loadConfig, loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
+import { loadConfig, loadEnvironment, loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
 import { appendMutation } from "../state/plan-history.js";
 import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionPlan, MissionState, WorkerAttempt, WorkerResult } from "../types.js";
@@ -22,6 +22,16 @@ import { generateId, getPiInvocation, nowISO } from "../utils.js";
 import { removePidFile, writePidFile } from "../worker-pid.js";
 import { synthesizeWorkerResult } from "./result-synthesis.js";
 import { runValidator } from "./validate-worker.js";
+
+interface SetupCommandResult {
+	success: boolean;
+	command: string;
+	exitCode: number | null;
+	stdout: string;
+	stderr: string;
+}
+
+type RunSetupCommandFn = (command: string, cwd: string, timeoutMs: number) => Promise<SetupCommandResult>;
 
 interface StreamLike {
 	on(event: string, handler: (data: Buffer) => void): unknown;
@@ -51,6 +61,7 @@ interface Deps {
 	_isGitAvailableOverride?: (cwd: string) => boolean;
 	_getChangedFilesOverride?: (cwd: string, baseCommit?: string) => string[];
 	_stageAndCommitOverride?: (cwd: string, files: string[], message: string) => string;
+	_runSetupCommandOverride?: RunSetupCommandFn;
 }
 
 const TERMINAL_FEATURE_STATUSES = new Set(["blocked", "skipped", "done"]);
@@ -526,6 +537,67 @@ function performSelfCorrection(
 	};
 }
 
+const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
+
+function runSetupCommand(command: string, cwd: string, timeoutMs: number): Promise<SetupCommandResult> {
+	return new Promise((resolve) => {
+		const proc = spawn("sh", ["-c", command], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+		let stdout = "";
+		let stderr = "";
+		let timedOut = false;
+		proc.stdout.on("data", (chunk: Buffer) => {
+			stdout += chunk.toString();
+		});
+		proc.stderr.on("data", (chunk: Buffer) => {
+			stderr += chunk.toString();
+		});
+		const timeoutId = setTimeout(() => {
+			timedOut = true;
+			proc.kill("SIGTERM");
+		}, timeoutMs);
+		proc.on("close", (code) => {
+			clearTimeout(timeoutId);
+			resolve({ success: !timedOut && code === 0, command, exitCode: timedOut ? null : code, stdout, stderr });
+		});
+		proc.on("error", (err) => {
+			clearTimeout(timeoutId);
+			resolve({ success: false, command, exitCode: null, stdout, stderr: err.message });
+		});
+	});
+}
+
+export interface EnvironmentSetupResult {
+	ran: boolean;
+	success: boolean;
+	error?: string;
+}
+
+export async function runEnvironmentSetup(
+	basePath: string,
+	projectDir: string,
+	state: MissionState,
+	runSetup: RunSetupCommandFn,
+): Promise<EnvironmentSetupResult> {
+	if (state.environmentSetupComplete) {
+		return { ran: false, success: true };
+	}
+	const env = loadEnvironment(basePath);
+	if (!env?.setupCommands || env.setupCommands.length === 0) {
+		return { ran: false, success: true };
+	}
+	for (const cmd of env.setupCommands) {
+		const result = await runSetup(cmd, projectDir, DEFAULT_SETUP_TIMEOUT_MS);
+		if (!result.success) {
+			return {
+				ran: true,
+				success: false,
+				error: `Environment setup command '${cmd}' failed (exit code ${result.exitCode}): ${result.stderr || result.stdout}`,
+			};
+		}
+	}
+	return { ran: true, success: true };
+}
+
 export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 	const spawnFn: SpawnFn = deps._spawnOverride ?? (spawn as SpawnFn);
 
@@ -560,7 +632,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			return new Text(`${icon} ${output}`, 0, 0);
 		},
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			const state = loadState(deps.basePath);
+			let state = loadState(deps.basePath);
 			if (!state) {
 				return { content: [{ type: "text", text: "Error: no active mission state." }], details: {} };
 			}
@@ -638,6 +710,19 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 						details: {},
 					};
 				}
+			}
+
+			const runSetup = deps._runSetupCommandOverride ?? runSetupCommand;
+			const setupResult = await runEnvironmentSetup(deps.basePath, deps.projectDir, state, runSetup);
+			if (!setupResult.success) {
+				return {
+					content: [{ type: "text", text: `Error: environment setup failed. ${setupResult.error}` }],
+					details: {},
+				};
+			}
+			if (setupResult.ran) {
+				state = { ...state, environmentSetupComplete: true };
+				saveState(deps.basePath, state);
 			}
 
 			const attemptNumber = feature.attempts.length + 1;

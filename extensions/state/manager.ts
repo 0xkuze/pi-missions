@@ -2,8 +2,8 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Value } from "@sinclair/typebox/value";
 import { getDefaultConfig } from "../config.js";
-import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
-import { MissionConfigSchema, MissionPlanSchema, MissionStateSchema } from "../types.js";
+import type { EnvironmentDescriptor, MissionConfig, MissionPlan, MissionState } from "../types.js";
+import { EnvironmentDescriptorSchema, MissionConfigSchema, MissionPlanSchema, MissionStateSchema } from "../types.js";
 
 let stateCache: { basePath: string; state: MissionState } | null = null;
 let planCache: { basePath: string; plan: MissionPlan } | null = null;
@@ -149,4 +149,36 @@ function mergeConfig(defaults: MissionConfig, overrides: MissionConfig): Mission
 		validation: overrides.validation ? { ...defaults.validation, ...overrides.validation } : defaults.validation,
 		git: overrides.git ? { ...defaults.git, ...overrides.git } : defaults.git,
 	};
+}
+
+function environmentPath(basePath: string): string {
+	return join(basePath, "environment.json");
+}
+
+export function saveEnvironment(basePath: string, descriptor: EnvironmentDescriptor): void {
+	atomicWrite(environmentPath(basePath), JSON.stringify(descriptor, null, 2));
+}
+
+export function loadEnvironment(basePath: string): EnvironmentDescriptor | null {
+	const file = environmentPath(basePath);
+	let raw: string;
+	try {
+		raw = readFileSync(file, "utf8");
+	} catch {
+		return null;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch (err) {
+		throw new Error(`environment.json contains invalid JSON: ${(err as Error).message}`);
+	}
+	if (!Value.Check(EnvironmentDescriptorSchema, parsed)) {
+		const errors = [...Value.Errors(EnvironmentDescriptorSchema, parsed)];
+		const first = errors[0];
+		throw new Error(
+			`environment.json failed schema validation: ${first ? `${first.path} ${first.message}` : "unknown error"}`,
+		);
+	}
+	return parsed;
 }

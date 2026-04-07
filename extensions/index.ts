@@ -17,6 +17,7 @@ import { transitionState } from "./state/transitions.js";
 import { type Question, type QuestionAnswer, registerAskQuestionsTool } from "./tools/ask-questions.js";
 import { registerCommitChangesTool } from "./tools/commit-changes.js";
 import { registerCompleteMissionTool } from "./tools/complete.js";
+import { registerConfigureEnvironmentTool } from "./tools/configure-environment.js";
 import { registerCreateFixTool } from "./tools/create-fix.js";
 import { registerRunValidationTool } from "./tools/run-validation.js";
 import { killActiveWorker, registerSpawnWorkerTool } from "./tools/spawn-worker.js";
@@ -324,6 +325,7 @@ export default function (pi: ExtensionAPI): void {
 		"create_fix_feature",
 		"ask_questions",
 		"update_library",
+		"configure_environment",
 	] as const;
 
 	const missionToolSet = new Set<string>(MISSION_TOOL_NAMES);
@@ -707,6 +709,7 @@ export default function (pi: ExtensionAPI): void {
 	registerCommitChangesTool(pi, { basePath, projectDir, updateWidget });
 	registerCreateFixTool(pi, { basePath, updateWidget });
 	registerUpdateLibraryTool(pi, { basePath });
+	registerConfigureEnvironmentTool(pi, { basePath });
 	registerAskQuestionsTool(pi, {
 		basePath,
 		showQuestions: (questions: Question[]) => {

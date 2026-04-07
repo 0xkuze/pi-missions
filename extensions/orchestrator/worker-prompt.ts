@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { readLibraryTopic } from "../state/library.js";
+import { loadEnvironment } from "../state/manager.js";
 import type { Feature, PromptingMode } from "../types.js";
 
 export function generateWorkerSkill(feature: Feature, agentsMdContent?: string, promptingMode?: PromptingMode): string {
@@ -70,6 +71,24 @@ function buildLibrarySection(basePath: string): string {
 	return sections.join("\n\n");
 }
 
+function buildEnvironmentSection(basePath: string): string {
+	const env = loadEnvironment(basePath);
+	if (!env) return "";
+	const hasServices = env.services && env.services.length > 0;
+	const hasEnvVars = env.envVars && env.envVars.length > 0;
+	if (!hasServices && !hasEnvVars) return "";
+	const parts: string[] = [];
+	if (hasServices) {
+		const serviceLines = env.services!.map((s) => `- ${s.name} (${s.type})`).join("\n");
+		parts.push(`### Services\n${serviceLines}`);
+	}
+	if (hasEnvVars) {
+		const envVarLines = env.envVars!.map((v) => `- ${v.key}=${v.secret ? "<secret>" : v.value}`).join("\n");
+		parts.push(`### Environment Variables\n${envVarLines}`);
+	}
+	return `## Environment\n\n${parts.join("\n\n")}`;
+}
+
 export function generateWorkerContext(
 	agentsMdContent?: string,
 	completedFeatures?: CompletedFeatureSummary[],
@@ -83,6 +102,10 @@ export function generateWorkerContext(
 		const librarySection = buildLibrarySection(basePath);
 		if (librarySection) {
 			parts.push(librarySection);
+		}
+		const envSection = buildEnvironmentSection(basePath);
+		if (envSection) {
+			parts.push(envSection);
 		}
 	}
 	if (completedFeatures && completedFeatures.length > 0) {

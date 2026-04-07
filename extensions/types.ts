@@ -135,6 +135,7 @@ export interface MissionState {
 	missionStartedAtMs?: number;
 	protocolVersion?: number;
 	turnCount?: number;
+	environmentSetupComplete?: boolean;
 }
 
 export type PromptingMode = "default" | "caveman" | "caveman-full";
@@ -461,6 +462,7 @@ export const MissionStateSchema = Type.Object({
 	missionStartedAtMs: Type.Optional(Type.Number()),
 	protocolVersion: Type.Optional(Type.Number()),
 	turnCount: Type.Optional(Type.Number()),
+	environmentSetupComplete: Type.Optional(Type.Boolean()),
 });
 
 const PromptingModeSchema = Type.Optional(
@@ -501,6 +503,30 @@ export const MissionConfigSchema = Type.Object({
 	workerTimeoutMs: Type.Optional(Type.Number()),
 	validatorStrictness: Type.Optional(Type.Union([Type.Literal("strict"), Type.Literal("lenient")])),
 });
+
+export const EnvironmentDescriptorSchema = Type.Object({
+	services: Type.Optional(
+		Type.Array(
+			Type.Object({
+				name: Type.String(),
+				type: Type.String(),
+				config: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+			}),
+		),
+	),
+	envVars: Type.Optional(
+		Type.Array(
+			Type.Object({
+				key: Type.String(),
+				value: Type.String(),
+				secret: Type.Optional(Type.Boolean()),
+			}),
+		),
+	),
+	setupCommands: Type.Optional(Type.Array(Type.String())),
+});
+
+export type EnvironmentDescriptor = Static<typeof EnvironmentDescriptorSchema>;
 
 export const ReportResultSchema = Type.Object({
 	whatWasImplemented: Type.String(),
