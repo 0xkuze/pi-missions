@@ -34,6 +34,10 @@ function truncateContent(content: string): string {
 	return content.slice(0, MAX_CONTENT_LENGTH - TRUNCATION_MARKER.length) + TRUNCATION_MARKER;
 }
 
+function skillsDir(basePath: string): string {
+	return join(basePath, "skills");
+}
+
 function initLibrary(basePath: string): void {
 	const dir = libraryDir(basePath);
 	if (!existsSync(dir)) {
@@ -44,6 +48,10 @@ function initLibrary(basePath: string): void {
 		if (!existsSync(filePath)) {
 			writeFileSync(filePath, `${header}\n`, "utf8");
 		}
+	}
+	const skills = skillsDir(basePath);
+	if (!existsSync(skills)) {
+		mkdirSync(skills, { recursive: true });
 	}
 }
 

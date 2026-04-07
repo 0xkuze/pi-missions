@@ -21,6 +21,7 @@ import { registerCreateFixTool } from "./tools/create-fix.js";
 import { registerRunValidationTool } from "./tools/run-validation.js";
 import { killActiveWorker, registerSpawnWorkerTool } from "./tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
+import { registerUpdateLibraryTool } from "./tools/update-library.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
 import type { Feature, GlobalConfig, MissionPlan, MissionState, WorkerResult } from "./types.js";
 import { DraftReviewComponent } from "./ui/draft-review.js";
@@ -322,6 +323,7 @@ export default function (pi: ExtensionAPI): void {
 		"run_validation",
 		"create_fix_feature",
 		"ask_questions",
+		"update_library",
 	] as const;
 
 	const missionToolSet = new Set<string>(MISSION_TOOL_NAMES);
@@ -704,6 +706,7 @@ export default function (pi: ExtensionAPI): void {
 	});
 	registerCommitChangesTool(pi, { basePath, projectDir, updateWidget });
 	registerCreateFixTool(pi, { basePath, updateWidget });
+	registerUpdateLibraryTool(pi, { basePath });
 	registerAskQuestionsTool(pi, {
 		basePath,
 		showQuestions: (questions: Question[]) => {
