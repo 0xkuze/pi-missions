@@ -553,6 +553,39 @@ describe("registerSpawnWorkerTool", () => {
 			expect(capturedArgs).toContain("--append-system-prompt");
 		});
 
+		it("passes --extension flag with report-result-extension.ts to pi process", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			await executeFn!("id", { featureId: "feat-1" });
+			expect(capturedArgs).toContain("--extension");
+			const extIdx = capturedArgs!.indexOf("--extension");
+			const extPath = capturedArgs![extIdx + 1];
+			expect(extPath).toContain("report-result-extension.ts");
+			const { existsSync } = await import("node:fs");
+			expect(existsSync(extPath)).toBe(true);
+		});
+
+		it("writes report-result-extension.ts to runtime directory", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			registerTool(mockSpawnFn);
+			await executeFn!("id", { featureId: "feat-1" });
+			const { existsSync, readFileSync } = await import("node:fs");
+			const { join } = await import("node:path");
+			const extPath = join(testDir, "runtime", "feat-1", "1", "report-result-extension.ts");
+			expect(existsSync(extPath)).toBe(true);
+			const content = readFileSync(extPath, "utf8");
+			expect(content).toContain("report_result");
+			expect(content).toContain("registerTool");
+		});
+
 		it("passes --model arg when config or plan has worker model", async () => {
 			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);

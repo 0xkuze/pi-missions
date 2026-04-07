@@ -194,13 +194,35 @@ function checkDependencies(feature: Feature, allFeatures: Map<string, Feature>):
 	return null;
 }
 
+const REPORT_RESULT_EXTENSION_SOURCE = `import { Type } from "@sinclair/typebox";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+const S = Type.Object({
+  whatWasImplemented: Type.String(),
+  whatWasLeftUndone: Type.String(),
+  commandsRun: Type.Array(Type.Object({ command: Type.String(), exitCode: Type.Number(), observation: Type.String() })),
+  testsAdded: Type.Array(Type.Object({ file: Type.String(), cases: Type.Array(Type.String()) })),
+  discoveredIssues: Type.Array(Type.Object({ severity: Type.Union([Type.Literal("low"),Type.Literal("medium"),Type.Literal("high")]), description: Type.String(), suggestedFix: Type.Optional(Type.String()) })),
+});
+export default function register(pi: ExtensionAPI): void {
+  pi.registerTool({ name: "report_result", label: "Report Result", description: "Report your work results. You MUST call this tool when done.", parameters: S, async execute(_: string, p: typeof S._static) { return { content: [{ type: "text" as const, text: "Result reported successfully.\\nImplemented: " + p.whatWasImplemented }] }; } });
+}`;
+
+function writeReportResultExtension(runtimeDir: string): string {
+	mkdirSync(runtimeDir, { recursive: true });
+	const extensionPath = join(runtimeDir, "report-result-extension.ts");
+	writeFileSync(extensionPath, REPORT_RESULT_EXTENSION_SOURCE, "utf8");
+	return extensionPath;
+}
+
 function buildWorkerArgs(
 	skillPath: string,
 	contextPath: string,
 	promptText: string,
 	workerModel: string | undefined,
+	runtimeDir: string,
 ): string[] {
-	const args: string[] = ["--mode", "json", "-p", "--no-session"];
+	const extensionPath = writeReportResultExtension(runtimeDir);
+	const args: string[] = ["--mode", "json", "-p", "--no-session", "--extension", extensionPath];
 	if (workerModel) {
 		args.push("--model", workerModel);
 	}
@@ -693,7 +715,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			const skillPath = join(runtimeDir, "worker-skill.md");
 			const contextPath = join(runtimeDir, "worker-context.md");
 
-			const workerArgs = buildWorkerArgs(skillPath, contextPath, prompt, workerModel);
+			const workerArgs = buildWorkerArgs(skillPath, contextPath, prompt, workerModel, runtimeDir);
 			const { command, commandArgs } = getPiInvocation(workerArgs);
 
 			let activeState = state;

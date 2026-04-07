@@ -89,6 +89,16 @@ describe("generateWorkerSkill", () => {
 		expect(skill).toContain("report_result");
 	});
 
+	it("report_result section states it is a TOOL CALL", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("TOOL CALL");
+	});
+
+	it("report_result section says You MUST call the report_result tool", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toMatch(/MUST call.*report_result.*tool/i);
+	});
+
 	it("report_result instructions include whatWasImplemented field", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
 		expect(skill).toContain("whatWasImplemented");
@@ -181,6 +191,11 @@ describe("generateWorkerSkill (caveman mode)", () => {
 	it("contains report_result tool instructions", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
 		expect(skill).toContain("report_result");
+	});
+
+	it("report_result section states it is a TOOL", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("TOOL");
 	});
 
 	it("report_result includes whatWasImplemented field", () => {

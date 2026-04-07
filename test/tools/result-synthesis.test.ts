@@ -922,10 +922,20 @@ describe("VAL-HANDOFF-002: result synthesis extracts data from report_result too
 	});
 });
 
-describe("VAL-HANDOFF-003: worker marked as failed if report_result not called (strict mode)", () => {
-	it("returns failure when no report_result event in stdout (strict mode, default)", () => {
+describe("VAL-HANDOFF-003: worker result when report_result not called", () => {
+	it("returns success with warning when no report_result event but files were changed (auto-legacy)", () => {
 		const stdout = makeStdout([
 			makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
+			makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
+			makeMessageEnd("assistant", "Feature implemented."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.notes?.some((n) => n.includes("report_result"))).toBe(true);
+	});
+
+	it("returns failure when no report_result and no files changed", () => {
+		const stdout = makeStdout([
 			makeToolExecutionEnd("bash", { command: "npm test" }, { exitCode: 0 }),
 			makeMessageEnd("assistant", "Feature implemented."),
 		]);
@@ -934,11 +944,11 @@ describe("VAL-HANDOFF-003: worker marked as failed if report_result not called (
 		expect(result.error?.message).toMatch(/report_result|handoff/i);
 	});
 
-	it("returns failure with descriptive error about missing handoff", () => {
+	it("returns success with warning when no report_result but write events present (auto-legacy)", () => {
 		const stdout = makeLegacySuccessStdout();
 		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
-		expect(result.status).toBe("failure");
-		expect(result.error?.message).toContain("report_result");
+		expect(result.status).toBe("success");
+		expect(result.notes?.some((n) => n.includes("report_result"))).toBe(true);
 	});
 });
 
@@ -1047,8 +1057,18 @@ describe("VAL-HANDOFF-008: backward compatibility — legacy workers without rep
 		expect(result.notes?.some((n) => n.includes("report_result") || n.includes("handoff"))).toBe(true);
 	});
 
-	it("strict mode (default) returns failure when report_result missing", () => {
+	it("no report_result with files changed auto-succeeds with warning (graceful degradation)", () => {
 		const stdout = makeLegacySuccessStdout();
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.notes?.some((n) => n.includes("report_result"))).toBe(true);
+	});
+
+	it("no report_result and no files changed returns failure", () => {
+		const stdout = makeStdout([
+			makeToolExecutionEnd("bash", { command: "echo hi" }, { exitCode: 0 }),
+			makeMessageEnd("assistant", "Nothing changed."),
+		]);
 		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
 		expect(result.status).toBe("failure");
 		expect(result.error?.message).toMatch(/report_result|handoff/i);
@@ -1140,5 +1160,70 @@ describe("existing synthesis behavior preserved with handoff", () => {
 		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 500);
 		expect(result.metrics.tokensUsed).toBe(2000);
 		expect(result.metrics.durationMs).toBeGreaterThan(0);
+	});
+});
+
+describe("auto-legacy fallback when report_result missing but work was done", () => {
+	it("returns success with warning when exit code 0 and files changed but no report_result", () => {
+		const stdout = makeStdout([
+			makeToolExecutionEnd("write", { path: "/project/src/feature.ts", content: "code" }),
+			makeToolExecutionEnd("bash", { command: "bun test" }, { exitCode: 0 }),
+			makeMessageEnd("assistant", "Feature implemented."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.notes).toBeDefined();
+		expect(result.notes?.some((n) => n.includes("report_result"))).toBe(true);
+	});
+
+	it("returns success with warning when exit code 0 and edit files changed but no report_result", () => {
+		const stdout = makeStdout([
+			makeToolExecutionEnd("edit", { path: "/project/src/utils.ts", edits: [] }),
+			makeMessageEnd("assistant", "Fixed the bug."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.notes).toBeDefined();
+		expect(result.notes?.some((n) => n.includes("report_result"))).toBe(true);
+	});
+
+	it("returns failure when exit code 0, no report_result, and no files changed", () => {
+		const stdout = makeStdout([
+			makeToolExecutionEnd("bash", { command: "echo hi" }, { exitCode: 0 }),
+			makeMessageEnd("assistant", "Nothing to do."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("failure");
+		expect(result.error?.message).toMatch(/report_result|handoff/i);
+	});
+
+	it("auto-legacy preserves filesChanged and commandsRun", () => {
+		const stdout = makeStdout([
+			makeToolExecutionEnd("write", { path: "/project/a.ts" }),
+			makeToolExecutionEnd("write", { path: "/project/b.ts" }),
+			makeToolExecutionEnd("bash", { command: "bun test" }, { exitCode: 0 }),
+			makeMessageEnd("assistant", "Done."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.filesChanged).toContain("/project/a.ts");
+		expect(result.filesChanged).toContain("/project/b.ts");
+		expect(result.commandsRun).toHaveLength(1);
+	});
+
+	it("explicit legacyMode still works even with no files changed", () => {
+		const stdout = makeStdout([makeMessageEnd("assistant", "Nothing changed.")]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100, { legacyMode: true });
+		expect(result.status).toBe("success");
+		expect(result.notes).toBeDefined();
+	});
+
+	it("auto-legacy does not override explicit strict behavior when exit code is non-zero", () => {
+		const stdout = makeStdout([
+			makeToolExecutionEnd("write", { path: "/project/a.ts" }),
+			makeMessageEnd("assistant", "Failed."),
+		]);
+		const result = synthesizeWorkerResult(stdout, "", 1, null, Date.now() - 100);
+		expect(result.status).toBe("failure");
 	});
 });

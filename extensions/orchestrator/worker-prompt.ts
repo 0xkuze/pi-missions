@@ -17,13 +17,9 @@ ${feature.description}
 ${criteriaList}
 ## Files
 ${filesList}
-## report_result
-When done, call report_result with:
-- whatWasImplemented: string
-- whatWasLeftUndone: string
-- commandsRun: [{command, exitCode, observation}]
-- testsAdded: [{file, cases: [string]}]
-- discoveredIssues: [{severity, description, suggestedFix?}]
+## report_result TOOL CALL
+You MUST call the report_result tool (not output text) before finishing.
+Parameters: whatWasImplemented (string), whatWasLeftUndone (string), commandsRun ([{command, exitCode, observation}]), testsAdded ([{file, cases: [string]}]), discoveredIssues ([{severity, description, suggestedFix?}])
 ## Verification
 Run tests. Run lint. Fix if broken.${conventionsSection}`;
 }
@@ -36,7 +32,7 @@ function generateCavemanWorkerSkill(feature: Feature, agentsMdContent?: string):
 ${feature.description}
 Do: ${criteria}
 Files: ${files}
-report_result: whatWasImplemented, whatWasLeftUndone, commandsRun, testsAdded, discoveredIssues
+report_result TOOL: whatWasImplemented, whatWasLeftUndone, commandsRun, testsAdded, discoveredIssues
 Run tests. Fix if broken.${conventions}`;
 }
 

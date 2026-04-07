@@ -378,7 +378,7 @@ export function synthesizeWorkerResult(
 	}
 
 	if (!hasReportResult) {
-		if (options?.legacyMode) {
+		if (options?.legacyMode || (exitCode === 0 && filesChanged.length > 0)) {
 			return {
 				status: "success",
 				summary,
