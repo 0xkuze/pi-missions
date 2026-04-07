@@ -1,156 +1,78 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/pi-missions-7c3aed?style=for-the-badge&labelColor=1e1e2e&logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiM3YzNhZWQiIHN0cm9rZS13aWR0aD0iMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIj48cGF0aCBkPSJNMTIgMmwzLjA5IDYuMjZMIDIyIDkuMjdsLTUgNC44NyAxLjE4IDYuODhMMTIgMTcuNzdsLTYuMTggMy4yNUw3IDEzLjE0IDIgOS4yN2w2LjkxLTEuMDFMMTIgMnoiLz48L3N2Zz4=" alt="pi-missions" />
-  <br />
-  <img src="https://img.shields.io/badge/version-0.1.0-blue?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-1506_passing-brightgreen?style=flat-square" alt="Tests" />
-  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
+  <img src="https://img.shields.io/badge/pi-missions-7c3aed?style=for-the-badge&labelColor=1e1e2e" alt="pi-missions" />
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-0.3.0-blue?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-1861_passing-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/test_files-52-blue?style=flat-square" alt="Test Files" />
+  <img src="https://img.shields.io/badge/source_files-45-blue?style=flat-square" alt="Source Files" />
   <img src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/pi-v0.65.0+-7c3aed?style=flat-square" alt="Pi Compatible" />
+  <img src="https://img.shields.io/badge/runtime-Node.js-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/tests-Bun-f9f1e1?style=flat-square&logo=bun&logoColor=black" alt="Bun" />
+  <img src="https://img.shields.io/badge/lint-Biome-60a5fa?style=flat-square&logo=biome&logoColor=white" alt="Biome" />
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
 </p>
 
 # pi-missions
 
-Structured orchestration for [pi](https://github.com/nichochar/pi-coding-agent), inspired by [Factory AI Missions](https://www.factory.ai/). Describe a goal, get a plan, execute with isolated workers, validate at every checkpoint.
-
-[Quickstart](#quickstart) · [Features](#features) · [How It Works](#how-it-works) · [Architecture](#architecture) · [Commands](#commands) · [Configuration](#configuration) · [FAQ](#faq)
-
----
-
-```
-╭─ Mission Control ──────────────────────╮ ╭─ Mission Outline ─────────────╮
-│ ● jwt-tokens                           │ │ Milestone 1: Foundation       │
-│ Milestone: auth                        │ │  ✓ user-model                 │
-│ Worker: claude-sonnet-4                │ │  ✓ password-hashing           │
-│ Attempt: 1/3                           │ │  ✓ login-endpoint             │
-│                                        │ │  ● jwt-tokens                 │
-│ Acceptance Criteria                    │ │  ○ refresh-tokens             │
-│  • JWT signing with RS256              │ │                               │
-│  • Token refresh endpoint              │ │ Milestone 2: Validation       │
-│  • 15m access / 7d refresh             │ │  ○ auth audit                 │
-│                                        │ ├─ Progress Log ───────────────┤
-│ Warnings                               │ │ 2m   ✓ user-model done       │
-│  • Repo dirty: auto-commit off         │ │ 5m   ✓ password-hashing      │
-╰────────────────────────────────────────╯ │ 14m  ● jwt-tokens start      │
-                                           ╰───────────────────────────────╯
-P: Pause  R: Redirect  X: Reset  Esc: Close
-```
-
----
-
-## Table of Contents
-
-- [Features](#features)
-- [How It Works](#how-it-works)
-- [Quickstart](#quickstart)
-- [Installation](#installation)
-- [Architecture](#architecture)
-- [Commands](#commands)
-- [Configuration](#configuration)
-- [Mission Control TUI](#mission-control-tui)
-- [Comparison: pi-missions vs Factory AI Droid](#comparison-pi-missions-vs-factory-ai-droid)
-- [Tech Stack](#tech-stack)
-- [FAQ](#faq)
-- [Contributing](#contributing)
-- [License](#license)
-
----
+Structured orchestration for [pi](https://github.com/mariozechner/pi-coding-agent), inspired by [Factory AI Missions](https://www.factory.ai/). Describe a goal, get a plan, execute with isolated workers, validate at every checkpoint.
 
 ## Features
 
-**Planning-first workflow** — The orchestrator reads your codebase, asks clarifying questions, and produces a structured plan before writing any code.
-
-**Structured missions** — Goals decompose into milestones containing features. Validation checkpoints run at every milestone boundary.
-
-**Isolated workers** — Each feature runs in a fresh pi process with clean context. No cross-contamination between tasks.
-
-**Automated validation** — Typecheck, lint, test, and build run at milestone boundaries. Failures generate fix features automatically.
-
-**Mission Control TUI** — A terminal overlay (`Ctrl+Shift+M`) for monitoring progress, pausing, resuming, redirecting, switching models, and reading logs.
-
-**Self-healing execution** — When workers fail or validation catches regressions, the orchestrator creates targeted fix features and retries.
-
-**Crash-safe persistence** — All state lives on the filesystem under `.pi/missions/`. Survives session switches, crashes, and `/compact`. Resume exactly where you left off.
-
-**Git safety** — Pre-mission snapshots, per-feature change tracking, selective staging (never `git add -A`), and dirty-repo awareness. Works without git too.
-
-**Multi-model support** — Assign different models to orchestrator, worker, and validator roles. Switch models mid-mission from Mission Control.
-
-**Completion reports** — Each mission produces a report with timings, outcomes, fix features, git commits, and deviations from the plan.
-
-**Full user control** — Pause, resume, skip features, redirect the orchestrator, re-plan, or abort at any time.
-
-**Interactive planning** — The `ask_questions` tool presents structured questionnaires so the AI gathers exact constraints upfront.
-
----
+- **Planning-first workflow** — The orchestrator reads your codebase, asks clarifying questions via interactive overlays, and produces a structured plan before writing any code.
+- **Structured missions** — Goals decompose into milestones containing features. Validation checkpoints run at every milestone boundary.
+- **Isolated workers** — Each feature runs in a fresh pi process with clean context. No cross-contamination between tasks.
+- **Automated validation** — Typecheck, lint, test, and build run at milestone boundaries. Failures generate fix features automatically.
+- **Worker validation** — After each worker completes, a separate validator worker reviews the output against acceptance criteria and can request fixes before the feature is marked done.
+- **Mission Control TUI** — A full terminal overlay (`Ctrl+Shift+M`) for monitoring progress, pausing, resuming, redirecting, switching models, viewing logs, and managing missions.
+- **Self-healing execution** — When workers fail or validation catches regressions, the orchestrator creates targeted fix features and retries (up to configurable max retries).
+- **Crash-safe persistence** — All state lives on the filesystem under `.pi/missions/`. Survives session switches, crashes, and `/compact`. Auto-resumes from pause on session restart.
+- **Git safety** — Pre-mission snapshots, auto-init for non-git repos, per-feature change tracking, selective staging (never `git add -A`), dirty-repo awareness, and auto-commit after successful workers.
+- **Multi-model support** — Assign different models to orchestrator, worker, and validator roles. Assign models by feature complexity (low/medium/high). Switch models mid-mission from Mission Control.
+- **Onboarding overlay** — First-run setup wizard for choosing models, prompting mode, and spawn-and-learn preference. Configuration persists globally at `~/.pi/missions/global-config.json`.
+- **Prompting modes** — Three modes: `default` (full verbose protocol), `caveman` (terse micro-rule), and `caveman-full` (terse with detailed grammar rules). Configurable per-mission or globally.
+- **Interactive questionnaires** — The `ask_questions` tool presents structured questionnaires with selectable options so the orchestrator gathers exact constraints upfront.
+- **Mission registry** — Cross-project registry at `~/.pi/missions/registry.json` tracks all missions. Mission Control shows a mission list when no mission is active.
+- **Orphaned worker cleanup** — Detects and kills orphaned worker processes from crashed sessions via PID file tracking.
+- **Completion reports** — Each mission produces a markdown report with timings, outcomes, fix features, git commits, and warnings.
+- **Context-aware compaction** — Injects mission state summary into `/compact` so the orchestrator retains awareness after context compaction.
+- **User input transformation** — Messages sent during execution are prefixed with `[User instruction during mission execution]` so the orchestrator interprets them as redirects.
 
 ## How It Works
 
-pi-missions turns your pi session into a project manager backed by an engineering team of isolated workers.
-
-```
- You                    Orchestrator (main LLM)              Workers (isolated pi processes)
-  │                            │                                       │
-  │  /mission "Build auth"     │                                       │
-  ├───────────────────────────>│                                       │
-  │                            │── reads codebase, AGENTS.md ──>       │
-  │                            │── asks clarifying questions ──>       │
-  │  answer questions          │                                       │
-  ├───────────────────────────>│                                       │
-  │                            │── submit_plan ──>                     │
-  │  /mission-approve          │                                       │
-  ├───────────────────────────>│                                       │
-  │                            │── spawn_worker(feature-1) ──────────> │ ← fresh pi process
-  │                            │<──── WorkerResult ────────────────────│
-  │                            │── commit_changes ──>                  │
-  │                            │── spawn_worker(feature-2) ──────────> │ ← fresh pi process
-  │                            │<──── WorkerResult ────────────────────│
-  │                            │── run_validation(milestone-1) ──>     │
-  │                            │   (typecheck ✓, lint ✓, test ✓)       │
-  │                            │── spawn_worker(feature-3) ──────────> │
-  │                            │   ...                                 │
-  │                            │── complete_mission ──>                │
-  │  report.md                 │                                       │
-  │<───────────────────────────│                                       │
-```
-
 ### The Lifecycle
 
-1. **Plan** — You describe a goal. The orchestrator explores your codebase, asks questions, and drafts a plan with milestones and features.
-2. **Review** — You inspect the draft in a structured overlay. Approve it or keep refining.
-3. **Execute** — The orchestrator spawns isolated workers one feature at a time. Each worker gets a generated skill and prompt scoped to its task.
-4. **Validate** — At milestone boundaries, validation commands run automatically. Failures trigger fix features.
-5. **Complete** — A report is generated covering timings, outcomes, and git history.
+1. **Activate** — Run `/mission-mode` to activate mission mode. First-time use shows the onboarding overlay to configure models and preferences.
+2. **Plan** — Describe a goal in Mission Control (`Ctrl+Shift+M → N`) or the orchestrator picks it up. The orchestrator explores your codebase, asks questions via the `ask_questions` overlay, and drafts a plan with milestones and features.
+3. **Review** — The draft plan is shown in a review overlay. Approve it from Mission Control (`A` key) or the draft review overlay.
+4. **Execute** — The orchestrator spawns isolated workers one feature at a time. Each worker gets a generated skill and prompt scoped to its task. After success, a validator worker optionally reviews the output. Auto-commit happens if the repo is clean.
+5. **Validate** — At milestone boundaries, validation commands run automatically. Failures trigger fix feature creation.
+6. **Complete** — A markdown report is generated at `.pi/missions/report.md` covering timings, outcomes, and git history.
 
----
+### Orchestrator and Workers
 
-## Quickstart
+The orchestrator is the main pi session LLM, augmented with mission-specific tools via the extension. It never writes code directly during execution — all implementation is delegated to workers.
 
-```bash
-# 1. Install pi-missions into your project
-cd your-project
-pi install pi-missions
+Workers are spawned as isolated pi processes:
 
-# 2. Start a mission
-/mission "Add user authentication with JWT tokens, password hashing, and role-based access control"
-
-# 3. Answer the orchestrator's questions about your project
-# 4. Review and approve the plan
-/mission-approve
-
-# 5. Open Mission Control anytime with Ctrl+Shift+M
+```
+pi --mode json -p --no-session \
+  --model <worker-model> \
+  --skill .pi/missions/runtime/<featureId>/<attempt>/worker-skill.md \
+  --append-system-prompt .pi/missions/runtime/<featureId>/<attempt>/worker-context.md \
+  "<feature prompt>"
 ```
 
-The orchestrator handles the rest: spawning workers, committing changes, running validation, creating fix features for failures, and generating a final report.
-
----
+Workers have standard pi tools (read, bash, edit, write) and operate on the same project directory. They don't know about missions — they receive a task and execute it. The orchestrator's `edit` and `write` tools are restricted during execution to enforce delegation.
 
 ## Installation
 
 ### Prerequisites
 
-- [pi](https://github.com/nichochar/pi-coding-agent) v0.65.0 or later
+- [pi](https://github.com/mariozechner/pi-coding-agent) with extension support
 - Node.js 18+
-- Git (optional but recommended)
+- Git (optional — missions work without it, git features degrade gracefully)
 
 ### Install
 
@@ -166,174 +88,15 @@ cd pi-missions
 bun install
 ```
 
-Then symlink or copy `extensions/` to your pi extensions path.
-
----
-
-## Architecture
-
-### State Machine
-
-Every mission follows a deterministic state machine. All transitions are triggered by explicit tool calls, never by parsing LLM output.
-
-```
-                          ┌──────────────────────────────────────────┐
-                          │                                          │
-  ┌──────┐  /mission   ┌──────────┐  submit_plan  ┌──────────────┐  │
-  │ idle │────────────> │ planning │──────────────>│ draft_review │  │
-  └──────┘              └──────────┘               └──────┬───────┘  │
-                                                          │ approve  │
-                                                          v          │
-                                              ┌──────────────┐       │
-                                              │   approved   │       │
-                                              └──────┬───────┘       │
-                                                     │ spawn_worker  │
-                                                     v               │
-                                  ┌───────────────────────────┐      │
-                          ┌──────>│        executing          │<─────┘
-                          │       └─────┬──────────────┬──────┘  fix features
-                          │             │              │
-                          │  run_validation    complete_mission
-                          │             v              v
-                          │     ┌──────────────┐  ┌───────────┐
-                          └─────│  validating  │  │ completed │
-                                └──────────────┘  └───────────┘
-
-   Any state ──── /mission-pause ───> || paused (stores resumeTargetState)
-   Any state ──── /mission-reset ───> ✗ aborted
-   Any state ──── unrecoverable ────> ✗ failed
-```
-
-### Orchestrator-to-Worker Flow
-
-```
-┌─────────────────────────────────────────────────────────┐
-│  Main pi Session (Orchestrator)                         │
-│                                                         │
-│  LLM + mission tools (submit_plan, spawn_worker, ...)   │
-│  + standard pi tools (read, bash, edit, write)          │
-│                                                         │
-│  ┌─────────────────────────────────────────────┐        │
-│  │  spawn_worker("jwt-tokens")                 │        │
-│  │                                             │        │
-│  │  1. Read feature from plan.json             │        │
-│  │  2. Generate worker skill + prompt          │        │
-│  │  3. Spawn child process:                    │        │
-│  │     pi --mode json -p --no-session          │        │
-│  │        --model claude-sonnet-4              │        │
-│  │        --skill worker-skill.md              │        │
-│  │        "Implement JWT token signing..."     │        │
-│  │  4. Block until exit                        │        │
-│  │  5. Synthesize WorkerResult                 │        │
-│  └─────────────────────────────────────────────┘        │
-│                    │                                    │
-└────────────────────┼────────────────────────────────────┘
-                     │ spawn
-                     v
-┌─────────────────────────────────────────────────────────┐
-│  Worker Process (Isolated)                              │
-│                                                         │
-│  • Fresh pi session, no mission awareness               │
-│  • Standard tools only: read, bash, edit, write         │
-│  • Scoped by skill + prompt to a single feature         │
-│  • Operates on the same project directory               │
-│  • Never commits — orchestrator handles git             │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Persistence Layout
-
-```
-.pi/missions/
-├── plan.json                    # Mission structure (milestones, features)
-├── state.json                   # Runtime lifecycle state
-├── config.json                  # User configuration
-├── plan-history.jsonl           # Append-only plan mutation log
-├── report.md                    # Generated at completion
-├── lock                         # Advisory file lock
-├── active-session.json          # Lock metadata
-└── runtime/
-    ├── <feature-id>/
-    │   └── <attempt>/
-    │       ├── worker-skill.md
-    │       ├── worker-context.md
-    │       ├── worker-prompt.md
-    │       ├── stdout.log
-    │       ├── stderr.log
-    │       ├── result.json
-    │       └── metadata.json
-    └── validation/
-        └── <milestone-id>/
-            └── <timestamp>/
-                ├── <command>-stdout.log
-                ├── <command>-stderr.log
-                └── result.json
-```
-
-### Project Structure
-
-```
-extensions/
-├── index.ts                     # Entry point: event wiring, tool registration
-├── types.ts                     # All interfaces and type definitions
-├── commands.ts                  # Slash command registration
-├── config.ts                    # Config loading, validation discovery
-├── git.ts                       # Git operations (snapshot, diff, commit)
-├── report.ts                    # Report generation
-├── utils.ts                     # Shared helpers
-├── tools/
-│   ├── submit-plan.ts           # submit_plan — structured plan submission
-│   ├── spawn-worker.ts          # spawn_worker — blocking worker execution
-│   ├── run-validation.ts        # run_validation — milestone validation
-│   ├── commit-changes.ts        # commit_changes — git operations
-│   ├── create-fix.ts            # create_fix_feature — failure recovery
-│   ├── update-state.ts          # update_mission_state — status changes
-│   ├── complete.ts              # complete_mission — finalization
-│   ├── ask-questions.ts         # ask_questions — interactive questionnaires
-│   └── result-synthesis.ts      # Worker result synthesis from JSON events
-├── orchestrator/
-│   ├── protocol.ts              # System prompt injection per state
-│   └── worker-prompt.ts         # Worker skill + prompt generation
-├── state/
-│   ├── manager.ts               # Filesystem persistence + session cache
-│   ├── lock.ts                  # File locking
-│   ├── transitions.ts           # State machine transitions
-│   ├── plan-history.ts          # Append-only mutation log
-│   └── registry.ts              # Cross-project mission registry
-└── ui/
-    ├── widget.ts                # Always-visible progress widget
-    ├── mission-control.ts       # Full TUI overlay (Ctrl+Shift+M)
-    ├── mission-list.ts          # Mission history list with fuzzy search
-    ├── draft-review.ts          # Draft plan review component
-    ├── plan-overlay.ts          # Plan viewer overlay
-    ├── questions-overlay.ts     # Interactive questionnaire overlay
-    ├── validation-view.ts       # Validation progress component
-    ├── blocked-view.ts          # Blocked mission component
-    ├── report-view.ts           # Completion report component
-    ├── status-overlay.ts        # Quick status overlay
-    ├── progress-log.ts          # Event timeline
-    ├── plan-history.ts          # Plan mutation history
-    ├── planning-setup.ts        # Planning phase view
-    └── frame.ts                 # Shared TUI frame primitives
-```
-
----
-
 ## Commands
 
 ### Slash Commands
 
-| Command | Description | Valid States |
-|---------|-------------|--------------|
-| `/mission <description>` | Start a new mission | `idle` |
-| `/mission` | Quick status check | any |
-| `/mission-status` | Detailed status overlay | any active |
-| `/mission-plan` | View current plan | `draft_review`, `approved`, `executing`, `paused` |
-| `/mission-approve` | Approve draft plan, begin execution | `draft_review` |
-| `/mission-pause` | Pause the mission | `planning`, `executing`, `validating` |
-| `/mission-resume` | Resume from pause | `paused` |
-| `/mission-skip` | Skip the current feature | `executing` |
-| `/mission-reset` | Abort and clear all mission state | any |
+| Command | Description |
+|---------|-------------|
+| `/mission-mode` | Toggle mission mode on or off. Activates/deactivates mission tools and protocol injection. Pauses active missions on deactivation. |
+
+All other mission actions (start, approve, pause, resume, skip, redirect, reset, model switching) are handled through **Mission Control** (`Ctrl+Shift+M`).
 
 ### Keyboard Shortcuts
 
@@ -346,31 +109,99 @@ extensions/
 | Key | Action |
 |-----|--------|
 | `P` | Pause / Resume |
+| `S` | Skip current feature |
+| `D` | Mark mission done (sends complete_mission instruction) |
 | `R` | Redirect (send new instructions to the orchestrator) |
-| `X` | Reset mission |
-| `M` | Open model assignment sub-view |
+| `M` | Open model assignment view |
 | `V` | Show validation results |
-| `Esc` | Close overlay |
+| `L` | Show progress logs |
+| `H` | Show plan mutation history |
+| `X` | Reset mission (with confirmation) |
+| `N` | New mission (from mission list view) |
+| `Tab` | Switch active pane (left / right-top / right-bottom) |
+| `Esc` | Close overlay or go back |
 
----
+Mission Control supports mouse wheel scrolling on individual panes and arrow key / page up/down navigation within the active pane.
+
+## State Machine
+
+Every mission follows a deterministic state machine. All transitions are triggered by explicit tool calls or commands, never by parsing LLM output.
+
+```
+idle → planning → draft_review → approved → executing ⇄ validating → completed
+                                                ↑                          
+                                                └── fix features ──────────┘
+
+Any active state → paused (stores resumeTargetState)
+Any state → aborted (via reset)
+Any state → failed (unrecoverable error)
+```
+
+**States:** `planning`, `draft_review`, `approved`, `executing`, `validating`, `paused`, `completed`, `failed`, `aborted`
+
+## Orchestrator Tools
+
+The extension registers these tools for the orchestrator LLM:
+
+| Tool | Description |
+|------|-------------|
+| `submit_plan` | Submit a structured plan with milestones, features, acceptance criteria, and model suggestions. Transitions to `draft_review`. |
+| `spawn_worker` | Spawn an isolated worker for a feature. Blocks until complete. Handles auto-commit, validator review, milestone auto-start/complete. |
+| `run_validation` | Run validation commands at milestone boundaries. Returns structured pass/fail results per command. |
+| `create_fix_feature` | Create a targeted fix feature in response to worker failures or validation failures. |
+| `update_mission_state` | Communicate status changes: start/complete milestones, skip/block features, add notes. |
+| `complete_mission` | Finalize the mission, generate the completion report. |
+| `ask_questions` | Present structured questions to the user via interactive overlay during planning. |
+| `commit_changes` | Stage and commit files changed by a specific feature. |
 
 ## Configuration
 
-Mission configuration lives in `.pi/missions/config.json`. All fields are optional with sensible defaults.
+### Global Configuration
+
+Global preferences live at `~/.pi/missions/global-config.json`, set during onboarding:
 
 ```jsonc
 {
-  // Model assignments per role
   "models": {
-    "orchestrator": "claude-sonnet-4-20250514",   // Planning + execution decisions
-    "worker": "claude-sonnet-4-20250514",          // Feature implementation
-    "validator": "claude-sonnet-4-20250514"        // Reserved for future LLM validation
+    "orchestrator": "opus-4.6",
+    "worker": "opencode-go/glm-5",
+    "validator": "openaicodex/gpt-5.4"
+  },
+  "promptingMode": "caveman",       // "default" | "caveman" | "caveman-full"
+  "spawnAndLearn": true,
+  "onboardingCompleted": true
+}
+```
+
+### Per-Mission Configuration
+
+Mission-specific overrides live at `.pi/missions/config.json`:
+
+```jsonc
+{
+  "models": {
+    "orchestrator": "claude-sonnet-4-20250514",
+    "worker": "claude-sonnet-4-20250514",
+    "validator": "claude-sonnet-4-20250514"
   },
 
-  // Validation commands (auto-detected from package.json if not set)
+  // Assign different worker models by feature complexity
+  "modelByComplexity": {
+    "low": "claude-haiku-4",
+    "medium": "claude-sonnet-4-20250514",
+    "high": "claude-opus-4"
+  },
+
+  // Prompting mode override
+  "promptingMode": "caveman",
+
+  // Spawn-and-learn mode
+  "spawnAndLearn": true,
+
+  // Validation commands (auto-detected from project if not set)
   "validation": {
     "commands": ["npm run typecheck", "npm run lint", "npm test", "npm run build"],
-    "timeoutMs": 120000    // Per-command timeout (default: 2 minutes)
+    "timeoutMs": 120000
   },
 
   // Autonomy level
@@ -381,19 +212,24 @@ Mission configuration lives in `.pi/missions/config.json`. All fields are option
 
   // Git behavior
   "git": {
-    "autoCommit": true     // Auto-commit after each feature (disabled if repo is dirty)
+    "autoCommit": true    // disabled automatically if repo is dirty at mission start
   },
 
   // Retry limit per feature
-  "maxRetries": 3
+  "maxRetries": 3,
+
+  // Worker process timeout (default: 10 minutes)
+  "workerTimeoutMs": 600000
 }
 ```
 
 ### Model Resolution Priority
 
-1. Explicit config in `config.json`
-2. Model suggestions from the plan (`submit_plan` call)
-3. Current session model (fallback)
+1. Complexity-based model (`modelByComplexity`) for workers
+2. Explicit config in `config.json`
+3. Model suggestions from the plan (`submit_plan` call)
+4. Global config (`~/.pi/missions/global-config.json`)
+5. Built-in defaults
 
 ### Validation Discovery
 
@@ -402,189 +238,158 @@ When no commands are configured, pi-missions auto-detects from your project:
 | Source | Detection |
 |--------|-----------|
 | `package.json` | `typecheck`, `lint`, `test`, `build` scripts |
-| `Makefile` | Corresponding targets |
-| Ecosystem | `cargo test`, `go test ./...`, `pytest`, `bun test`, etc. |
+| `bun.lock` | `bun test` |
+| `Cargo.toml` | `cargo test` |
+| `go.mod` | `go test ./...` |
+| `setup.py` / `pyproject.toml` | `pytest` |
+| `Makefile` | `test`, `lint`, `typecheck`, `build` targets |
 
-Commands run in order: typecheck, lint, test, build. No fail-fast — all run regardless of earlier results.
+Commands are sorted in canonical order: typecheck → lint → test → build. All run regardless of earlier results (no fail-fast).
 
----
+## Persistence
 
-## Mission Control TUI
-
-### Widget (Always Visible)
-
-A compact status bar visible throughout the mission:
-
-```
-● Running  ██████▓░░░  4/10 features  ·  Milestone: auth  ·  Feature: jwt-tokens
-~ Paused   ██████▓░░░  4/10 features  ·  waiting for input
-.. Planning ·  analyzing codebase...
-[] Draft    ·  2 milestones, 8 features  ·  awaiting approval
-+ Done     ██████████  10/10 features  ·  report ready
-x Failed   ██████░░░░  6/10 features   ·  blocked on jwt-tokens
-```
-
-Progress bar: `█` done · `▓` active · `░` pending
-
-### Mission Control Overlay (`Ctrl+Shift+M`)
-
-Full-screen TUI overlay with multi-panel layout:
+### Filesystem Layout
 
 ```
-╭─ Current Feature ──────────────────────╮ ╭─ Mission Outline ─────────────╮
-│ jwt-tokens                             │ │ Milestone 1: Foundation       │
-│ Milestone: auth                        │ │  ✓ user-model                 │
-│ Worker: claude-sonnet-4                │ │  ✓ password-hashing           │
-│ Attempt: 1/3                           │ │  ✓ login-endpoint             │
-│                                        │ │  ● jwt-tokens                 │
-│ Acceptance Criteria                    │ │  ○ refresh-tokens             │
-│  • JWT signing with RS256              │ ├─ Progress Log ───────────────┤
-│  • Token refresh endpoint              │ │ 2m   ✓ user-model done       │
-│  • 15m access / 7d refresh             │ │ 5m   ✓ password-hashing      │
-╰────────────────────────────────────────╯ │ 14m  ● jwt-tokens start      │
-                                           ╰───────────────────────────────╯
-P: Pause  R: Redirect  X: Reset  Esc: Close
+.pi/missions/
+├── plan.json                    # Mission structure (milestones, features)
+├── state.json                   # Runtime lifecycle state
+├── config.json                  # Per-mission configuration
+├── plan-history.jsonl           # Append-only plan mutation log
+├── report.md                    # Generated at completion
+├── lock                         # Advisory file lock
+├── active-session.json          # Lock metadata (session ID, PID)
+└── runtime/
+    ├── <feature-id>/
+    │   └── <attempt>/
+    │       ├── worker-skill.md
+    │       ├── worker-context.md
+    │       ├── worker-prompt.md
+    │       ├── validator-skill.md
+    │       ├── validator-prompt.md
+    │       ├── worker.pid
+    │       ├── stdout.log
+    │       ├── stderr.log
+    │       ├── result.json
+    │       └── metadata.json
+    └── validation/
+        └── <milestone-id>/
+            └── <timestamp>/
+                ├── <command>-stdout.log
+                ├── <command>-stderr.log
+                └── result.json
 ```
 
-### Draft Plan Review
+### Global Files
 
 ```
-╭─ Draft Mission Plan ──────────────────────────────────────────────────────╮
-│ Mission: Build multi-tenant auth system                                  │
-│                                                                          │
-│ Milestone 1: Foundation (3 features)                                     │
-│  • user-model: Create User entity and migration                          │
-│  • tenant-model: Create Tenant entity with relations                     │
-│  • session-strategy: Implement session management                        │
-│                                                                          │
-│ Validation: npm run typecheck · npm test · npm run lint                   │
-│ Models:     Worker: claude-sonnet-4 · Est. runs: ~10                     │
-╰──────────────────────────────────────────────────────────────────────────╯
-A: approve   Esc: back to chat
+~/.pi/missions/
+├── global-config.json           # Onboarding preferences, default models
+└── registry.json                # Cross-project mission registry
 ```
 
-### Validation View
+### Crash Recovery
+
+If the orchestrator crashes mid-feature:
+
+1. File locks are released on process exit
+2. On next session start, the extension reads `state.json`
+3. If a feature was in progress, it checks for `result.json`:
+   - Complete result found → reconcile (mark done/failed)
+   - No result → mark attempt as interrupted
+4. If the state was paused, it auto-resumes to the `resumeTargetState`
+5. Orphaned worker processes are detected via PID files and killed
+6. Recovery context is injected into the orchestrator's next system prompt
+
+### Session Entry Cache
+
+State is mirrored to session entries (`mission-state-cache`) for fast widget restoration after `/compact`. Filesystem is always authoritative — session entries are a fallback cache only. A null sentinel is written on reset to prevent stale cache restoration.
+
+## Project Structure
 
 ```
-╭─ Milestone Validation ────────────────────────────────────────────────────╮
-│ Milestone: Auth Flows                                                    │
-│                                                                          │
-│ ✓ typecheck ·························· 2.1s                              │
-│ ● test ·······························                                   │
-│ ○ build                                                                  │
-│                                                                          │
-│ Failures will generate fix features before the mission can proceed.      │
-╰──────────────────────────────────────────────────────────────────────────╯
+extensions/
+├── index.ts                     # Entry point: event wiring, tool registration, recovery
+├── types.ts                     # All interfaces, type definitions, TypeBox schemas
+├── commands.ts                  # Slash command registration (/mission-mode)
+├── config.ts                    # Config loading, validation discovery, model resolution
+├── git.ts                       # Git operations (snapshot, diff, commit, out-of-scope detection)
+├── report.ts                    # Markdown report generation
+├── utils.ts                     # Shared helpers (generateId, formatDuration, getPiInvocation)
+├── input-handler.ts             # User input transformation during execution
+├── worker-pid.ts                # PID file management for orphaned worker detection
+├── tools/
+│   ├── submit-plan.ts           # submit_plan tool
+│   ├── spawn-worker.ts          # spawn_worker tool (blocking, with validator integration)
+│   ├── run-validation.ts        # run_validation tool
+│   ├── commit-changes.ts        # commit_changes tool
+│   ├── create-fix.ts            # create_fix_feature tool
+│   ├── update-state.ts          # update_mission_state tool
+│   ├── complete.ts              # complete_mission tool
+│   ├── ask-questions.ts         # ask_questions tool (interactive overlay)
+│   ├── validate-worker.ts       # Validator worker spawning and verdict parsing
+│   └── result-synthesis.ts      # Worker result synthesis from JSON event stream
+├── orchestrator/
+│   ├── protocol.ts              # System prompt injection per state (default + caveman modes)
+│   ├── caveman-rules.ts         # Caveman output style rules
+│   ├── worker-prompt.ts         # Worker skill, prompt, and context generation
+│   └── validator-prompt.ts      # Validator skill and prompt generation
+├── state/
+│   ├── manager.ts               # Filesystem persistence + session entry cache
+│   ├── lock.ts                  # File locking + conflict detection
+│   ├── transitions.ts           # State machine transitions
+│   ├── plan-history.ts          # Append-only mutation log
+│   ├── registry.ts              # Cross-project mission registry (~/.pi/missions/registry.json)
+│   └── global-config.ts         # Global config loading/saving (~/.pi/missions/global-config.json)
+└── ui/
+    ├── widget.ts                # Always-visible progress widget
+    ├── mission-control.ts       # Full TUI overlay with multi-panel layout
+    ├── mission-list.ts          # Mission history list
+    ├── draft-review.ts          # Draft plan review + approval component
+    ├── plan-overlay.ts          # Plan viewer overlay
+    ├── questions-overlay.ts     # Interactive questionnaire overlay
+    ├── onboarding-overlay.ts    # First-run setup wizard
+    ├── validation-view.ts       # Validation progress component
+    ├── blocked-view.ts          # Blocked/failed feature component
+    ├── report-view.ts           # Completion report + model view component
+    ├── status-overlay.ts        # Quick status overlay
+    ├── progress-log.ts          # Event timeline view
+    ├── plan-history.ts          # Plan mutation history view
+    ├── planning-setup.ts        # Planning phase view
+    ├── count-progress.ts        # Progress counting logic
+    └── frame.ts                 # Shared TUI frame primitives and theming
 ```
 
----
+## Event Handling
 
-## Comparison: pi-missions vs Factory AI Droid
+The extension hooks into pi's lifecycle events:
 
-pi-missions replicates the core workflow of [Factory AI's Droid Missions](https://www.factory.ai/) within pi's terminal extension architecture.
-
-| Aspect | Factory AI Droid | pi-missions |
-|--------|-----------------|-------------|
-| **Runtime** | Cloud containers or local | Local only (pi processes) |
-| **Worker isolation** | Separate cloud sessions | Spawned pi processes (`--no-session`) |
-| **Planning** | Conversational, multi-turn | Conversational, multi-turn |
-| **Structured plans** | Milestones / features | Milestones / features |
-| **Validation** | Commands + computer-use (visual QA) | Commands only (typecheck, lint, test, build) |
-| **Fix features** | Auto-generated on failure | Auto-generated on failure |
-| **Parallelism** | Targeted within milestones | Sequential (v1) |
-| **Multi-model** | Per-role model assignment | Per-role model assignment |
-| **Persistence** | Cloud-managed state | Filesystem (`.pi/missions/`) |
-| **UI** | IDE integration + CLI | Terminal TUI overlay |
-| **Skill learning** | Skills refined across missions | Per-feature skill generation |
-| **User control** | Pause, redirect, skip | Pause, redirect, skip, re-plan |
-| **Git safety** | Built-in | Snapshot, selective staging, dirty-repo aware |
-| **Crash recovery** | Cloud-managed | Filesystem + lock-based recovery |
-| **Duration profile** | Median ~2h, up to 16 days | Same — long-running missions supported |
-| **Enterprise** | SSO, RBAC, audit logging | Not in scope |
-| **Cost** | Commercial SaaS | Free and open source |
-
----
+| Event | Behavior |
+|-------|----------|
+| `session_start` | Load state from filesystem, run crash recovery, auto-resume from pause, acquire lock, handle lock conflicts, detect orphaned workers |
+| `before_agent_start` | Inject orchestrator protocol into system prompt based on current state and prompting mode |
+| `session_shutdown` | Kill active workers, auto-pause active missions |
+| `session_compact` | Cache state to session entry for post-compact restoration |
+| `session_before_compact` | Inject compact mission summary into custom instructions |
+| `context` | Track context usage percentage for high-usage protocol switching |
+| `input` | Transform user messages during execution |
 
 ## Tech Stack
 
 | Technology | Role |
 |------------|------|
-| [pi](https://github.com/nichochar/pi-coding-agent) | Host coding agent and extension runtime |
-| [TypeScript](https://www.typescriptlang.org/) | Strict mode, full type safety |
-| [TypeBox](https://github.com/sinclairzx81/typebox) | Runtime schema validation for tool parameters |
-| [pi-tui](https://github.com/nichochar/pi-coding-agent) | Terminal UI components for Mission Control |
+| [pi](https://github.com/mariozechner/pi-coding-agent) | Host coding agent and extension runtime |
+| TypeScript | Strict mode, full type safety |
+| [TypeBox](https://github.com/sinclairzx81/typebox) | Runtime schema validation for tool parameters and state |
+| [pi-tui](https://github.com/mariozechner/pi-coding-agent) | Terminal UI components for Mission Control |
 | [Bun](https://bun.sh/) | Test runner and development tooling |
 | [Biome](https://biomejs.dev/) | Linting and formatting |
 | Node.js `child_process` | Worker process isolation |
 | Filesystem (`.pi/missions/`) | Canonical state persistence |
 
----
+## Development
 
-## FAQ
-
-<details>
-<summary><strong>How is this different from just using pi normally?</strong></summary>
-<br>
-
-pi handles one task at a time in a single context. pi-missions adds orchestration: it breaks large goals into structured plans, executes each piece with isolated workers that have clean context, validates at checkpoints, auto-fixes failures, and tracks everything. Think of it as giving pi a project manager.
-
-</details>
-
-<details>
-<summary><strong>Can I use different models for different parts of the mission?</strong></summary>
-<br>
-
-Yes. Set `models.orchestrator` and `models.worker` in `.pi/missions/config.json`, or switch models live from the Mission Control overlay (`M` key). The orchestrator can also suggest models during planning.
-
-</details>
-
-<details>
-<summary><strong>What happens if a worker fails?</strong></summary>
-<br>
-
-The orchestrator receives the full `WorkerResult` including error details, changed files, and commands run. It can retry the feature (up to `maxRetries`, default 3), create a fix feature targeting the specific issue, skip the feature, or ask for your guidance. Validation failures at milestone boundaries also trigger automatic fix feature creation.
-
-</details>
-
-<details>
-<summary><strong>Is my git history safe?</strong></summary>
-<br>
-
-Yes. pi-missions takes a pre-mission snapshot, tracks per-feature file changes, and only stages files changed by each worker — never `git add -A`. If your repo is dirty when the mission starts, auto-commit is disabled. You can review all changes before they are committed.
-
-</details>
-
-<details>
-<summary><strong>Can I pause and resume a mission?</strong></summary>
-<br>
-
-Yes. Use `/mission-pause` or press `P` in Mission Control. The current worker finishes (it is not killed), but no new workers spawn. Resume with `/mission-resume`. State persists to the filesystem, so you can close pi entirely and pick up in a new session.
-
-</details>
-
-<details>
-<summary><strong>What if my session crashes mid-mission?</strong></summary>
-<br>
-
-All state lives on the filesystem under `.pi/missions/`. On the next session start, the extension detects the interrupted mission, reconciles any in-progress work by checking for completed results, and the orchestrator resumes from where it left off.
-
-</details>
-
-<details>
-<summary><strong>Does it work without git?</strong></summary>
-<br>
-
-Yes. Git features degrade gracefully. Validation, worker execution, and reporting all work without git. The `commit_changes` tool returns a skip message, and file change tracking falls back to filesystem-level summaries.
-
-</details>
-
----
-
-## Contributing
-
-Contributions welcome. The project follows clear conventions.
-
-### Development Setup
+### Setup
 
 ```bash
 git clone https://github.com/0xkuze/pi-missions.git
@@ -592,10 +397,10 @@ cd pi-missions
 bun install
 ```
 
-### Running Tests
+### Tests
 
 ```bash
-bun test                    # All tests
+bun test                    # All tests (1861 tests across 52 files)
 bun test --watch            # Watch mode
 bun test test/tools/        # Specific directory
 ```
@@ -612,26 +417,6 @@ npx @biomejs/biome check --write extensions/  # Fix
 ```bash
 npx tsc --noEmit
 ```
-
-### Code Conventions
-
-- TypeScript strict mode, no implicit returns, no unused variables
-- `interface` for public API contracts, `type` for unions and aliases
-- `import type` for type-only imports, `.js` extensions on relative imports
-- Zero comments — if code needs explanation, refactor it
-- Early returns and guard clauses, no deep nesting
-- Conventional commits: `feat:`, `fix:`, `refactor:`, `test:`, `chore:`
-- Tests must pass before every commit
-
-### Architecture Principles
-
-- State transitions flow through explicit tool calls, not regex parsing of LLM output
-- Filesystem is the source of truth; session entries are a cache
-- Workers never know about missions — they receive a task and execute it
-- The orchestrator LLM decides what to do; the extension provides the tools
-- Keep it simple or don't do it
-
----
 
 ## License
 
