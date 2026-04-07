@@ -106,13 +106,56 @@ function progressSummary(state: MissionState, plan: MissionPlan | undefined): st
 
 	const currentFeatureIndex = allFeatures.findIndex((f) => f.id === state.currentFeatureId) + 1;
 
-	const nextPendingFeature = allFeatures.find((f) => f.status === "pending" && f.id !== state.currentFeatureId);
+	const nextPendingFeature =
+		currentMilestone?.features.find((f) => f.status === "pending" && f.id !== state.currentFeatureId) ??
+		allFeatures.find((f) => f.status === "pending" && f.id !== state.currentFeatureId);
 	const nextFeatureName = nextPendingFeature?.name ?? "(no more features)";
 
 	return `Milestone ${currentMilestoneIndex > 0 ? currentMilestoneIndex : "?"}/${totalMilestones > 0 ? totalMilestones : "?"}: ${currentMilestoneName}
 Feature ${currentFeatureIndex > 0 ? currentFeatureIndex : "?"}/${totalFeatures > 0 ? totalFeatures : "?"}: ${currentFeatureName}
 Next: ${nextFeatureName}
 Progress: ${completedFeatures}/${totalFeatures} features done`;
+}
+
+function buildPlanContext(state: MissionState, plan: MissionPlan | undefined): string {
+	if (!plan) return "";
+	const allMilestones = plan.milestones;
+	const allFeatures = allMilestones.flatMap((m) => m.features);
+	const currentMilestone = allMilestones.find((m) => m.id === state.currentMilestoneId);
+	const currentFeature = allFeatures.find((f) => f.id === state.currentFeatureId);
+
+	const lines: string[] = [];
+
+	lines.push("## MILESTONES");
+	for (const ms of allMilestones) {
+		if (ms.id === state.currentMilestoneId) {
+			const done = ms.features.filter((f) => f.status === "done" || f.status === "skipped").length;
+			lines.push(`  ${ms.name}: active (${done}/${ms.features.length} done)`);
+		} else if (ms.status === "done") {
+			lines.push(`  ${ms.name}: done`);
+		} else {
+			lines.push(`  ${ms.name}: ${ms.features.length} features`);
+		}
+	}
+
+	if (currentMilestone) {
+		lines.push("");
+		lines.push(`## ${currentMilestone.name} FEATURES`);
+		for (const f of currentMilestone.features) {
+			lines.push(`  ${f.name}: ${f.status}`);
+		}
+	}
+
+	if (currentFeature) {
+		lines.push("");
+		lines.push("## CURRENT FEATURE");
+		lines.push(`  ${currentFeature.name}: ${currentFeature.description}`);
+		for (const c of currentFeature.acceptanceCriteria) {
+			lines.push(`  - ${c}`);
+		}
+	}
+
+	return lines.join("\n");
 }
 
 function gitWarnings(state: MissionState): string {
@@ -132,9 +175,12 @@ function executingProtocol(
 ): string {
 	const progress = progressSummary(state, plan);
 	const warnings = gitWarnings(state);
+	const planContext = buildPlanContext(state, plan);
 	return `## MISSION ORCHESTRATOR \u2014 EXECUTING
 
 ${progress}${warnings}
+
+${planContext}
 
 You are a project manager, not an implementer. Never read implementation files, edit code, or run tests. Delegate all implementation to workers.
 During EXECUTION: do NOT use \`edit\` or \`write\`. All code changes MUST go through workers via \`spawn_worker\`.

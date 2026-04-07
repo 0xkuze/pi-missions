@@ -358,9 +358,9 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result).toContain("auth-endpoint");
 		});
 
-		it("is under 600 tokens (char count < 3000)", () => {
+		it("is under 800 tokens (char count < 4000)", () => {
 			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
-			expect(result.length).toBeLessThan(3000);
+			expect(result.length).toBeLessThan(4000);
 			expect(result.length).toBeGreaterThan(200);
 		});
 
@@ -776,7 +776,13 @@ describe("buildOrchestratorProtocol", () => {
 		});
 
 		it("first turn includes autonomy instructions", () => {
-			const result = buildOrchestratorProtocol(state, plan, { promptingMode: "default", autonomy: "medium" }, false, { turnCount: 1 }) as string;
+			const result = buildOrchestratorProtocol(
+				state,
+				plan,
+				{ promptingMode: "default", autonomy: "medium" },
+				false,
+				{ turnCount: 1 },
+			) as string;
 			expect(result.toLowerCase()).toContain("autonomy");
 		});
 
@@ -972,9 +978,15 @@ describe("buildOrchestratorProtocol", () => {
 				currentFeatureId: "f2",
 			});
 			const plan = makeProtocolPlan();
-			const first = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1, contextUsagePercent: 40 });
+			const first = buildOrchestratorProtocol(state, plan, VERBOSE, false, {
+				turnCount: 1,
+				contextUsagePercent: 40,
+			});
 			clearProtocolCache();
-			const second = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1, contextUsagePercent: 80 });
+			const second = buildOrchestratorProtocol(state, plan, VERBOSE, false, {
+				turnCount: 1,
+				contextUsagePercent: 80,
+			});
 			expect(first).not.toEqual(second);
 		});
 	});
@@ -1051,6 +1063,353 @@ describe("buildOrchestratorProtocol", () => {
 			const first = buildOrchestratorProtocol(state, plan, cavemanConfig, false, { turnCount: 1 }) as string;
 			const second = buildOrchestratorProtocol(state, plan, cavemanConfig, false, { turnCount: 2 }) as string;
 			expect(second.length).toBeLessThan(first.length);
+		});
+	});
+
+	describe("plan context in dynamic section (VAL-PLANCTX-001)", () => {
+		it("includes all milestone names with their statuses", () => {
+			const plan = makePlan({
+				description: "Build CRM",
+				milestones: [
+					makeMilestone({ id: "m1", name: "Foundation", status: "done", features: [] }),
+					makeMilestone({ id: "m2", name: "Auth System", status: "active", features: [] }),
+					makeMilestone({ id: "m3", name: "Dashboard", status: "pending", features: [] }),
+				],
+			});
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m2",
+			});
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toContain("Foundation");
+			expect(result).toContain("Auth System");
+			expect(result).toContain("Dashboard");
+			expect(result.toLowerCase()).toMatch(/done|completed/);
+			expect(result.toLowerCase()).toMatch(/active/);
+			expect(result.toLowerCase()).toMatch(/pending/);
+		});
+
+		it("active milestone is clearly marked", () => {
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({ id: "m1", name: "Done MS", status: "done", features: [] }),
+					makeMilestone({ id: "m2", name: "Active MS", status: "active", features: [] }),
+				],
+			});
+			const state = makeState({ status: "executing", currentMilestoneId: "m2" });
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			const activeMatch = result.match(/Active MS.*active|active.*Active MS/i);
+			expect(activeMatch).not.toBeNull();
+		});
+	});
+
+	describe("plan context — feature names with statuses (VAL-PLANCTX-002)", () => {
+		it("includes current milestone feature names and statuses", () => {
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({
+						id: "m1",
+						name: "Core",
+						status: "active",
+						features: [
+							makeFeature({ id: "f1", name: "user-model", status: "done" }),
+							makeFeature({ id: "f2", name: "auth-api", status: "active" }),
+							makeFeature({ id: "f3", name: "token-refresh", status: "pending" }),
+							makeFeature({ id: "f4", name: "session-store", status: "pending" }),
+						],
+					}),
+				],
+			});
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+			});
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toContain("user-model");
+			expect(result).toContain("auth-api");
+			expect(result).toContain("token-refresh");
+			expect(result).toContain("session-store");
+		});
+
+		it("features in non-current milestones are summarized as count only", () => {
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({
+						id: "m1",
+						name: "Active",
+						status: "active",
+						features: [
+							makeFeature({ id: "f1", name: "feature-a", status: "active" }),
+							makeFeature({ id: "f1b", name: "feature-b", status: "pending" }),
+						],
+					}),
+					makeMilestone({
+						id: "m2",
+						name: "Future",
+						status: "pending",
+						features: [
+							makeFeature({ id: "f2", name: "secret-feature-x", status: "pending" }),
+							makeFeature({ id: "f3", name: "secret-feature-y", status: "pending" }),
+						],
+					}),
+				],
+			});
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f1",
+			});
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			const milestonesIdx = result.indexOf("## MILESTONES");
+			const currentFeatureIdx = result.indexOf("## CURRENT FEATURE");
+			const planContextSection = result.slice(
+				milestonesIdx,
+				currentFeatureIdx > -1 ? currentFeatureIdx : result.length,
+			);
+			expect(planContextSection).not.toContain("secret-feature-x");
+			expect(planContextSection).not.toContain("secret-feature-y");
+			expect(planContextSection).toMatch(/2\s*features/);
+		});
+	});
+
+	describe("plan context — current feature details (VAL-PLANCTX-003)", () => {
+		it("includes current feature name, description, and criteria", () => {
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({
+						id: "m1",
+						name: "Core",
+						status: "active",
+						features: [
+							makeFeature({
+								id: "f2",
+								name: "auth-endpoint",
+								description: "Create login and register endpoints with JWT",
+								acceptanceCriteria: ["Login returns token", "Register creates user"],
+								status: "active",
+							}),
+						],
+					}),
+				],
+			});
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+			});
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toContain("auth-endpoint");
+			expect(result).toContain("Create login and register endpoints with JWT");
+			expect(result).toContain("Login returns token");
+			expect(result).toContain("Register creates user");
+		});
+
+		it("handles missing current feature gracefully", () => {
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({
+						id: "m1",
+						name: "Core",
+						status: "active",
+						features: [],
+					}),
+				],
+			});
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "nonexistent",
+			});
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 });
+			expect(result).not.toBeNull();
+			expect(typeof result).toBe("string");
+		});
+	});
+
+	describe("plan context — line count constraint (VAL-PLANCTX-004)", () => {
+		function makeLargePlan() {
+			return makePlan({
+				description: "Large mission with 10 features across 2 milestones",
+				milestones: [
+					makeMilestone({
+						id: "ms1",
+						name: "Milestone One - Core Infrastructure",
+						status: "active",
+						features: [
+							makeFeature({
+								id: "f1",
+								name: "database-schema",
+								description: "Design database schema",
+								acceptanceCriteria: ["Tables created", "Migrations run"],
+								status: "done",
+							}),
+							makeFeature({
+								id: "f2",
+								name: "user-model",
+								description: "Create user model with validation",
+								acceptanceCriteria: ["Model validates email", "Password hashing works"],
+								status: "done",
+							}),
+							makeFeature({
+								id: "f3",
+								name: "auth-endpoint",
+								description: "Login and register endpoints",
+								acceptanceCriteria: ["Login returns JWT", "Register creates user"],
+								status: "active",
+							}),
+							makeFeature({
+								id: "f4",
+								name: "token-refresh",
+								description: "JWT refresh token rotation",
+								acceptanceCriteria: ["Tokens refresh correctly", "Old tokens invalidated"],
+								status: "pending",
+							}),
+							makeFeature({
+								id: "f5",
+								name: "session-store",
+								description: "Server-side session management",
+								acceptanceCriteria: ["Sessions persist", "Session timeout works"],
+								status: "pending",
+							}),
+						],
+					}),
+					makeMilestone({
+						id: "ms2",
+						name: "Milestone Two - User Interface",
+						status: "pending",
+						features: [
+							makeFeature({
+								id: "f6",
+								name: "login-page",
+								description: "Login page with form",
+								acceptanceCriteria: ["Form renders", "Error messages shown"],
+								status: "pending",
+							}),
+							makeFeature({
+								id: "f7",
+								name: "register-page",
+								description: "Registration page",
+								acceptanceCriteria: ["Form validates input", "Success redirect"],
+								status: "pending",
+							}),
+							makeFeature({
+								id: "f8",
+								name: "dashboard-view",
+								description: "Main dashboard after login",
+								acceptanceCriteria: ["Data loads", "Charts render"],
+								status: "pending",
+							}),
+							makeFeature({
+								id: "f9",
+								name: "profile-page",
+								description: "User profile editing",
+								acceptanceCriteria: ["Profile updates", "Avatar upload"],
+								status: "pending",
+							}),
+							makeFeature({
+								id: "f10",
+								name: "settings-page",
+								description: "App settings management",
+								acceptanceCriteria: ["Settings save", "Defaults applied"],
+								status: "pending",
+							}),
+						],
+					}),
+				],
+			});
+		}
+
+		function extractPlanContextLines(result: string): string[] {
+			const lines = result.split("\n");
+			const startIdx = lines.findIndex((l) => l.match(/MILESTONES|milestones/i));
+			if (startIdx === -1) return [];
+			const contextLines: string[] = [];
+			for (let i = startIdx; i < lines.length; i++) {
+				if (lines[i].trim() === "") continue;
+				if (i > startIdx && lines[i].startsWith("## ")) break;
+				contextLines.push(lines[i]);
+			}
+			return contextLines;
+		}
+
+		it("plan context section is <=30 non-empty lines for a 10-feature plan", () => {
+			const plan = makeLargePlan();
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "ms1",
+				currentFeatureId: "f3",
+				totalFeaturesCompleted: 2,
+			});
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			const planContextLines = extractPlanContextLines(result);
+			const planContextNonEmpty = planContextLines.filter((l) => l.trim().length > 0);
+			expect(planContextNonEmpty.length).toBeLessThanOrEqual(30);
+		});
+	});
+
+	describe("plan context — cross-feature validation (VAL-CROSS-005)", () => {
+		it("dynamic section shows milestone, feature, progress, and next feature", () => {
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({
+						id: "m1",
+						name: "Core Module",
+						status: "active",
+						features: [
+							makeFeature({ id: "f1", name: "setup", status: "done" }),
+							makeFeature({ id: "f2", name: "auth-layer", status: "active" }),
+							makeFeature({ id: "f3", name: "data-sync", status: "pending" }),
+							makeFeature({ id: "f4", name: "event-bus", status: "pending" }),
+							makeFeature({ id: "f5", name: "api-gateway", status: "pending" }),
+						],
+					}),
+					makeMilestone({
+						id: "m2",
+						name: "UI Layer",
+						status: "pending",
+						features: [],
+					}),
+				],
+			});
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+			});
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toContain("Core Module");
+			expect(result).toContain("auth-layer");
+			expect(result).toMatch(/1\/5/);
+			expect(result).toContain("data-sync");
+		});
+
+		it("advancing state updates the summary", () => {
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({
+						id: "m1",
+						name: "Core Module",
+						status: "active",
+						features: [
+							makeFeature({ id: "f1", name: "setup", status: "done" }),
+							makeFeature({ id: "f2", name: "auth-layer", status: "done" }),
+							makeFeature({ id: "f3", name: "data-sync", status: "active" }),
+						],
+					}),
+				],
+			});
+			const state2 = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f3",
+				totalFeaturesCompleted: 2,
+			});
+			clearProtocolCache();
+			const result2 = buildOrchestratorProtocol(state2, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result2).toContain("data-sync");
+			expect(result2).toMatch(/2\/3/);
 		});
 	});
 });
