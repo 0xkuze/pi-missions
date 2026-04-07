@@ -126,9 +126,9 @@ describe("VAL-CROSS-010: full pipeline — plan to learned context", () => {
 		const spawnAndLearn = config.spawnAndLearn !== false;
 		learnFromResult(basePath, worker1Result, spawnAndLearn);
 
-		const pitfalls = readLibraryTopic(basePath, "pitfalls");
-		expect(pitfalls).toContain("Race condition in cache layer");
-		expect(pitfalls).toContain("Add mutex");
+		const conventions = readLibraryTopic(basePath, "conventions");
+		expect(conventions).toContain("Race condition in cache layer");
+		expect(conventions).toContain("Add mutex");
 
 		const skill2 = generateWorkerSkill(f2, undefined, "caveman");
 		const context2 = generateWorkerContext(undefined, [], basePath);
@@ -138,7 +138,7 @@ describe("VAL-CROSS-010: full pipeline — plan to learned context", () => {
 		expect(existsSync(context2Path)).toBe(true);
 		const context2Content = readFileSync(context2Path, "utf8");
 		expect(context2Content).toContain("Race condition in cache layer");
-		expect(context2Content).toContain("Known Pitfalls");
+		expect(context2Content).toContain("Project Conventions");
 
 		const skill2Path = join(basePath, "runtime", f2.id, "1", "worker-skill.md");
 		const skill2Content = readFileSync(skill2Path, "utf8");

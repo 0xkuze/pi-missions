@@ -7,10 +7,18 @@ export interface LearnResult {
 	entry?: string;
 }
 
-function formatFailureEntry(result: WorkerResult): string {
+export interface FeatureContext {
+	name: string;
+	description: string;
+}
+
+function formatFailureEntry(result: WorkerResult, feature?: FeatureContext): string {
 	const error = result.error;
 	const parts: string[] = [];
 	parts.push(`## Failure Pattern (${error?.kind ?? "unknown"})`);
+	if (feature) {
+		parts.push(`Feature: ${feature.name} — ${feature.description}`);
+	}
 	parts.push(`Message: ${error?.message ?? "Unknown error"}`);
 	if (error?.details) {
 		parts.push(`Details: ${error.details}`);
@@ -31,14 +39,19 @@ function formatNotesEntry(note: string): string {
 	return `- ${note}`;
 }
 
-export function learnFromResult(basePath: string, result: WorkerResult, spawnAndLearn: boolean): LearnResult {
+export function learnFromResult(
+	basePath: string,
+	result: WorkerResult,
+	spawnAndLearn: boolean,
+	feature?: FeatureContext,
+): LearnResult {
 	if (!spawnAndLearn) {
 		return { learned: false };
 	}
 
 	if (result.status === "failure") {
 		initLibrary(basePath);
-		const entry = formatFailureEntry(result);
+		const entry = formatFailureEntry(result, feature);
 		appendLibraryTopic(basePath, "pitfalls", entry);
 		return { learned: true, topic: "pitfalls", entry };
 	}
@@ -63,8 +76,8 @@ export function learnFromResult(basePath: string, result: WorkerResult, spawnAnd
 		}
 
 		const entry = parts.join("\n");
-		appendLibraryTopic(basePath, "pitfalls", entry);
-		return { learned: true, topic: "pitfalls", entry };
+		appendLibraryTopic(basePath, "conventions", entry);
+		return { learned: true, topic: "conventions", entry };
 	}
 
 	return { learned: false };

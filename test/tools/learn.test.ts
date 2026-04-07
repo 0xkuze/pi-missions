@@ -78,7 +78,7 @@ describe("learnFromResult", () => {
 			expect(learned.learned).toBe(false);
 		});
 
-		it("returns { learned: true, topic: 'pitfalls', entry } for success with discoveredIssues", () => {
+		it("returns { learned: true, topic: 'conventions', entry } for success with discoveredIssues", () => {
 			const basePath = makeBasePath();
 			initLibrary(basePath);
 			const result = makeSuccessResult({
@@ -91,7 +91,7 @@ describe("learnFromResult", () => {
 			});
 			const learned = learnFromResult(basePath, result, true);
 			expect(learned.learned).toBe(true);
-			expect(learned.topic).toBe("pitfalls");
+			expect(learned.topic).toBe("conventions");
 			expect(learned.entry).toContain("dep@2.1.0");
 		});
 	});
@@ -150,8 +150,8 @@ describe("learnFromResult", () => {
 		});
 	});
 
-	describe("VAL-LEARN-003: Success workarounds appended to pitfalls", () => {
-		it("appends discoveredIssues with workarounds to pitfalls.md", () => {
+	describe("VAL-LEARN-003: Success workarounds appended to conventions", () => {
+		it("appends discoveredIssues with workarounds to conventions.md", () => {
 			const basePath = makeBasePath();
 			initLibrary(basePath);
 			const result = makeSuccessResult({
@@ -164,12 +164,12 @@ describe("learnFromResult", () => {
 				],
 			});
 			learnFromResult(basePath, result, true);
-			const content = readLibraryTopic(basePath, "pitfalls");
+			const content = readLibraryTopic(basePath, "conventions");
 			expect(content).toContain("Had to pin dep@2.1.0 due to breaking change in 2.2.0");
 			expect(content).toContain("Pin dep to 2.1.0 in package.json");
 		});
 
-		it("appends multiple discoveredIssues to pitfalls.md", () => {
+		it("appends multiple discoveredIssues to conventions.md", () => {
 			const basePath = makeBasePath();
 			initLibrary(basePath);
 			const result = makeSuccessResult({
@@ -186,7 +186,7 @@ describe("learnFromResult", () => {
 				],
 			});
 			learnFromResult(basePath, result, true);
-			const content = readLibraryTopic(basePath, "pitfalls");
+			const content = readLibraryTopic(basePath, "conventions");
 			expect(content).toContain("Minor typo in log output");
 			expect(content).toContain("Race condition in cache");
 			expect(content).toContain("Add mutex");
@@ -204,8 +204,24 @@ describe("learnFromResult", () => {
 				metrics: { durationMs: 1000 },
 			};
 			learnFromResult(basePath, result, true);
-			const content = readLibraryTopic(basePath, "pitfalls");
+			const content = readLibraryTopic(basePath, "conventions");
 			expect(content).toContain("Had to pin dep@2.1.0 due to breaking change in 2.2.0");
+		});
+
+		it("does not append success workarounds to pitfalls", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			const result = makeSuccessResult({
+				discoveredIssues: [
+					{
+						severity: "medium" as const,
+						description: "Had to pin dep@2.1.0 due to breaking change in 2.2.0",
+					},
+				],
+			});
+			learnFromResult(basePath, result, true);
+			const pitfalls = readLibraryTopic(basePath, "pitfalls");
+			expect(pitfalls).toBe("# Pitfalls\n");
 		});
 	});
 
@@ -226,7 +242,7 @@ describe("learnFromResult", () => {
 	});
 
 	describe("VAL-CROSS-001: Handoff issues flow to learning system", () => {
-		it("discoveredIssues from handoff are appended to pitfalls.md", () => {
+		it("discoveredIssues from handoff are appended to conventions.md", () => {
 			const basePath = makeBasePath();
 			initLibrary(basePath);
 			const result = makeSuccessResult({
@@ -240,7 +256,8 @@ describe("learnFromResult", () => {
 			});
 			const learned = learnFromResult(basePath, result, true);
 			expect(learned.learned).toBe(true);
-			const content = readLibraryTopic(basePath, "pitfalls");
+			expect(learned.topic).toBe("conventions");
+			const content = readLibraryTopic(basePath, "conventions");
 			expect(content).toContain("Flaky test in integration suite");
 			expect(content).toContain("Add retry logic");
 		});
@@ -291,7 +308,7 @@ describe("learnFromResult", () => {
 				],
 			});
 			learnFromResult(basePath, result2, true);
-			const afterTrue = readLibraryTopic(basePath, "pitfalls");
+			const afterTrue = readLibraryTopic(basePath, "conventions");
 			expect(afterTrue).toContain("Found workaround for API rate limit");
 		});
 	});
@@ -334,7 +351,7 @@ describe("learnFromResult", () => {
 			expect(learned.learned).toBe(false);
 		});
 
-		it("appends entries cumulatively", () => {
+		it("appends entries cumulatively across topics", () => {
 			const basePath = makeBasePath();
 			initLibrary(basePath);
 
@@ -350,9 +367,11 @@ describe("learnFromResult", () => {
 			});
 			learnFromResult(basePath, result2, true);
 
-			const content = readLibraryTopic(basePath, "pitfalls");
-			expect(content).toContain("Edit failed on locked file");
-			expect(content).toContain("Needed workaround for bug in lib");
+			const pitfalls = readLibraryTopic(basePath, "pitfalls");
+			expect(pitfalls).toContain("Edit failed on locked file");
+
+			const conventions = readLibraryTopic(basePath, "conventions");
+			expect(conventions).toContain("Needed workaround for bug in lib");
 		});
 
 		it("creates library directory if it does not exist", () => {
@@ -364,6 +383,117 @@ describe("learnFromResult", () => {
 			expect(existsSync(join(basePath, "library"))).toBe(true);
 			const content = readLibraryTopic(basePath, "pitfalls");
 			expect(content).toContain("Test failed");
+		});
+	});
+
+	describe("feature context in failure entries", () => {
+		it("includes feature name and description in failure entry", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			const result = makeFailureResult({
+				error: { kind: "validation", message: "TypeScript error" },
+			});
+			learnFromResult(basePath, result, true, {
+				name: "auth-endpoint",
+				description: "Create authentication endpoint",
+			});
+			const content = readLibraryTopic(basePath, "pitfalls");
+			expect(content).toContain("auth-endpoint");
+			expect(content).toContain("Create authentication endpoint");
+			expect(content).toContain("TypeScript error");
+		});
+
+		it("works without feature context (backward compatible)", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			const result = makeFailureResult({
+				error: { kind: "tool", message: "Edit failed" },
+			});
+			learnFromResult(basePath, result, true);
+			const content = readLibraryTopic(basePath, "pitfalls");
+			expect(content).toContain("Edit failed");
+			expect(content).not.toContain("Feature:");
+		});
+
+		it("feature context not included in success entries", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			const result = makeSuccessResult({
+				discoveredIssues: [
+					{ severity: "medium" as const, description: "Used workaround for lib bug" },
+				],
+			});
+			learnFromResult(basePath, result, true, {
+				name: "auth-endpoint",
+				description: "Create authentication endpoint",
+			});
+			const conventions = readLibraryTopic(basePath, "conventions");
+			expect(conventions).toContain("Used workaround for lib bug");
+			expect(conventions).not.toContain("auth-endpoint");
+		});
+	});
+
+	describe("deduplication", () => {
+		it("skips appending duplicate failure entries", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			const result = makeFailureResult({
+				error: { kind: "validation", message: "Same error repeated" },
+			});
+			learnFromResult(basePath, result, true);
+			learnFromResult(basePath, result, true);
+			const content = readLibraryTopic(basePath, "pitfalls");
+			const occurrences = content!.split("Same error repeated").length - 1;
+			expect(occurrences).toBe(1);
+		});
+
+		it("skips appending duplicate success workarounds", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			const result = makeSuccessResult({
+				discoveredIssues: [
+					{ severity: "medium" as const, description: "Same workaround again" },
+				],
+			});
+			learnFromResult(basePath, result, true);
+			learnFromResult(basePath, result, true);
+			const content = readLibraryTopic(basePath, "conventions");
+			const occurrences = content!.split("Same workaround again").length - 1;
+			expect(occurrences).toBe(1);
+		});
+
+		it("allows different entries for the same topic", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			const result1 = makeFailureResult({
+				error: { kind: "tool", message: "First error" },
+			});
+			const result2 = makeFailureResult({
+				error: { kind: "validation", message: "Second error" },
+			});
+			learnFromResult(basePath, result1, true);
+			learnFromResult(basePath, result2, true);
+			const content = readLibraryTopic(basePath, "pitfalls");
+			expect(content).toContain("First error");
+			expect(content).toContain("Second error");
+		});
+
+		it("deduplication only checks last 5 entries", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			for (let i = 0; i < 6; i++) {
+				const r = makeFailureResult({
+					error: { kind: "validation", message: `Error ${i}` },
+				});
+				learnFromResult(basePath, r, true);
+			}
+			const dupResult = makeFailureResult({
+				error: { kind: "validation", message: "Error 0" },
+			});
+			learnFromResult(basePath, dupResult, true);
+			const content = readLibraryTopic(basePath, "pitfalls");
+			const occurrences = content!.split("Error 0").length - 1;
+			expect(occurrences).toBe(2);
 		});
 	});
 });

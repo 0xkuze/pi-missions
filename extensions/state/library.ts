@@ -75,6 +75,15 @@ function writeLibraryTopic(basePath: string, topic: string, content: string): vo
 	writeFileSync(filePath, content, "utf8");
 }
 
+const DEDUP_ENTRY_COUNT = 5;
+
+function isDuplicateEntry(existingContent: string, entry: string): boolean {
+	const blocks = existingContent.split(/\n\n+/).filter((b) => b.trim().length > 0);
+	const recent = blocks.slice(-DEDUP_ENTRY_COUNT);
+	const entryTrimmed = entry.trim();
+	return recent.some((block) => block.includes(entryTrimmed) || entryTrimmed.includes(block.trim()));
+}
+
 function appendLibraryTopic(basePath: string, topic: string, entry: string): void {
 	validateTopicName(topic);
 	const dir = libraryDir(basePath);
@@ -83,6 +92,9 @@ function appendLibraryTopic(basePath: string, topic: string, entry: string): voi
 	}
 	const filePath = join(dir, `${topic}.md`);
 	const existing = existsSync(filePath) ? readFileSync(filePath, "utf8") : "";
+	if (isDuplicateEntry(existing, entry)) {
+		return;
+	}
 	const updated = existing ? `${existing}\n\n${entry}` : `${entry}`;
 	writeFileSync(filePath, updated, "utf8");
 }

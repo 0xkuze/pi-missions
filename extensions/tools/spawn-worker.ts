@@ -897,7 +897,12 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			writeRunArtifacts(runtimeDir, procResult.stdout, procResult.stderr, result, metadata);
 
 			const spawnAndLearn = resolveSpawnAndLearn(config);
-			if (learnFromResult(deps.basePath, result, spawnAndLearn).learned) {
+			if (
+				learnFromResult(deps.basePath, result, spawnAndLearn, {
+					name: feature.name,
+					description: feature.description,
+				}).learned
+			) {
 				clearProtocolCache();
 			}
 

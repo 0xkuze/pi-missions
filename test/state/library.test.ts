@@ -164,6 +164,41 @@ describe("appendLibraryTopic", () => {
 		const content = readFileSync(filePath, "utf8");
 		expect(content).toBe("# Pitfalls\n\nBase\n\nEntry A\n\nEntry B");
 	});
+
+	it("skips duplicate entries (substring match)", () => {
+		const basePath = makeBasePath();
+		initLibrary(basePath);
+		const filePath = join(basePath, "library", "pitfalls.md");
+		appendLibraryTopic(basePath, "pitfalls", "Error: TypeScript strict null check failed");
+		appendLibraryTopic(basePath, "pitfalls", "Error: TypeScript strict null check failed");
+		const content = readFileSync(filePath, "utf8");
+		const occurrences = content.split("TypeScript strict null check failed").length - 1;
+		expect(occurrences).toBe(1);
+	});
+
+	it("allows different entries", () => {
+		const basePath = makeBasePath();
+		initLibrary(basePath);
+		const filePath = join(basePath, "library", "pitfalls.md");
+		appendLibraryTopic(basePath, "pitfalls", "Error: TypeScript error");
+		appendLibraryTopic(basePath, "pitfalls", "Error: ESLint error");
+		const content = readFileSync(filePath, "utf8");
+		expect(content).toContain("TypeScript error");
+		expect(content).toContain("ESLint error");
+	});
+
+	it("only checks last 5 entries for dedup", () => {
+		const basePath = makeBasePath();
+		initLibrary(basePath);
+		const filePath = join(basePath, "library", "pitfalls.md");
+		for (let i = 0; i < 6; i++) {
+			appendLibraryTopic(basePath, "pitfalls", `Entry number ${i}`);
+		}
+		appendLibraryTopic(basePath, "pitfalls", "Entry number 0");
+		const content = readFileSync(filePath, "utf8");
+		const occurrences = content.split("Entry number 0").length - 1;
+		expect(occurrences).toBe(2);
+	});
 });
 
 describe("topic name validation", () => {
