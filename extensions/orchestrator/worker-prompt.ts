@@ -8,70 +8,34 @@ export function generateWorkerSkill(feature: Feature, agentsMdContent?: string, 
 	const criteriaList = feature.acceptanceCriteria.map((c) => `- ${c}`).join("\n");
 	const filesList =
 		feature.relevantFiles.length > 0 ? feature.relevantFiles.map((f) => `- ${f}`).join("\n") : "(none specified)";
-
-	const conventionsSection = agentsMdContent ? `\n## Project Conventions\n\n${agentsMdContent}` : "";
-
-	return `# Task: ${feature.name}
-
-## Description
-
+	const conventionsSection = agentsMdContent ? `\n${agentsMdContent}` : "";
+	return `# ${feature.name}
 ${feature.description}
-
-## Acceptance Criteria
-
+## Criteria
 ${criteriaList}
-
-## Relevant Files
-
+## Files
 ${filesList}
-
-## Focus Instructions
-
-- Implement only what is described in this task. Do not modify unrelated files.
-- All acceptance criteria must be satisfied before finishing.
-- Keep changes focused and minimal.
-- Do not introduce unrelated refactors or improvements.
-
-## Procedure
-
-1. Read the relevant files listed above and understand the existing code structure.
-2. Review the acceptance criteria carefully before writing any code.
-3. If the project has tests, write or update tests for your changes first.
-4. Implement the changes to satisfy all acceptance criteria.
-5. Run the project's test command (if available) and fix any failures.
-6. Run the project's lint/format command (if available) and fix any issues.
-7. Verify every acceptance criterion is met before finishing.
-
+## report_result
+When done, call report_result with:
+- whatWasImplemented: string
+- whatWasLeftUndone: string
+- commandsRun: [{command, exitCode, observation}]
+- testsAdded: [{file, cases: [string]}]
+- discoveredIssues: [{severity, description, suggestedFix?}]
 ## Verification
-
-Before finishing, you MUST:
-- Run the project's test command. If tests fail, fix them.
-- Run the project's lint command. If lint fails, fix the issues.
-- Do not finish with failing tests or lint errors.
-
-## Completion
-
-As your final message, include a structured summary:
-- Files changed: (list files you created or modified)
-- Tests: passed / failed / not run
-- Lint: clean / issues / not run
-- Remaining issues: (any known issues or none)${conventionsSection}`;
+Run tests. Run lint. Fix if broken.${conventionsSection}`;
 }
 
 function generateCavemanWorkerSkill(feature: Feature, agentsMdContent?: string): string {
 	const criteria = feature.acceptanceCriteria.map((c) => `- ${c}`).join("\n");
 	const files = feature.relevantFiles.length > 0 ? feature.relevantFiles.join(", ") : "(none)";
-	const conventions = agentsMdContent ? `\nConventions:\n${agentsMdContent}` : "";
+	const conventions = agentsMdContent ? `\n${agentsMdContent}` : "";
 	return `# ${feature.name}
-
 ${feature.description}
-
-Do this:
-${criteria}
-
+Do: ${criteria}
 Files: ${files}
-
-Only touch listed files. Run tests. Run lint. Fix if broken. No extras.${conventions}`;
+report_result: whatWasImplemented, whatWasLeftUndone, commandsRun, testsAdded, discoveredIssues
+Run tests. Fix if broken.${conventions}`;
 }
 
 export function generateWorkerPrompt(feature: Feature, additionalContext?: string): string {

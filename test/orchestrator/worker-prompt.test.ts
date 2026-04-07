@@ -49,11 +49,6 @@ describe("generateWorkerSkill", () => {
 		expect(skill).toContain("src/middleware/verify.ts");
 	});
 
-	it("includes focus instructions", () => {
-		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("Implement only what is described");
-	});
-
 	it("includes AGENTS.md conventions when provided (VAL-WORKER-001)", () => {
 		const agentsMd = "## Conventions\n\nUse TypeScript strict mode.";
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), agentsMd);
@@ -73,29 +68,67 @@ describe("generateWorkerSkill", () => {
 		expect(skill).toContain("(none specified)");
 	});
 
-	it("contains Procedure section", () => {
+	it("does NOT contain verbose Procedure section", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("## Procedure");
+		expect(skill).not.toContain("## Procedure");
 	});
 
-	it("contains Verification section", () => {
+	it("does NOT contain verbose Completion section", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).not.toContain("## Completion");
+	});
+
+	it("does NOT contain verbose focus instructions", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).not.toContain("Implement only what is described");
+	});
+
+	it("contains report_result tool instructions", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("report_result");
+	});
+
+	it("report_result instructions include whatWasImplemented field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("whatWasImplemented");
+	});
+
+	it("report_result instructions include whatWasLeftUndone field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("whatWasLeftUndone");
+	});
+
+	it("report_result instructions include commandsRun field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("commandsRun");
+	});
+
+	it("report_result instructions include testsAdded field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("testsAdded");
+	});
+
+	it("report_result instructions include discoveredIssues field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("discoveredIssues");
+	});
+
+	it("contains verification commands section", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
 		expect(skill).toContain("## Verification");
 	});
 
-	it("contains Completion section", () => {
+	it("default mode skill is at most 40 non-empty lines", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("## Completion");
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(40);
 	});
 
-	it("contains instruction to run project test command", () => {
-		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("Run the project's test command");
-	});
-
-	it("contains instruction to run project lint command", () => {
-		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("Run the project's lint command");
+	it("default mode skill with conventions is at most 40 non-empty lines", () => {
+		const agentsMd = "## Conventions\n\nUse TypeScript strict mode.\nNo enums.";
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), agentsMd);
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(40);
 	});
 
 	describe("mission terminology exclusion (VAL-WORKER-002)", () => {
@@ -120,6 +153,91 @@ describe("generateWorkerSkill", () => {
 				expect(skill.toLowerCase()).not.toContain(term.toLowerCase());
 			}
 		});
+	});
+});
+
+describe("generateWorkerSkill (caveman mode)", () => {
+	it("includes feature name", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("Add JWT authentication");
+	});
+
+	it("includes feature description", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("Implement JWT-based authentication with refresh tokens.");
+	});
+
+	it("includes acceptance criteria", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("JWT signing with RS256 algorithm");
+	});
+
+	it("includes relevant files", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("src/auth.ts");
+	});
+
+	it("contains report_result tool instructions", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("report_result");
+	});
+
+	it("report_result includes whatWasImplemented field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("whatWasImplemented");
+	});
+
+	it("report_result includes whatWasLeftUndone field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("whatWasLeftUndone");
+	});
+
+	it("report_result includes commandsRun field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("commandsRun");
+	});
+
+	it("report_result includes testsAdded field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("testsAdded");
+	});
+
+	it("report_result includes discoveredIssues field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("discoveredIssues");
+	});
+
+	it("caveman mode skill is at most 20 non-empty lines", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(20);
+	});
+
+	it("caveman mode skill with conventions is at most 20 non-empty lines", () => {
+		const agentsMd = "## Conventions\n\nUse strict mode.";
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), agentsMd, "caveman");
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(20);
+	});
+
+	it("caveman-full mode produces caveman output", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman-full");
+		expect(skill).toContain("report_result");
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(20);
+	});
+
+	it("handles empty relevant files gracefully", () => {
+		const feature = makeFeature({ ...JWT_OVERRIDES, relevantFiles: [] });
+		const skill = generateWorkerSkill(feature, undefined, "caveman");
+		expect(skill).not.toContain("undefined");
+	});
+
+	it("excludes forbidden terms", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		for (const term of FORBIDDEN_TERMS) {
+			expect(skill.toLowerCase()).not.toContain(term.toLowerCase());
+		}
 	});
 });
 
