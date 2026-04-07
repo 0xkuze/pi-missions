@@ -431,13 +431,27 @@ describe("registerSpawnWorkerTool", () => {
 			expect(capturedCommand).toBeNull();
 		});
 
-		it("proceeds when worker model is in available models", async () => {
+		it("proceeds when worker model matches by plain id", async () => {
 			const state = localMakeState({ status: "approved" });
 			saveState(testDir, state);
 			const feature = localMakeFeature();
 			const plan = localMakePlan([localMakeMilestone([feature])]);
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn, { availableModels: ["opencode/glm-5"] });
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).not.toContain("Error");
+		});
+
+		it("proceeds when worker model matches by provider/id format", async () => {
+			const state = localMakeState({ status: "approved" });
+			saveState(testDir, state);
+			const feature = localMakeFeature();
+			const plan = localMakePlan([localMakeMilestone([feature])]);
+			savePlan(testDir, plan);
+			// Config has "opencode-go/glm-5", available list has both "glm-5" and "opencode-go/glm-5"
+			const { saveConfig } = await import("../../extensions/state/manager.js");
+			saveConfig(testDir, { models: { worker: "opencode-go/glm-5" } });
+			registerTool(mockSpawnFn, { availableModels: ["glm-5", "opencode-go/glm-5"] });
 			const result = await executeFn!("id", { featureId: "feat-1" });
 			expect(result.content[0].text).not.toContain("Error");
 		});

@@ -646,7 +646,13 @@ export default function (pi: ExtensionAPI): void {
 		setThinkingLevel: (level) => pi.setThinkingLevel(level),
 		availableModels: () => {
 			if (!latestCtx) return [];
-			return latestCtx.modelRegistry.getAll().map((m) => m.id);
+			const models = latestCtx.modelRegistry.getAll();
+			const ids: string[] = [];
+			for (const m of models) {
+				ids.push(m.id);
+				ids.push(`${m.provider}/${m.id}`);
+			}
+			return ids;
 		},
 	});
 	registerUpdateStateTool(pi, { basePath, updateWidget });
