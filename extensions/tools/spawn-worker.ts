@@ -14,9 +14,10 @@ import {
 	writeWorkerFiles,
 } from "../orchestrator/worker-prompt.js";
 import { loadConfig, loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
+import { appendMutation } from "../state/plan-history.js";
 import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionPlan, MissionState, WorkerAttempt, WorkerResult } from "../types.js";
-import { getPiInvocation, nowISO } from "../utils.js";
+import { generateId, getPiInvocation, nowISO } from "../utils.js";
 import { removePidFile, writePidFile } from "../worker-pid.js";
 import { synthesizeWorkerResult } from "./result-synthesis.js";
 import { runValidator } from "./validate-worker.js";
@@ -390,6 +391,138 @@ function readAgentsMd(projectDir: string): string | undefined {
 	} catch {
 		return undefined;
 	}
+}
+
+interface SelfCorrectionResult {
+	fixFeatureId?: string;
+	fixFeatureName?: string;
+	summary: string;
+}
+
+function performSelfCorrection(
+	basePath: string,
+	plan: MissionPlan,
+	state: MissionState,
+	feature: Feature,
+	result: WorkerResult,
+	autonomy: "low" | "medium" | "high",
+	maxRetries: number,
+): { updatedPlan: MissionPlan; updatedState: MissionState; correction: SelfCorrectionResult } {
+	const handoff = result.handoff;
+	if (!handoff) {
+		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
+	}
+
+	const hasUndone = handoff.whatWasLeftUndone.trim().length > 0;
+	const highSeverityIssues = handoff.discoveredIssues.filter((i) => i.severity === "high");
+
+	if (!hasUndone && highSeverityIssues.length === 0) {
+		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
+	}
+
+	const reasons: string[] = [];
+	if (hasUndone) reasons.push(`Undone: ${handoff.whatWasLeftUndone}`);
+	for (const issue of highSeverityIssues) reasons.push(`High-severity: ${issue.description}`);
+	const reasonText = reasons.join("; ");
+
+	if (autonomy === "low") {
+		return {
+			updatedPlan: plan,
+			updatedState: state,
+			correction: {
+				summary: `Self-correction: issues found but autonomy is low — please review. ${reasonText}`,
+			},
+		};
+	}
+
+	const failureCount =
+		feature.attempts.filter((a) => a.status === "failure").length + (result.status === "failure" ? 1 : 0);
+	if (failureCount >= maxRetries) {
+		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
+	}
+
+	const milestone = findMilestoneForFeature(plan, feature.id);
+	if (!milestone) {
+		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
+	}
+
+	const fixFeatureId = generateId();
+	const descriptionParts: string[] = [];
+	if (hasUndone) descriptionParts.push(handoff.whatWasLeftUndone);
+	for (const issue of highSeverityIssues) descriptionParts.push(issue.description);
+
+	const newFeature: Feature = {
+		id: fixFeatureId,
+		name: `fix-${feature.name}`,
+		description: `Self-correction for '${feature.name}': ${descriptionParts.join(". ")}`,
+		acceptanceCriteria:
+			highSeverityIssues.length > 0
+				? highSeverityIssues.map((i) => i.suggestedFix ?? `Fix: ${i.description}`)
+				: [`Complete: ${handoff.whatWasLeftUndone}`],
+		relevantFiles: feature.relevantFiles,
+		dependencies: [],
+		estimatedComplexity: "medium",
+		status: "pending",
+		fixOrigin: {
+			sourceKind: "worker-failure",
+			sourceFeatureId: feature.id,
+			sourceMilestoneId: milestone.id,
+		},
+		attempts: [],
+	};
+
+	const newPlanVersion = plan.planVersion + 1;
+	const updatedPlan: MissionPlan = {
+		...plan,
+		planVersion: newPlanVersion,
+		milestones: plan.milestones.map((m) =>
+			m.id === milestone.id ? { ...m, features: [...m.features, newFeature] } : m,
+		),
+	};
+
+	const now = nowISO();
+	const updatedState: MissionState = {
+		...state,
+		totalFixFeaturesCreated: state.totalFixFeaturesCreated + 1,
+		progressLog: [
+			...state.progressLog,
+			{
+				timestamp: now,
+				type: "fix_feature_created" as const,
+				detail: `Self-correction: fix feature 'fix-${feature.name}' created in milestone '${milestone.name}'`,
+				metadata: {
+					featureId: fixFeatureId,
+					milestoneId: milestone.id,
+					sourceKind: "worker-failure",
+					sourceFeatureId: feature.id,
+				},
+			},
+		],
+	};
+
+	appendMutation(basePath, {
+		planVersion: newPlanVersion,
+		timestamp: now,
+		actor: "orchestrator",
+		kind: "add-fix-feature",
+		summary: `Self-correction: fix feature 'fix-${feature.name}' added to milestone '${milestone.name}'`,
+		payload: {
+			featureId: fixFeatureId,
+			milestoneId: milestone.id,
+			sourceKind: "worker-failure",
+			sourceFeatureId: feature.id,
+		},
+	});
+
+	return {
+		updatedPlan,
+		updatedState,
+		correction: {
+			fixFeatureId,
+			fixFeatureName: `fix-${feature.name}`,
+			summary: `Self-correction: auto-created fix feature 'fix-${feature.name}' (${fixFeatureId}). ${reasonText}`,
+		},
+	};
 }
 
 export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
@@ -793,6 +926,21 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			savePlan(deps.basePath, updatedPlan);
 			deps.updateWidget(activeState, updatedPlan);
 
+			const autonomy = config.autonomy ?? "medium";
+			const {
+				updatedPlan: correctedPlan,
+				updatedState: correctedState,
+				correction,
+			} = performSelfCorrection(deps.basePath, updatedPlan, activeState, feature, result, autonomy, maxRetries);
+
+			if (correction.fixFeatureId) {
+				updatedPlan = correctedPlan;
+				activeState = correctedState;
+				saveState(deps.basePath, activeState);
+				savePlan(deps.basePath, updatedPlan);
+				deps.updateWidget(activeState, updatedPlan);
+			}
+
 			const statusText = result.status === "success" ? "succeeded" : `failed (attempt ${attemptNumber})`;
 			const nextPending = findNextPending(updatedPlan, feature.id);
 			const progressDone = activeState.totalFeaturesCompleted + activeState.totalFeaturesSkipped;
@@ -804,11 +952,12 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 					? `Next: ${nextPending.name}.`
 					: "ALL FEATURES DONE. Call complete_mission now with a summary of what was accomplished.";
 			}
+			const correctionText = correction.summary ? `\n\n${correction.summary}` : "";
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${result.summary}`,
+						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${result.summary}${correctionText}`,
 					},
 				],
 				details: {},

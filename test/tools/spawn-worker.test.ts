@@ -1605,4 +1605,429 @@ describe("registerSpawnWorkerTool", () => {
 			expect(savedPlan.milestones[0].status).toBe("active");
 		});
 	});
+
+	describe("VAL-SELFCORR-001: non-empty whatWasLeftUndone triggers fix feature at medium/high autonomy", () => {
+		function makeReportResultWithUndone(whatWasLeftUndone: string): string {
+			return JSON.stringify({
+				type: "tool_execution_end",
+				toolName: "report_result",
+				args: {
+					whatWasImplemented: "Implemented core feature",
+					whatWasLeftUndone,
+					commandsRun: [{ command: "bun test", exitCode: 0, observation: "all pass" }],
+					testsAdded: [{ file: "test.ts", cases: ["works"] }],
+					discoveredIssues: [],
+				},
+				result: { content: [{ type: "text", text: "Report submitted." }] },
+				isError: false,
+			});
+		}
+
+		it("creates fix feature when whatWasLeftUndone is non-empty and autonomy is high", async () => {
+			const spawnWithUndone = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithUndone("Error logging not implemented"),
+					makeMessageEndLine("assistant", "Worker completed with partial work."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high" });
+			registerTool(spawnWithUndone);
+
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Self-correction");
+			expect(result.content[0].text).toContain("fix feature");
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(1);
+			expect(fixFeatures[0].fixOrigin!.sourceKind).toBe("worker-failure");
+			expect(fixFeatures[0].fixOrigin!.sourceFeatureId).toBe("feat-1");
+			expect(fixFeatures[0].description).toContain("Error logging not implemented");
+		});
+
+		it("creates fix feature when whatWasLeftUndone is non-empty and autonomy is medium", async () => {
+			const spawnWithUndone = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithUndone("Missing edge case handling"),
+					makeMessageEndLine("assistant", "Worker completed."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "medium" });
+			registerTool(spawnWithUndone);
+
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Self-correction");
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(1);
+		});
+
+		it("does NOT create fix feature when whatWasLeftUndone is empty", async () => {
+			const spawnNoUndone = makeMockSpawn({
+				stdoutLines: [makeMessageEndLine("assistant", "Worker completed successfully.")],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high" });
+			registerTool(spawnNoUndone);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(0);
+		});
+	});
+
+	describe("VAL-SELFCORR-002: discoveredIssues with severity high trigger fix feature", () => {
+		function makeReportResultWithIssues(
+			issues: Array<{ severity: "low" | "medium" | "high"; description: string; suggestedFix?: string }>,
+		): string {
+			return JSON.stringify({
+				type: "tool_execution_end",
+				toolName: "report_result",
+				args: {
+					whatWasImplemented: "Implemented feature",
+					whatWasLeftUndone: "",
+					commandsRun: [],
+					testsAdded: [],
+					discoveredIssues: issues,
+				},
+				result: { content: [{ type: "text", text: "Report submitted." }] },
+				isError: false,
+			});
+		}
+
+		it("creates fix feature when discoveredIssues has high severity", async () => {
+			const spawnWithHighIssue = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithIssues([
+						{ severity: "high", description: "Race condition in cache", suggestedFix: "Add mutex" },
+					]),
+					makeMessageEndLine("assistant", "Done with issues."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high" });
+			registerTool(spawnWithHighIssue);
+
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Self-correction");
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(1);
+			expect(fixFeatures[0].fixOrigin!.sourceKind).toBe("worker-failure");
+			expect(fixFeatures[0].fixOrigin!.sourceFeatureId).toBe("feat-1");
+			expect(fixFeatures[0].description).toContain("Race condition in cache");
+		});
+
+		it("does NOT create fix feature for low and medium severity issues only", async () => {
+			const spawnWithLowMedIssues = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithIssues([
+						{ severity: "medium", description: "Suboptimal query plan" },
+						{ severity: "low", description: "Minor typo in log" },
+					]),
+					makeMessageEndLine("assistant", "Done."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high" });
+			registerTool(spawnWithLowMedIssues);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(0);
+		});
+	});
+
+	describe("VAL-SELFCORR-003: self-correction respects autonomy level", () => {
+		function makeReportResultWithUndone(whatWasLeftUndone: string): string {
+			return JSON.stringify({
+				type: "tool_execution_end",
+				toolName: "report_result",
+				args: {
+					whatWasImplemented: "Partial implementation",
+					whatWasLeftUndone,
+					commandsRun: [],
+					testsAdded: [],
+					discoveredIssues: [],
+				},
+				result: { content: [{ type: "text", text: "Report submitted." }] },
+				isError: false,
+			});
+		}
+
+		it("low autonomy: does NOT auto-create fix, includes issue details in return text", async () => {
+			const spawnWithUndone = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithUndone("Error handling not done"),
+					makeMessageEndLine("assistant", "Partial work."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "low" });
+			registerTool(spawnWithUndone);
+
+			const result = await executeFn!("id", { featureId: "feat-1" });
+			expect(result.content[0].text).toContain("Self-correction");
+			expect(result.content[0].text).toContain("review");
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(0);
+		});
+
+		it("medium autonomy: auto-creates fix feature", async () => {
+			const spawnWithUndone = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithUndone("Missing tests"),
+					makeMessageEndLine("assistant", "Partial."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "medium" });
+			registerTool(spawnWithUndone);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(1);
+		});
+
+		it("high autonomy: auto-creates fix feature", async () => {
+			const spawnWithUndone = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithUndone("Incomplete feature"),
+					makeMessageEndLine("assistant", "Partial."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high" });
+			registerTool(spawnWithUndone);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(1);
+		});
+
+		it("default autonomy (undefined): auto-creates fix feature", async () => {
+			const spawnWithUndone = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithUndone("Incomplete feature"),
+					makeMessageEndLine("assistant", "Partial."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ status: "pending" });
+			const milestone = localMakeMilestone([feature], { status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			registerTool(spawnWithUndone);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
+			expect(fixFeatures.length).toBe(1);
+		});
+	});
+
+	describe("VAL-SELFCORR-004: fix features reference source worker via fixOrigin", () => {
+		function makeReportResultWithHighIssue(): string {
+			return JSON.stringify({
+				type: "tool_execution_end",
+				toolName: "report_result",
+				args: {
+					whatWasImplemented: "Partial work",
+					whatWasLeftUndone: "Missing error handling",
+					commandsRun: [],
+					testsAdded: [],
+					discoveredIssues: [
+						{ severity: "high", description: "Race condition in cache", suggestedFix: "Add mutex" },
+					],
+				},
+				result: { content: [{ type: "text", text: "Report submitted." }] },
+				isError: false,
+			});
+		}
+
+		it("fix feature has correct fixOrigin fields", async () => {
+			const spawnWithIssue = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithHighIssue(),
+					makeMessageEndLine("assistant", "Done."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ id: "feat-1", status: "pending" });
+			const milestone = localMakeMilestone([feature], { id: "milestone-1", status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high" });
+			registerTool(spawnWithIssue);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeature = savedPlan.milestones[0].features.find((f) => f.fixOrigin !== undefined && f.id !== "feat-1");
+			expect(fixFeature).toBeDefined();
+			expect(fixFeature!.fixOrigin!.sourceKind).toBe("worker-failure");
+			expect(fixFeature!.fixOrigin!.sourceFeatureId).toBe("feat-1");
+			expect(fixFeature!.fixOrigin!.sourceMilestoneId).toBe("milestone-1");
+		});
+
+		it("fix feature description references the undone work and issues", async () => {
+			const spawnWithIssue = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithHighIssue(),
+					makeMessageEndLine("assistant", "Done."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ id: "feat-1", status: "pending" });
+			const milestone = localMakeMilestone([feature], { id: "milestone-1", status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high" });
+			registerTool(spawnWithIssue);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeature = savedPlan.milestones[0].features.find((f) => f.fixOrigin !== undefined && f.id !== "feat-1");
+			expect(fixFeature).toBeDefined();
+			expect(fixFeature!.description).toContain("Missing error handling");
+			expect(fixFeature!.description).toContain("Race condition in cache");
+		});
+
+		it("fix feature increments totalFixFeaturesCreated in state", async () => {
+			const spawnWithIssue = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithHighIssue(),
+					makeMessageEndLine("assistant", "Done."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({ id: "feat-1", status: "pending" });
+			const milestone = localMakeMilestone([feature], { id: "milestone-1", status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high" });
+			registerTool(spawnWithIssue);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadState } = await import("../../extensions/state/manager.js");
+			const savedState = loadState(testDir)!;
+			expect(savedState.totalFixFeaturesCreated).toBe(1);
+		});
+
+		it("fix feature respects maxRetries config - no fix created when retries exhausted for source feature", async () => {
+			const spawnWithIssue = makeMockSpawn({
+				stdoutLines: [
+					makeReportResultWithHighIssue(),
+					makeMessageEndLine("assistant", "Done."),
+				],
+				exitCode: 0,
+			});
+			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
+			const feature = localMakeFeature({
+				id: "feat-1",
+				status: "active",
+				attempts: [
+					{ attemptNumber: 1, startedAt: "2025-01-01T00:00:00Z", resultPath: "", stdoutPath: "", stderrPath: "", status: "failure" },
+					{ attemptNumber: 2, startedAt: "2025-01-01T00:00:00Z", resultPath: "", stdoutPath: "", stderrPath: "", status: "failure" },
+				],
+			});
+			const milestone = localMakeMilestone([feature], { id: "milestone-1", status: "active" });
+			const plan = localMakePlan([milestone]);
+			saveState(testDir, state);
+			savePlan(testDir, plan);
+			saveConfig(testDir, { autonomy: "high", maxRetries: 2 });
+			registerTool(spawnWithIssue);
+
+			await executeFn!("id", { featureId: "feat-1" });
+
+			const { loadPlan } = await import("../../extensions/state/manager.js");
+			const savedPlan = loadPlan(testDir)!;
+			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined && f.id !== "feat-1");
+			expect(fixFeatures.length).toBe(0);
+		});
+	});
 });
