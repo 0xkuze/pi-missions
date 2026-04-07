@@ -1,0 +1,28 @@
+{
+  "featureId": "fix-learning-quality-and-dedup",
+  "reviewedAt": "2026-04-07T20:35:00.000Z",
+  "commitId": "41f620f",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "All four requirements implemented correctly. (1) Success workarounds route to 'conventions' topic instead of 'pitfalls' — clean separation of concerns. (2) FeatureContext interface added with optional parameter for backward compatibility; failure entries include feature name/description. (3) Deduplication via isDuplicateEntry in library.ts checks last 5 blocks with bidirectional substring matching — meets the 'simple substring check' spec. (4) Protocol.ts already contained library population instructions at lines 53-56, no changes needed — worker correctly verified this. Tests are comprehensive: 28 learn tests, 31 library tests, plus integration test updates. All existing tests adapted to new topic routing.",
+    "issues": [
+      {
+        "file": "extensions/state/library.ts",
+        "line": 85,
+        "severity": "non_blocking",
+        "description": "Bidirectional substring check in isDuplicateEntry (block.includes(entryTrimmed) || entryTrimmed.includes(block.trim())) could produce false positives when an existing block is short and appears as substring of a structurally different new entry. E.g., existing block '- Use mutex' would match any new entry containing that text. Acceptable for 'simple dedup' per spec, but worth noting for future refinement."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md already has the convention 'Success workarounds from workers should be learned as conventions, failure patterns as pitfalls' — this was correctly maintained. No gap.",
+      "evidence": "AGENTS.md Conventions section, last bullet point"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Clean implementation of all four requirements. Topic routing correctly separates success workarounds (conventions) from failure patterns (pitfalls). Feature context adds traceability to failure entries with backward compatibility. Deduplication is simple but effective with a 5-entry window. Protocol.ts already had library population instructions. Tests are thorough with 12 new test cases covering all paths including edge cases. One non-blocking note about bidirectional substring matching potentially producing false positives with short entries."
+}

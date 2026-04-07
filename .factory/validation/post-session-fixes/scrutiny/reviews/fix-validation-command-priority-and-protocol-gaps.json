@@ -1,0 +1,28 @@
+{
+  "featureId": "fix-validation-command-priority-and-protocol-gaps",
+  "reviewedAt": "2026-04-07T20:35:00.000Z",
+  "commitId": "5cbf5ac",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "All three fixes are correctly implemented. The config.ts priority swap is minimal and correct (3-line reorder). Planning protocol additions for library population and milestone-specific validationCommands are clear and well-placed. Executing protocol retry/stuck-feature instructions add useful guidance. One non-blocking duplication issue found: the new RETRY AND STUCK FEATURE HANDLING section repeats two bullet points verbatim from the existing INTERVENTION PATTERNS section immediately below it.",
+    "issues": [
+      {
+        "file": "extensions/orchestrator/protocol.ts",
+        "line": 213,
+        "severity": "non_blocking",
+        "description": "Duplication between RETRY AND STUCK FEATURE HANDLING and INTERVENTION PATTERNS sections. Two bullets are near-identical: (1) 'Feature fails twice → create a targeted fix feature addressing the specific failure' and (2) 'Feature exhausts retries (3x) → mark blocked, inform user clearly what went wrong and why' appear in both sections. This wastes LLM context tokens. The RETRY section adds 3 unique bullets (retry once on first failure, stuck active handling, move-on after fix), but the duplicate bullets should be removed from one section or the other."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "Mission AGENTS.md already documents the updated validation command priority order (milestone-specific > config > plan > auto-detect), so shared state is consistent with the code change.",
+      "evidence": "AGENTS.md Conventions section: 'Validation command resolution priority: milestone-specific > config > plan > auto-detect.'"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. Config priority reorder is correct and well-tested. Protocol additions for planning (library population, milestone validationCommands) and executing (retry logic, stuck feature handling, complete_feature usage) are useful and tested. One non-blocking issue: the new RETRY AND STUCK FEATURE HANDLING section duplicates two bullet points from the pre-existing INTERVENTION PATTERNS section in the executing protocol. Worker followed TDD procedure correctly per transcript. All 2352 tests pass, typecheck and lint clean."
+}

@@ -1,0 +1,34 @@
+{
+  "featureId": "fix-feature-status-on-verified-work",
+  "reviewedAt": "2026-04-07T20:35:00.000Z",
+  "commitId": "eb46687",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Clean, well-structured implementation that follows existing patterns closely. The completeFeature function mirrors skipFeature's structure (find feature, validate state, update plan + state, log progress event). The tool schema correctly adds complete_feature to the TypeBox Union. The execute handler follows the same guard/save/widget/return pattern as skip_feature and block_feature. Protocol instruction is clear and correctly placed. Types updated consistently. Tests are thorough with 9 cases covering status change, counter increments, counter non-interference, progress event logging, widget updates, error cases (unknown ID, already done), success message, and state guards. Protocol tests verify both presence of the section and the NOT skip_feature distinction.",
+    "issues": [
+      {
+        "file": "extensions/tools/update-state.ts",
+        "line": 84,
+        "severity": "non_blocking",
+        "description": "completeFeature allows completing features in any non-'done' status (pending, active, blocked, skipped, failed). While the protocol instructs this is for verified-work scenarios (where status would typically be 'active'), completing a 'skipped' or 'blocked' feature without clearing those semantics could be surprising. Consider restricting to only 'active' or 'failed' statuses. Low severity since the protocol instruction limits usage, and the orchestrator is the only caller."
+      },
+      {
+        "file": "extensions/types.ts",
+        "line": 302,
+        "severity": "non_blocking",
+        "description": "UpdateMissionStateParams type still doesn't include 'add_feature' and 'remove_feature' actions that exist in the tool schema. Pre-existing issue not introduced by this feature, but worth noting since this feature added 'complete_feature' to it."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md was updated with a convention about using complete_feature instead of skip_feature for verified work. This is good — the convention is documented and the protocol matches.",
+      "evidence": "Mission AGENTS.md contains: 'When a worker fails but work is verified (exit code 0, files changed), use complete_feature action (not skip_feature) so stats are accurate.'"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Solid implementation. Adds complete_feature action to update_mission_state following the exact same patterns as skip_feature and block_feature. Properly increments totalFeaturesCompleted (not totalFeaturesSkipped), sets feature status to 'done' with completedAt timestamp, and logs a feature_complete progress event. Protocol updated with clear VERIFIED WORK COMPLETION section. Tests comprehensive (9 update-state + 2 protocol). All verification commands passed (2330 tests, clean typecheck, clean lint). Two non-blocking observations: the function accepts any non-done status (not just active/failed), and UpdateMissionStateParams type is still missing add_feature/remove_feature (pre-existing). Pass."
+}

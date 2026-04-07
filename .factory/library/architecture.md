@@ -58,7 +58,7 @@ pi-missions is a pi extension providing Factory AI Missions-inspired orchestrati
 ## Validator Strictness
 
 - Default validator behavior is strict (reject on timeout/abort/missing verdict). Tests that depend on old pass-on-error behavior must set `saveConfig(basePath, { validatorStrictness: 'lenient' })`.
-- `synthesizeWorkerResult` defaults to strict mode for `report_result` extraction. Pass `{ legacyMode: true }` for backward-compat.
+- `synthesizeWorkerResult` has auto-legacy fallback: when `report_result` is not found but `exitCode === 0` and files were changed, the worker is treated as a success with a warning. Explicit `{ legacyMode: true }` also enables this fallback.
 
 ## Self-Correction
 
