@@ -23,7 +23,7 @@ pi-missions is a pi extension providing Factory AI Missions-inspired orchestrati
 - Auto-commit after success, PID tracking for orphan cleanup.
 - Per-feature validator (separate pi process for code review).
 
-## Tools (8 registered)
+## Tools (11 registered)
 
 1. submit_plan - Plan creation with validation
 2. spawn_worker - Blocking worker execution
@@ -33,6 +33,9 @@ pi-missions is a pi extension providing Factory AI Missions-inspired orchestrati
 6. update_mission_state - State updates
 7. complete_mission - Mission completion
 8. ask_questions - Interactive questionnaire
+9. update_library - Append content to knowledge library topics
+10. configure_environment - Create/update environment descriptor
+11. web_search - DuckDuckGo-based web search with optional library persistence
 
 ## State Files (.pi/missions/)
 
@@ -40,6 +43,9 @@ pi-missions is a pi extension providing Factory AI Missions-inspired orchestrati
 - state.json: Runtime lifecycle
 - config.json: User configuration
 - plan-history.jsonl: Mutation log
+- environment.json: Environment descriptor (services, env vars, setup commands)
+- library/: Knowledge library (architecture.md, environment.md, pitfalls.md, conventions.md, research.md)
+- skills/: Living skill templates (.md files)
 - runtime/: Worker artifacts per feature/attempt
 
 ## Protocol Injection Details

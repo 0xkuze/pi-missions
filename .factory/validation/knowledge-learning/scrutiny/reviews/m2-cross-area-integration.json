@@ -1,0 +1,28 @@
+{
+  "featureId": "m2-cross-area-integration",
+  "reviewedAt": "2026-04-07T15:30:00.000Z",
+  "commitId": "63a4499",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid integration feature. 17 tests across 3 validation assertions (VAL-CROSS-010, VAL-CROSS-011, VAL-CROSS-017) thoroughly cover the M2 cross-area integration. The wiring changes are minimal and correct: (1) clearProtocolCache() is conditionally called in spawn-worker.ts only when learning actually occurred (.learned check), (2) clearProtocolCache() is called unconditionally after appendLibraryTopic in update-library.ts and web-search.ts since those always mutate the library, (3) initLibrary(basePath) is called in index.ts during startNewMission() right after saveState(), ensuring library exists during planning phase. All library mutation paths in production code are correctly paired with clearProtocolCache(). The tests exercise the full pipeline (plan → spawn → learn → context propagation), backward compatibility (no library/contract), and cache invalidation mechanics.",
+    "issues": [
+      {
+        "file": "test/m2-integration.test.ts",
+        "line": 303,
+        "severity": "non_blocking",
+        "description": "Test 'protocol cache is invalidated after library content changes' asserts expect(thirdCall).toBe(firstCall) after clearProtocolCache(). Since buildOrchestratorProtocol is called with identical inputs, this assertion passes via string value equality but doesn't actually prove cache invalidation occurred (a cached result would also pass). The test name implies cache invalidation is being verified, but it only verifies content stability. Other tests in the block (e.g., 'library changes visible in worker context after cache clear') do properly verify cache invalidation with differing content, so coverage is adequate overall."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The codebase has a pattern where any function that mutates library content must call clearProtocolCache() afterward. This is enforced by convention in three places (spawn-worker, update-library, web-search) but is not documented in AGENTS.md. A new tool that appends to the library without clearing the cache would silently serve stale protocol prompts.",
+      "evidence": "extensions/tools/spawn-worker.ts:924-926 (conditional clear), extensions/tools/update-library.ts:75 (unconditional clear), extensions/tools/web-search.ts:157 (unconditional clear). No mention of this pattern in AGENTS.md or .factory/library/architecture.md."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The M2 cross-area integration feature correctly wires library initialization during mission start, protocol cache invalidation after all library mutation paths, and comprehensive tests for full pipeline, backward compatibility, and cache invalidation. One non-blocking test quality issue noted (weak assertion in cache invalidation test) but overall test coverage is thorough with 17 tests and 53 expect() calls all passing."
+}

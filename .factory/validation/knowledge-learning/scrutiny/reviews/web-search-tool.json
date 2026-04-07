@@ -1,0 +1,63 @@
+{
+  "featureId": "web-search-tool",
+  "reviewedAt": "2026-04-07T15:10:00.000Z",
+  "commitId": "fb0f566",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The web_search tool is well-implemented with proper error handling, TypeBox schema, injectable fetch for testing, and library persistence via appendLibraryTopic. The tool correctly registers with the expected name, parameters, and description. Error handling follows the feature spec: network errors return error results (not thrown exceptions), empty results return a success with 'no results' message, and rate limiting (429) returns a descriptive error. The implementation is wired into index.ts with import, MISSION_TOOL_NAMES entry, and registration call. 27 tests cover all specified validation assertions. However, there are several non-blocking issues: code duplication in HTML parsing, untested HTML parsing path (all tests use JSON mocks), dead code in tests, and minor style deviations.",
+    "issues": [
+      {
+        "file": "extensions/tools/web-search.ts",
+        "line": 42,
+        "severity": "non_blocking",
+        "description": "extractResultsFromHtml contains significant code duplication. The loop body parsing title, snippet, URL from HTML blocks (lines 48-67) is copy-pasted identically in the fallback path (lines 72-89). Per AGENTS.md: 'If you can't explain a function in one sentence, break it up. Delete dead code without hesitation.' The shared parsing logic should be extracted into a helper."
+      },
+      {
+        "file": "extensions/tools/web-search.ts",
+        "line": 42,
+        "severity": "non_blocking",
+        "description": "extractResultsFromHtml is the actual production code path (DuckDuckGo returns HTML, not JSON) but is not exported and has zero test coverage. All tests use mockFetchSuccess which returns JSON with Content-Type: application/json, so the JSON parsing branch is tested but the HTML branch — which is what runs in production — is completely untested. This is a meaningful test gap."
+      },
+      {
+        "file": "test/tools/web-search.test.ts",
+        "line": 37,
+        "severity": "non_blocking",
+        "description": "Dead code: callTool function (lines 37-46) is declared but never called. Per AGENTS.md: 'Delete dead code without hesitation.'"
+      },
+      {
+        "file": "test/tools/web-search.test.ts",
+        "line": 48,
+        "severity": "non_blocking",
+        "description": "Dead code: registerWithFetch function (lines 48-50) is declared but never called."
+      },
+      {
+        "file": "extensions/tools/web-search.ts",
+        "line": 9,
+        "severity": "non_blocking",
+        "description": "Style: SearchResult, SearchResponse, and Deps are declared as 'interface' but per AGENTS.md should be 'type' since they are simple data shapes, not public API contracts or extensible shapes. Convention says: 'interface for public API contracts and extensible shapes. type for unions, aliases, and everything else.'"
+      },
+      {
+        "file": "extensions/tools/web-search.ts",
+        "line": 107,
+        "severity": "non_blocking",
+        "description": "DuckDuckGo HTML search endpoint traditionally expects POST with form data, but the implementation sends a GET request with query parameters. This may work currently but is fragile — DuckDuckGo could change behavior for GET requests. The variable is even named 'formData' (suggesting POST) but is appended to the URL as query params."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The web_search tool returns structured details ({ error: boolean, results: SearchResult[] }) while every other tool in the codebase returns details: {} (empty object). This inconsistency is not documented anywhere. The structured approach is arguably better, but the divergence should be noted — either the convention should be updated to encourage structured details, or this tool should follow the existing empty-object pattern.",
+      "evidence": "extensions/tools/web-search.ts lines 185, 201, 207 vs every other tool file (update-library.ts, ask-questions.ts, spawn-worker.ts, etc.) which all use details: {}"
+    },
+    {
+      "area": "knowledge",
+      "observation": "Worker researched DuckDuckGo API approaches and discovered the HTML endpoint (html.duckduckgo.com/html/) is the viable free option. This knowledge about available free search APIs and their quirks (HTML vs JSON responses, rate limiting behavior) would be useful for future workers but is not recorded in .factory/library/.",
+      "evidence": "Transcript shows WebSearch and FetchUrl tool calls to research DuckDuckGo API options before implementation."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "PASS. The web_search tool implementation is solid and meets all specified validation assertions (VAL-SEARCH-001 through VAL-SEARCH-006). The tool is properly registered with TypeBox schema, handles errors gracefully without throwing, supports library persistence, and is wired into index.ts and MISSION_TOOL_NAMES. 27 tests pass covering all expected behaviors. Non-blocking issues include: duplicated HTML parsing code, zero test coverage for the HTML parsing path (the actual production path), two unused helper functions in tests, minor interface-vs-type style deviation, and an inconsistency with the details return pattern used by all other tools. None of these are blocking."
+}

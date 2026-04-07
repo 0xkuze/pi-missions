@@ -1,0 +1,40 @@
+{
+  "featureId": "spawn-and-learn",
+  "reviewedAt": "2026-04-07T14:15:00.000Z",
+  "commitId": "fee3b75",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Clean, focused implementation. learnFromResult in extensions/learn.ts correctly handles all three WorkerResult statuses (failure, success, blocked). Failure patterns are extracted with kind/message/details. Success workarounds come from handoff.discoveredIssues and notes. The spawnAndLearn toggle is respected as an early return guard. Integration into spawn-worker.ts is minimal and correct: placed after writeRunArtifacts, before validation, with protocol cache invalidation when learning occurs. Tests are thorough with 20 cases covering all VAL-LEARN and VAL-CROSS assertions plus edge cases. The TDD procedure was followed (tests written first, then implementation).",
+    "issues": [
+      {
+        "file": "test/tools/learn.test.ts",
+        "line": 2,
+        "severity": "non_blocking",
+        "description": "Unused import: readFileSync is imported from node:fs but never used in any test case. Biome flags this as noUnusedImports error."
+      },
+      {
+        "file": "test/tools/learn.test.ts",
+        "line": 4,
+        "severity": "non_blocking",
+        "description": "Unused import: appendLibraryTopic is imported from library.js but never used directly in any test (tests call learnFromResult which internally calls appendLibraryTopic). Biome flags this as noUnusedImports error."
+      },
+      {
+        "file": "test/tools/learn.test.ts",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "Import order not sorted per biome organizeImports rule. The learn.js import should come before library.js import alphabetically."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The worker ran biome check only on extensions/ directory (as documented in AGENTS.md), but the test file test/tools/learn.test.ts has biome lint errors (unused imports: readFileSync, appendLibraryTopic; unsorted imports). The mission AGENTS.md and skill both say 'Run npx @biomejs/biome check --write extensions/' which excludes test/. If test files should also pass biome checks, the documented lint command should include test/ as well.",
+      "evidence": "Running 'npx @biomejs/biome check test/tools/learn.test.ts' reports 2 errors (noUnusedImports for readFileSync and appendLibraryTopic), 2 warnings (organizeImports, formatting). The skill SKILL.md step 10 says 'Run npx @biomejs/biome check --write extensions/' — test directory excluded."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "The spawn-and-learn feature is well implemented. The core learnFromResult function is clean, handles all WorkerResult statuses correctly, and respects the spawnAndLearn toggle completely. Integration into spawn-worker.ts is minimal (3 lines) and correctly placed after artifact writing but before validation, with protocol cache invalidation when learning occurs. The end-to-end flow (learn → append pitfalls.md → readLibraryTopic → worker prompt injection) is verified by tracing through the codebase. All 20 tests pass and cover the required VAL-LEARN and VAL-CROSS assertions. The only issues are non-blocking: unused imports and unsorted imports in the test file, which biome flags but were not caught because the documented lint command targets only extensions/."
+}

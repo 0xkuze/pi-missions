@@ -1,0 +1,40 @@
+{
+  "featureId": "environment-management",
+  "reviewedAt": "2026-04-07T14:45:00.000Z",
+  "commitId": "7e07bb1",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid, well-structured implementation of environment management. The EnvironmentDescriptorSchema is properly defined in types.ts with all fields optional as specified. The configure_environment tool correctly gates on planning/draft_review states. State manager loadEnvironment/saveEnvironment follow existing patterns with atomic writes and TypeBox validation. Setup command execution in spawn-worker.ts is properly gated by the environmentSetupComplete flag, preventing re-runs. Secret masking in generateWorkerContext correctly replaces secret env var values with '<secret>'. The runSetupCommand function uses sh -c with timeout handling. All 30 tests cover the required VAL assertions comprehensively. Code follows project conventions: no comments, const usage, TypeBox schemas, named exports, .js extensions on imports, kebab-case files.",
+    "issues": [
+      {
+        "file": "extensions/tools/configure-environment.ts",
+        "line": 5,
+        "severity": "non_blocking",
+        "description": "PLANNING_STATUSES includes 'draft_review' but the feature description says 'planning state only'. The code is arguably more correct (allowing configuration during draft review makes sense), but the test suite only tests 'planning' and 'executing' (reject). There is no test confirming draft_review acceptance. Low risk since the Set lookup is trivially correct, but a test would provide coverage."
+      },
+      {
+        "file": "extensions/tools/spawn-worker.ts",
+        "line": 582,
+        "severity": "non_blocking",
+        "description": "The environmentSetupComplete flag is one-shot: once set to true, subsequent environment descriptor updates (via configure_environment tool) won't trigger setup command re-execution. This matches the spec ('not re-run on subsequent spawns') but could surprise users who update setupCommands after the first worker spawn. No mechanism exists to reset the flag. This is a design observation, not a bug."
+      },
+      {
+        "file": "extensions/state/manager.ts",
+        "line": 164,
+        "severity": "non_blocking",
+        "description": "loadEnvironment reads from disk on every call (no in-memory cache), unlike loadState/loadPlan which use caches. This is functionally correct and environment reads are infrequent (once per worker spawn), so performance impact is negligible. Just noting the inconsistency with the other load* functions."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "knowledge",
+      "observation": "architecture.md lists '8 registered' tools and enumerates them, but this commit (and recent prior commits) added configure_environment, update_library, and web_search — now 11 tools. The State Files section also doesn't mention environment.json. Workers or reviewers consulting architecture.md will get stale information about available tools and state files.",
+      "evidence": ".factory/library/architecture.md:26 says '## Tools (8 registered)' and lists 8 tools. extensions/index.ts MISSION_TOOL_NAMES array now has 10 entries (submit_plan, spawn_worker, update_mission_state, commit_changes, complete_mission, run_validation, create_fix_feature, ask_questions, update_library, configure_environment, web_search). State Files section (line 37-43) lists plan.json, state.json, config.json, plan-history.jsonl, runtime/ but not environment.json or library/."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Environment management feature passes review. The implementation is clean, well-tested (30 tests covering all 7 VAL-ENV assertions), and follows project conventions. The EnvironmentDescriptorSchema, configure_environment tool, state manager persistence, setup command execution, and worker context injection with secret masking all work correctly. Three non-blocking observations noted: (1) draft_review state acceptance is untested, (2) the one-shot environmentSetupComplete flag can't be reset after environment updates, (3) loadEnvironment lacks caching unlike sibling functions. One shared state observation: architecture.md is stale regarding tool count and state files."
+}
