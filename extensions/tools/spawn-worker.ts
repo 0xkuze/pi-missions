@@ -17,6 +17,7 @@ import type { Feature, MissionPlan, MissionState, WorkerAttempt, WorkerResult } 
 import { nowISO } from "../utils.js";
 import { removePidFile, writePidFile } from "../worker-pid.js";
 import { synthesizeWorkerResult } from "./result-synthesis.js";
+import { runValidator } from "./validate-worker.js";
 
 interface StreamLike {
 	on(event: string, handler: (data: Buffer) => void): unknown;
@@ -629,7 +630,92 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 
 			writeRunArtifacts(runtimeDir, procResult.stdout, procResult.stderr, result, metadata);
 
+			let finalResult = result;
+
+			// Validator step: after worker success, run LLM review against acceptance criteria.
+			// On FIX verdict: re-spawn worker once with feedback, then accept.
+			// On REJECT verdict: treat as failure with feedback for orchestrator.
 			if (result.status === "success") {
+				const validatorVerdict = await runValidator(feature, result, {
+					basePath: deps.basePath,
+					projectDir: deps.projectDir,
+					spawnFn,
+					plan: updatedPlan,
+					config,
+					signal: signal ?? undefined,
+				});
+
+				if (validatorVerdict.verdict === "fix") {
+					// Re-spawn worker with validator feedback for one retry
+					const retryAttemptNumber = attemptNumber + 1;
+					const retryRuntimeDir = join(deps.basePath, "runtime", feature.id, String(retryAttemptNumber));
+					const retrySkill = generateWorkerSkill(feature, agentsMd, config.promptingMode);
+					const retryPrompt = generateWorkerPrompt(
+						feature,
+						`Validator feedback (fix these issues):\n${validatorVerdict.feedback}`,
+					);
+					const retryContext = generateWorkerContext(agentsMd);
+					writeWorkerFiles(deps.basePath, feature.id, retryAttemptNumber, {
+						skill: retrySkill,
+						prompt: retryPrompt,
+						context: retryContext,
+					});
+					const retrySkillPath = join(retryRuntimeDir, "worker-skill.md");
+					const retryContextPath = join(retryRuntimeDir, "worker-context.md");
+					const retryArgs = buildWorkerArgs(retrySkillPath, retryContextPath, retryPrompt, workerModel);
+					const { command: retryCmd, commandArgs: retryCmdArgs } = getPiInvocation(retryArgs);
+
+					activeState = {
+						...activeState,
+						progressLog: [
+							...activeState.progressLog,
+							{
+								timestamp: nowISO(),
+								type: "worker_spawn" as const,
+								detail: `Validator said FIX for '${feature.name}' — re-spawning worker with feedback`,
+							},
+						],
+					};
+					saveState(deps.basePath, activeState);
+					deps.updateWidget(activeState, updatedPlan);
+
+					const retryProcResult = await spawnWorkerProcess(spawnFn, retryCmd, retryCmdArgs, deps.projectDir, {
+						signal: signal ?? undefined,
+						timeoutMs,
+						runtimeDir: retryRuntimeDir,
+					});
+
+					const retryResult = synthesizeWorkerResult(
+						retryProcResult.stdout,
+						retryProcResult.stderr,
+						retryProcResult.exitCode,
+						retryProcResult.signal,
+						startTime,
+					);
+
+					writeRunArtifacts(retryRuntimeDir, retryProcResult.stdout, retryProcResult.stderr, retryResult, {
+						...metadata,
+						attemptNumber: retryAttemptNumber,
+						validatorFeedback: validatorVerdict.feedback,
+					});
+
+					finalResult = retryResult.status === "success" ? retryResult : result;
+				} else if (validatorVerdict.verdict === "reject") {
+					// Architectural issue — return as failure with validator feedback
+					finalResult = {
+						...result,
+						status: "failure",
+						summary: `${result.summary}\n\nValidator REJECTED: ${validatorVerdict.feedback}`,
+						error: {
+							kind: "validation",
+							message: `Validator rejected: ${validatorVerdict.feedback}`,
+						},
+					};
+				}
+				// verdict === "pass" → finalResult stays as original success
+			}
+
+			if (finalResult.status === "success") {
 				updatedPlan = updateFeatureSuccess(updatedPlan, feature.id, attempt);
 				activeState = {
 					...activeState,
@@ -665,17 +751,18 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			savePlan(deps.basePath, updatedPlan);
 			deps.updateWidget(activeState, updatedPlan);
 
-			const statusText = result.status === "success" ? "succeeded" : `failed (attempt ${attemptNumber})`;
+			const statusText = finalResult.status === "success" ? "succeeded" : `failed (attempt ${attemptNumber})`;
 			const nextPending = findNextPending(updatedPlan, feature.id);
 			const progressDone = activeState.totalFeaturesCompleted + activeState.totalFeaturesSkipped;
 			const completionHint = nextPending
 				? `Next: ${nextPending.name}.`
 				: "ALL FEATURES DONE. Call complete_mission now with a summary of what was accomplished.";
+			const validatorNote = finalResult !== result ? "\n(Includes validator review step)" : "";
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${result.summary}`,
+						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${finalResult.summary}${validatorNote}`,
 					},
 				],
 				details: {},

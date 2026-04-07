@@ -241,10 +241,12 @@ function registerTool(
 		setThinkingLevel: extraOpts.setThinkingLevel,
 		availableModels: extraOpts.availableModels,
 		_spawnOverride: (command, args, opts) => {
-			capturedCommand = command;
-			capturedArgs = args;
-			capturedCwd = (opts as { cwd?: string }).cwd ?? null;
-			capturedSpawnOpts = opts as Record<string, unknown>;
+			if (capturedCommand === null) {
+				capturedCommand = command;
+				capturedArgs = args;
+				capturedCwd = (opts as { cwd?: string }).cwd ?? null;
+				capturedSpawnOpts = opts as Record<string, unknown>;
+			}
 			return spawnMock(command, args, opts);
 		},
 	});
