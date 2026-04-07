@@ -403,6 +403,14 @@ export default function (pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx) => {
 		latestCtx = ctx;
 
+		// Workers (non-interactive pi processes) must not activate the extension.
+		// They run in the same project dir and would find state.json, inject protocol,
+		// acquire locks, and interfere with the orchestrator session.
+		if (!ctx.hasUI) {
+			disableMissionTools();
+			return;
+		}
+
 		// Disable mission tools by default; they are enabled only when mission mode activates.
 		disableMissionTools();
 

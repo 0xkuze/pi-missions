@@ -433,6 +433,42 @@ describe("extension entry point (index.ts)", () => {
 		});
 	});
 
+	describe("worker isolation — extension must not activate in non-interactive (worker) processes", () => {
+		it("does not activate mission mode when ctx.hasUI is false", async () => {
+			const state = _ss({ status: "executing" });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			(ctx as any).hasUI = false;
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			const MISSION_NAMES = ["submit_plan", "spawn_worker", "update_mission_state", "complete_mission"];
+			for (const name of MISSION_NAMES) {
+				expect(activeTools).not.toContain(name);
+			}
+		});
+
+		it("does not inject protocol when ctx.hasUI is false", async () => {
+			const state = _ss({ status: "executing" });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			(ctx as any).hasUI = false;
+			const { handlers } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			const event = { type: "before_agent_start", prompt: "", systemPrompt: "base" };
+			const result = handlers.get("before_agent_start")!(event, ctx);
+			expect(result).toBeUndefined();
+		});
+
+		it("still activates when ctx.hasUI is true (normal session)", async () => {
+			const state = _ss({ status: "executing" });
+			saveState(basePath, state);
+			const ctx = buildMockCtx([]);
+			const { handlers, activeTools } = registerExtension(tmpDir);
+			await handlers.get("session_start")!({ type: "session_start", reason: "startup" }, ctx);
+			expect(activeTools).toContain("spawn_worker");
+		});
+	});
+
 	describe("session_start handler u2014 VAL-STATE-011", () => {
 		it("loads state from filesystem when it exists (filesystem takes priority)", () => {
 			const state = makePlanningState();
