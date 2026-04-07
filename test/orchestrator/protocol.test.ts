@@ -202,6 +202,23 @@ describe("buildOrchestratorProtocol", () => {
 			const result = verboseProtocol(makeState({ status: "planning" })) as string;
 			expect(result).not.toContain("do NOT use edit");
 		});
+
+		it("instructs populating library/architecture.md after codebase analysis", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result).toMatch(/architecture\.md|architecture topic/i);
+			expect(result.toLowerCase()).toMatch(/library.*architecture|populate.*library/i);
+		});
+
+		it("instructs populating library/conventions.md after codebase analysis", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result).toMatch(/conventions\.md|conventions topic/i);
+		});
+
+		it("instructs setting milestone-specific validationCommands", () => {
+			const result = verboseProtocol(makeState({ status: "planning" })) as string;
+			expect(result).toMatch(/validationCommands|validation.*commands/i);
+			expect(result.toLowerCase()).toMatch(/milestone.*validation|scaffold/i);
+		});
 	});
 
 	describe("draft_review state (VAL-PROTO-002)", () => {
@@ -358,9 +375,9 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result).toContain("auth-endpoint");
 		});
 
-		it("is under 800 tokens (char count < 4000)", () => {
+		it("is under 1000 tokens (char count < 5000)", () => {
 			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
-			expect(result.length).toBeLessThan(4000);
+			expect(result.length).toBeLessThan(5000);
 			expect(result.length).toBeGreaterThan(200);
 		});
 
@@ -445,6 +462,21 @@ describe("buildOrchestratorProtocol", () => {
 		it("contains guidance for user redirects", () => {
 			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
 			expect(result.toLowerCase()).toContain("redirect");
+		});
+
+		it("instructs retry logic for failed features", () => {
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result).toMatch(/retry|retries|retry.*feature|feature.*fail.*twice/i);
+		});
+
+		it("instructs handling features stuck as active", () => {
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result.toLowerCase()).toMatch(/stuck|active.*feature|feature.*stuck/i);
+		});
+
+		it("instructs when to move on vs retry", () => {
+			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
+			expect(result.toLowerCase()).toMatch(/move on|retry|exhausts/);
 		});
 	});
 

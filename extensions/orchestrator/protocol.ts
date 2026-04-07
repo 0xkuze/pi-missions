@@ -50,6 +50,13 @@ Analyze the codebase first using read and bash. Then have a conversation with th
 When scanning the codebase, combine multiple commands into a single bash call to minimize turns. Example: \`ls src/ && cat package.json && head -20 tsconfig.json\`
 Targeted scan only \u2014 check package.json, README, AGENTS.md, directory structure. Do NOT read implementation files.
 
+After codebase analysis, populate the knowledge library using \`update_library\`:
+- Write library/architecture.md with project structure overview, key components, and data flows.
+- Write library/conventions.md with coding conventions, naming patterns, and style rules discovered from AGENTS.md and existing code.
+This knowledge helps future workers understand the project without re-reading the codebase.
+
+When defining milestones, set \`validationCommands\` per milestone when the default commands don't apply. For example, scaffold-only milestones with no source code should skip typecheck and test commands. This overrides config-level validation commands for that milestone.
+
 Call \`ask_questions\` to interview the user about scope, priorities, constraints, and architecture preferences.
 Challenge vague goals. Ask "what does done look like?" for each major piece of work.
 Probe for edge cases, error handling expectations, testing requirements, and integration constraints.
@@ -198,6 +205,13 @@ CODE REVIEW: For complex features that touch many files or introduce architectur
 SCRUTINY: After run_validation returns status "pass" for a milestone, call run_scrutiny for that milestone. The scrutiny reviewer checks for architectural issues, cross-feature gaps, duplication, and convention violations. If scrutiny finds error-severity issues, create fix features addressing them. Warning/info issues can be noted but do not require fixes. If validation fails, skip scrutiny — fix validation failures first.
 
 VERIFIED WORK COMPLETION: When a worker fails (e.g., didn't call report_result) but you verify the work was actually done (files changed, tests pass, correct behavior via bash/read checks), use \`update_mission_state\` with action \`complete_feature\` (NOT \`skip_feature\`) to mark the feature as completed. This ensures totalFeaturesCompleted is accurate. Use \`skip_feature\` only for features that should genuinely be skipped (not needed, out of scope).
+
+RETRY AND STUCK FEATURE HANDLING:
+- Feature fails once \u2192 retry with spawn_worker for the same feature (fresh attempt).
+- Feature fails twice \u2192 create a targeted fix feature addressing the specific failure.
+- Feature exhausts retries (3x) \u2192 mark blocked, inform user clearly what went wrong and why.
+- Feature stuck as 'active' after worker completed but state wasn't updated \u2192 use complete_feature if work is verified, or skip_feature if genuinely abandoned.
+- After a fix feature completes successfully, move on to the next pending feature. Do not re-retry the original failed feature.
 
 INTERVENTION PATTERNS:
 - Feature fails twice \u2192 create a targeted fix feature addressing the specific failure.

@@ -91,10 +91,10 @@ export function resolveValidationCommands(
 	}
 
 	let result: string[];
-	if (config.validation?.commands && config.validation.commands.length > 0) {
-		result = sortCommandsByCanonicalOrder(config.validation.commands);
-	} else if (milestone?.validationCommands && milestone.validationCommands.length > 0) {
+	if (milestone?.validationCommands && milestone.validationCommands.length > 0) {
 		result = sortCommandsByCanonicalOrder(milestone.validationCommands);
+	} else if (config.validation?.commands && config.validation.commands.length > 0) {
+		result = sortCommandsByCanonicalOrder(config.validation.commands);
 	} else if (plan?.validationCommands && plan.validationCommands.length > 0) {
 		result = sortCommandsByCanonicalOrder(plan.validationCommands);
 	} else {
