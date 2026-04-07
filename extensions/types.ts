@@ -528,6 +528,44 @@ export const EnvironmentDescriptorSchema = Type.Object({
 
 export type EnvironmentDescriptor = Static<typeof EnvironmentDescriptorSchema>;
 
+export interface ValidationAssertion {
+	id: string;
+	featureId: string;
+	type: "command" | "script";
+	command: string;
+	expect: {
+		exitCode?: number;
+		stdoutContains?: string;
+		stdoutNotContains?: string;
+		stderrContains?: string;
+	};
+	description: string;
+	status: "pending" | "pass" | "fail" | "error";
+}
+
+export interface ValidationContract {
+	assertions: ValidationAssertion[];
+}
+
+const ValidationAssertionSchema = Type.Object({
+	id: Type.String(),
+	featureId: Type.String(),
+	type: Type.Union([Type.Literal("command"), Type.Literal("script")]),
+	command: Type.String(),
+	expect: Type.Object({
+		exitCode: Type.Optional(Type.Number()),
+		stdoutContains: Type.Optional(Type.String()),
+		stdoutNotContains: Type.Optional(Type.String()),
+		stderrContains: Type.Optional(Type.String()),
+	}),
+	description: Type.String(),
+	status: Type.Union([Type.Literal("pending"), Type.Literal("pass"), Type.Literal("fail"), Type.Literal("error")]),
+});
+
+export const ValidationContractSchema = Type.Object({
+	assertions: Type.Array(ValidationAssertionSchema),
+});
+
 export const ReportResultSchema = Type.Object({
 	whatWasImplemented: Type.String(),
 	whatWasLeftUndone: Type.String(),

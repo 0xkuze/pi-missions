@@ -2,8 +2,14 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Value } from "@sinclair/typebox/value";
 import { getDefaultConfig } from "../config.js";
-import type { EnvironmentDescriptor, MissionConfig, MissionPlan, MissionState } from "../types.js";
-import { EnvironmentDescriptorSchema, MissionConfigSchema, MissionPlanSchema, MissionStateSchema } from "../types.js";
+import type { EnvironmentDescriptor, MissionConfig, MissionPlan, MissionState, ValidationContract } from "../types.js";
+import {
+	EnvironmentDescriptorSchema,
+	MissionConfigSchema,
+	MissionPlanSchema,
+	MissionStateSchema,
+	ValidationContractSchema,
+} from "../types.js";
 
 let stateCache: { basePath: string; state: MissionState } | null = null;
 let planCache: { basePath: string; plan: MissionPlan } | null = null;
@@ -178,6 +184,38 @@ export function loadEnvironment(basePath: string): EnvironmentDescriptor | null 
 		const first = errors[0];
 		throw new Error(
 			`environment.json failed schema validation: ${first ? `${first.path} ${first.message}` : "unknown error"}`,
+		);
+	}
+	return parsed;
+}
+
+function contractPath(basePath: string): string {
+	return join(basePath, "validation-contract.json");
+}
+
+export function saveContract(basePath: string, contract: ValidationContract): void {
+	atomicWrite(contractPath(basePath), JSON.stringify(contract, null, 2));
+}
+
+export function loadContract(basePath: string): ValidationContract | null {
+	const file = contractPath(basePath);
+	let raw: string;
+	try {
+		raw = readFileSync(file, "utf8");
+	} catch {
+		return null;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch (err) {
+		throw new Error(`validation-contract.json contains invalid JSON: ${(err as Error).message}`);
+	}
+	if (!Value.Check(ValidationContractSchema, parsed)) {
+		const errors = [...Value.Errors(ValidationContractSchema, parsed)];
+		const first = errors[0];
+		throw new Error(
+			`validation-contract.json failed schema validation: ${first ? `${first.path} ${first.message}` : "unknown error"}`,
 		);
 	}
 	return parsed;

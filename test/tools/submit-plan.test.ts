@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadPlan, loadState, saveState } from "../../extensions/state/manager.js";
+import { loadContract, loadPlan, loadState, saveState } from "../../extensions/state/manager.js";
 import { readHistory } from "../../extensions/state/plan-history.js";
 import { registerSubmitPlanTool } from "../../extensions/tools/submit-plan.js";
 import type { MissionPlan, MissionState } from "../../extensions/types.js";
@@ -546,6 +546,315 @@ describe("registerSubmitPlanTool", () => {
 			await callTool(tmpDir, params, state, undefined, showDraftReview);
 
 			expect(showDraftReview).not.toHaveBeenCalled();
+		});
+	});
+
+	describe("VAL-CONTRACT-002/003/004/007/008: submit_plan with assertions", () => {
+		function makePlanParamsWithAssertions() {
+			return {
+				...makeMinimalPlanParams(),
+				assertions: [
+					{
+						id: "a1",
+						featureId: "feature-1",
+						type: "command",
+						command: "bun test",
+						expect: { exitCode: 0 },
+						description: "Tests pass",
+					},
+				],
+			};
+		}
+
+		describe("VAL-CONTRACT-002: contract created alongside plan", () => {
+			it("creates validation-contract.json when assertions provided", async () => {
+				const state = makePlanningState();
+				await callTool(tmpDir, makePlanParamsWithAssertions(), state);
+
+				expect(existsSync(join(tmpDir, "validation-contract.json"))).toBe(true);
+				const contract = loadContract(tmpDir);
+				expect(contract).not.toBeNull();
+				expect(contract!.assertions).toHaveLength(1);
+				expect(contract!.assertions[0]!.id).toBe("a1");
+			});
+
+			it("does not create contract file when assertions omitted", async () => {
+				const state = makePlanningState();
+				await callTool(tmpDir, makeMinimalPlanParams(), state);
+
+				expect(existsSync(join(tmpDir, "validation-contract.json"))).toBe(false);
+				expect(loadContract(tmpDir)).toBeNull();
+			});
+
+			it("does not create contract file when assertions is empty array", async () => {
+				const state = makePlanningState();
+				await callTool(tmpDir, { ...makeMinimalPlanParams(), assertions: [] }, state);
+
+				expect(existsSync(join(tmpDir, "validation-contract.json"))).toBe(false);
+			});
+		});
+
+		describe("VAL-CONTRACT-003: submit_plan accepts optional assertions", () => {
+			it("accepts assertions with all expect fields populated", async () => {
+				const state = makePlanningState();
+				const params = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a1",
+							featureId: "feature-1",
+							type: "command",
+							command: "bun test",
+							expect: {
+								exitCode: 0,
+								stdoutContains: "pass",
+								stdoutNotContains: "fail",
+								stderrContains: "",
+							},
+							description: "Full assertion",
+						},
+					],
+				};
+				const result = await callTool(tmpDir, params, state);
+				expect(result.content[0].text).toContain("submitted");
+
+				const contract = loadContract(tmpDir);
+				expect(contract!.assertions[0]!.expect.stdoutContains).toBe("pass");
+			});
+
+			it("accepts assertions with empty expect object", async () => {
+				const state = makePlanningState();
+				const params = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a2",
+							featureId: "feature-1",
+							type: "script",
+							command: "echo hi",
+							expect: {},
+							description: "Minimal assertion",
+						},
+					],
+				};
+				const result = await callTool(tmpDir, params, state);
+				expect(result.content[0].text).toContain("submitted");
+			});
+		});
+
+		describe("VAL-CONTRACT-004: featureIds validated against plan features", () => {
+			it("accepts assertions with valid featureIds", async () => {
+				const state = makePlanningState();
+				const params = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a1",
+							featureId: "feature-1",
+							type: "command",
+							command: "bun test",
+							expect: {},
+							description: "Valid",
+						},
+					],
+				};
+				const result = await callTool(tmpDir, params, state);
+				expect(result.content[0].text).toContain("submitted");
+			});
+
+			it("rejects assertion with nonexistent featureId", async () => {
+				const state = makePlanningState();
+				const params = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a1",
+							featureId: "nonexistent-feature",
+							type: "command",
+							command: "bun test",
+							expect: {},
+							description: "Invalid featureId",
+						},
+					],
+				};
+				const result = await callTool(tmpDir, params, state);
+				expect(result.content[0].text).toContain("Error");
+				expect(result.content[0].text).toContain("featureId");
+				expect(existsSync(join(tmpDir, "validation-contract.json"))).toBe(false);
+			});
+
+			it("rejects multiple assertions with one invalid featureId", async () => {
+				const state = makePlanningState();
+				const params = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a1",
+							featureId: "feature-1",
+							type: "command",
+							command: "bun test",
+							expect: {},
+							description: "Valid",
+						},
+						{
+							id: "a2",
+							featureId: "bad-feature",
+							type: "command",
+							command: "echo",
+							expect: {},
+							description: "Invalid",
+						},
+					],
+				};
+				const result = await callTool(tmpDir, params, state);
+				expect(result.content[0].text).toContain("Error");
+				expect(result.content[0].text).toContain("featureId");
+			});
+		});
+
+		describe("VAL-CONTRACT-007: status forced to pending", () => {
+			it("forces all assertion statuses to pending regardless of input", async () => {
+				const state = makePlanningState();
+				const params = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a1",
+							featureId: "feature-1",
+							type: "command",
+							command: "bun test",
+							expect: { exitCode: 0 },
+							description: "Test",
+							status: "pass",
+						},
+					],
+				};
+				await callTool(tmpDir, params, state);
+
+				const contract = loadContract(tmpDir);
+				expect(contract!.assertions[0]!.status).toBe("pending");
+			});
+
+			it("forces status to pending even when status is omitted from input", async () => {
+				const state = makePlanningState();
+				const params = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a1",
+							featureId: "feature-1",
+							type: "command",
+							command: "bun test",
+							expect: {},
+							description: "Test",
+						},
+					],
+				};
+				await callTool(tmpDir, params, state);
+
+				const contract = loadContract(tmpDir);
+				expect(contract!.assertions[0]!.status).toBe("pending");
+			});
+		});
+
+		describe("duplicate assertion ID rejection", () => {
+			it("rejects assertions with duplicate IDs", async () => {
+				const state = makePlanningState();
+				const params = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "dupe-id",
+							featureId: "feature-1",
+							type: "command",
+							command: "bun test",
+							expect: {},
+							description: "First",
+						},
+						{
+							id: "dupe-id",
+							featureId: "feature-1",
+							type: "command",
+							command: "echo hi",
+							expect: {},
+							description: "Duplicate",
+						},
+					],
+				};
+				const result = await callTool(tmpDir, params, state);
+				expect(result.content[0].text).toContain("Error");
+				expect(result.content[0].text).toContain("Duplicate assertion ID");
+				expect(existsSync(join(tmpDir, "validation-contract.json"))).toBe(false);
+			});
+		});
+
+		describe("VAL-CONTRACT-008: resubmission replaces previous contract", () => {
+			it("replaces old contract with new one on resubmission", async () => {
+				const state = makePlanningState();
+
+				const firstParams = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a1",
+							featureId: "feature-1",
+							type: "command",
+							command: "bun test",
+							expect: {},
+							description: "First assertion",
+						},
+					],
+				};
+				await callTool(tmpDir, firstParams, state);
+
+				const contract1 = loadContract(tmpDir);
+				expect(contract1!.assertions).toHaveLength(1);
+				expect(contract1!.assertions[0]!.id).toBe("a1");
+
+				const draftState = loadState(tmpDir)!;
+				const secondParams = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a2",
+							featureId: "feature-1",
+							type: "command",
+							command: "echo updated",
+							expect: {},
+							description: "Second assertion",
+						},
+					],
+				};
+				await callTool(tmpDir, secondParams, draftState);
+
+				const contract2 = loadContract(tmpDir);
+				expect(contract2!.assertions).toHaveLength(1);
+				expect(contract2!.assertions[0]!.id).toBe("a2");
+			});
+
+			it("removes contract when resubmission omits assertions", async () => {
+				const state = makePlanningState();
+
+				const firstParams = {
+					...makeMinimalPlanParams(),
+					assertions: [
+						{
+							id: "a1",
+							featureId: "feature-1",
+							type: "command",
+							command: "bun test",
+							expect: {},
+							description: "Will be removed",
+						},
+					],
+				};
+				await callTool(tmpDir, firstParams, state);
+				expect(existsSync(join(tmpDir, "validation-contract.json"))).toBe(true);
+
+				const draftState = loadState(tmpDir)!;
+				await callTool(tmpDir, makeMinimalPlanParams(), draftState);
+				expect(existsSync(join(tmpDir, "validation-contract.json"))).toBe(false);
+			});
 		});
 	});
 });

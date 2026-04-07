@@ -1,9 +1,11 @@
+import { existsSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
+import { loadPlan, loadState, saveContract, savePlan, saveState } from "../state/manager.js";
 import { appendMutation, lastPlanVersion } from "../state/plan-history.js";
 import { transitionState } from "../state/transitions.js";
-import type { MissionPlan, MissionState } from "../types.js";
+import type { MissionPlan, MissionState, ValidationContract } from "../types.js";
 import { generateId, nowISO } from "../utils.js";
 
 const VALID_COMPLEXITIES = new Set(["low", "medium", "high"]);
@@ -95,6 +97,29 @@ function validatePlanParams(params: {
 					return `Feature '${feature.id}' has dependency '${dep}' which does not reference an existing feature ID`;
 				}
 			}
+		}
+	}
+
+	return null;
+}
+
+function validateAssertions(
+	assertions:
+		| Array<{ id: string; featureId: string; type: string; command: string; expect: unknown; description: string }>
+		| undefined,
+	planFeatureIds: Set<string>,
+): string | null {
+	if (!assertions || assertions.length === 0) return null;
+
+	const assertionIds = new Set<string>();
+	for (const assertion of assertions) {
+		if (assertionIds.has(assertion.id)) {
+			return `Duplicate assertion ID: '${assertion.id}'`;
+		}
+		assertionIds.add(assertion.id);
+
+		if (!planFeatureIds.has(assertion.featureId)) {
+			return `Assertion '${assertion.id}' references unknown featureId: '${assertion.featureId}'`;
 		}
 	}
 
@@ -205,6 +230,29 @@ export function registerSubmitPlanTool(pi: ExtensionAPI, deps: Deps): void {
 					validator: Type.Optional(Type.String()),
 				}),
 			),
+			assertions: Type.Optional(
+				Type.Array(
+					Type.Object({
+						id: Type.String({ description: "Unique assertion identifier" }),
+						featureId: Type.String({ description: "Feature ID this assertion validates" }),
+						type: Type.Union([Type.Literal("command"), Type.Literal("script")], {
+							description: "Assertion execution type",
+						}),
+						command: Type.String({ description: "Command or script to execute" }),
+						expect: Type.Object(
+							{
+								exitCode: Type.Optional(Type.Number()),
+								stdoutContains: Type.Optional(Type.String()),
+								stdoutNotContains: Type.Optional(Type.String()),
+								stderrContains: Type.Optional(Type.String()),
+							},
+							{ description: "Expected outcomes" },
+						),
+						description: Type.String({ description: "What this assertion verifies" }),
+					}),
+					{ description: "Validation assertions for the plan" },
+				),
+			),
 		}),
 		async execute(_toolCallId, params) {
 			const state = loadState(deps.basePath);
@@ -235,6 +283,12 @@ export function registerSubmitPlanTool(pi: ExtensionAPI, deps: Deps): void {
 				return { content: [{ type: "text", text: `Error: ${validationError}` }], details: {} };
 			}
 
+			const planFeatureIds = collectAllFeatureIds(params.milestones);
+			const assertionError = validateAssertions(params.assertions, planFeatureIds);
+			if (assertionError !== null) {
+				return { content: [{ type: "text", text: `Error: ${assertionError}` }], details: {} };
+			}
+
 			const existingPlan = loadPlan(deps.basePath);
 			const isResubmission = state.status === "draft_review" && existingPlan !== null;
 			const historyVersion = lastPlanVersion(deps.basePath);
@@ -246,6 +300,26 @@ export function registerSubmitPlanTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const plan = buildPlan(params, planVersion, createdAt, planId);
 			savePlan(deps.basePath, plan);
+
+			const contractFilePath = join(deps.basePath, "validation-contract.json");
+			if (params.assertions && params.assertions.length > 0) {
+				const contract: ValidationContract = {
+					assertions: params.assertions.map((a) => ({
+						id: a.id,
+						featureId: a.featureId,
+						type: a.type,
+						command: a.command,
+						expect: a.expect,
+						description: a.description,
+						status: "pending" as const,
+					})),
+				};
+				saveContract(deps.basePath, contract);
+			} else {
+				if (existsSync(contractFilePath)) {
+					unlinkSync(contractFilePath);
+				}
+			}
 
 			const mutationKind = isResubmission ? "plan-revised" : "plan-created";
 			try {
