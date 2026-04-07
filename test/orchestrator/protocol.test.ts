@@ -753,4 +753,304 @@ describe("buildOrchestratorProtocol", () => {
 			expect(first).not.toEqual(second);
 		});
 	});
+
+	describe("progressive protocol injection — first turn (VAL-PROTOCOL-001)", () => {
+		const state = makeState({
+			status: "executing",
+			currentMilestoneId: "m1",
+			currentFeatureId: "f2",
+			totalFeaturesCompleted: 1,
+		});
+		const plan = makeProtocolPlan();
+
+		it("first turn (turnCount=1) includes both static rules and dynamic context", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toContain("INTERVENTION PATTERNS");
+			expect(result).toContain("auth-endpoint");
+			expect(result).toContain("Foundation");
+		});
+
+		it("first turn includes delegation boundary", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result.toLowerCase()).toContain("project manager");
+		});
+
+		it("first turn includes autonomy instructions", () => {
+			const result = buildOrchestratorProtocol(state, plan, { promptingMode: "default", autonomy: "medium" }, false, { turnCount: 1 }) as string;
+			expect(result.toLowerCase()).toContain("autonomy");
+		});
+
+		it("first turn (turnCount=0) also treated as first turn", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 0 }) as string;
+			expect(result).toContain("INTERVENTION PATTERNS");
+			expect(result).toContain("auth-endpoint");
+		});
+
+		it("undefined turnCount defaults to first turn (full protocol)", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE) as string;
+			expect(result).toContain("INTERVENTION PATTERNS");
+		});
+	});
+
+	describe("progressive protocol injection — subsequent turns (VAL-PROTOCOL-002)", () => {
+		const state = makeState({
+			status: "executing",
+			currentMilestoneId: "m1",
+			currentFeatureId: "f2",
+			totalFeaturesCompleted: 1,
+		});
+		const plan = makeProtocolPlan();
+
+		it("turn 2 omits static rules (INTERVENTION PATTERNS)", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 2 }) as string;
+			expect(result).not.toContain("INTERVENTION PATTERNS");
+		});
+
+		it("turn 2 retains dynamic context (current feature, progress)", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 2 }) as string;
+			expect(result).toContain("auth-endpoint");
+			expect(result).toContain("Foundation");
+			expect(result).toContain("1/4");
+		});
+
+		it("turn 2 omits delegation boundary text", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 2 }) as string;
+			expect(result.toLowerCase()).not.toContain("project manager");
+		});
+
+		it("turn 2 is significantly shorter than turn 1", () => {
+			const first = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			const second = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 2 }) as string;
+			expect(second.length).toBeLessThan(first.length * 0.6);
+		});
+
+		it("turn 3 behaves same as turn 2 (dynamic-only)", () => {
+			const turn2 = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 2 }) as string;
+			const turn3 = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 3 }) as string;
+			expect(turn2).toEqual(turn3);
+		});
+	});
+
+	describe("progressive protocol — context usage override (VAL-PROTOCOL-005)", () => {
+		const state = makeState({
+			status: "executing",
+			currentMilestoneId: "m1",
+			currentFeatureId: "f2",
+			totalFeaturesCompleted: 1,
+		});
+		const plan = makeProtocolPlan();
+
+		it("context usage >60% forces compact mode on turn 1", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, {
+				turnCount: 1,
+				contextUsagePercent: 70,
+			}) as string;
+			expect(result).not.toContain("INTERVENTION PATTERNS");
+		});
+
+		it("context usage <=60% allows full protocol on turn 1", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, {
+				turnCount: 1,
+				contextUsagePercent: 55,
+			}) as string;
+			expect(result).toContain("INTERVENTION PATTERNS");
+		});
+
+		it("context usage exactly 60 allows full protocol", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, {
+				turnCount: 1,
+				contextUsagePercent: 60,
+			}) as string;
+			expect(result).toContain("INTERVENTION PATTERNS");
+		});
+
+		it("context usage at 61 forces compact mode", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, {
+				turnCount: 1,
+				contextUsagePercent: 61,
+			}) as string;
+			expect(result).not.toContain("INTERVENTION PATTERNS");
+		});
+
+		it("compact boolean parameter still works independently", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, true) as string;
+			expect(result).not.toBeNull();
+			expect(typeof result).toBe("string");
+		});
+	});
+
+	describe("progressive protocol — getContextUsage unavailability (VAL-PROTOARCH-002)", () => {
+		const state = makeState({
+			status: "executing",
+			currentMilestoneId: "m1",
+			currentFeatureId: "f2",
+			totalFeaturesCompleted: 1,
+		});
+		const plan = makeProtocolPlan();
+
+		it("undefined contextUsagePercent falls back to turn-based (turn 1 = full)", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
+			expect(result).toContain("INTERVENTION PATTERNS");
+		});
+
+		it("undefined contextUsagePercent falls back to turn-based (turn 2 = compact)", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 2 }) as string;
+			expect(result).not.toContain("INTERVENTION PATTERNS");
+		});
+
+		it("no options parameter at all defaults to full protocol", () => {
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE) as string;
+			expect(result).toContain("INTERVENTION PATTERNS");
+		});
+	});
+
+	describe("progressive protocol — cache key includes protocolVersion and turnCount (VAL-PROTOCOL-006)", () => {
+		it("different protocolVersion produces different cache key", () => {
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				protocolVersion: 1,
+			});
+			const state2 = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				protocolVersion: 2,
+			});
+			const plan = makeProtocolPlan();
+			const first = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 });
+			clearProtocolCache();
+			const second = buildOrchestratorProtocol(state2, plan, VERBOSE, false, { turnCount: 1 });
+			expect(first).not.toEqual(second);
+		});
+
+		it("different turnCount produces different cache key", () => {
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+			});
+			const plan = makeProtocolPlan();
+			const first = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 });
+			clearProtocolCache();
+			const second = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 2 });
+			expect(first).not.toEqual(second);
+		});
+
+		it("same protocolVersion and turnCount returns cached result", () => {
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				protocolVersion: 3,
+			});
+			const plan = makeProtocolPlan();
+			const first = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 });
+			const second = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 });
+			expect(first).toBe(second);
+		});
+
+		it("cache key is stable for same protocolVersion", () => {
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				protocolVersion: 5,
+			});
+			const plan = makeProtocolPlan();
+			const first = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 });
+			clearProtocolCache();
+			const second = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 });
+			expect(first).toEqual(second);
+		});
+
+		it("contextUsagePercent affects cache key", () => {
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+			});
+			const plan = makeProtocolPlan();
+			const first = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1, contextUsagePercent: 40 });
+			clearProtocolCache();
+			const second = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1, contextUsagePercent: 80 });
+			expect(first).not.toEqual(second);
+		});
+	});
+
+	describe("progressive protocol — non-executing states unaffected", () => {
+		it("planning state ignores turnCount and always returns full protocol", () => {
+			const state = makeState({ status: "planning" });
+			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 5 }) as string;
+			expect(result).toContain("submit_plan");
+		});
+
+		it("draft_review state ignores turnCount", () => {
+			const state = makeState({ status: "draft_review" });
+			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 5 }) as string;
+			expect(result).toContain("approval");
+		});
+
+		it("approved state ignores turnCount", () => {
+			const state = makeState({ status: "approved" });
+			const plan = makeProtocolPlan();
+			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 5 }) as string;
+			expect(result).toContain("spawn_worker");
+		});
+
+		it("validating state ignores turnCount", () => {
+			const state = makeState({ status: "validating" });
+			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 5 }) as string;
+			expect(result.toLowerCase()).toContain("validat");
+		});
+
+		it("paused state ignores turnCount", () => {
+			const state = makeState({ status: "paused" });
+			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 5 }) as string;
+			expect(result.toLowerCase()).toContain("paused");
+		});
+	});
+
+	describe("progressive protocol — caveman mode", () => {
+		const cavemanConfig: MissionConfig = { promptingMode: "caveman" };
+
+		it("caveman first turn includes full caveman executing protocol", () => {
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+			});
+			const plan = makeProtocolPlan();
+			const result = buildOrchestratorProtocol(state, plan, cavemanConfig, false, { turnCount: 1 }) as string;
+			expect(result.toLowerCase()).toContain("caveman");
+			expect(result).toContain("auth-endpoint");
+		});
+
+		it("caveman subsequent turn uses compact summary", () => {
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+			});
+			const plan = makeProtocolPlan();
+			const result = buildOrchestratorProtocol(state, plan, cavemanConfig, false, { turnCount: 2 }) as string;
+			expect(result).toContain("auth-endpoint");
+		});
+
+		it("caveman subsequent turn is shorter than first turn", () => {
+			const state = makeState({
+				status: "executing",
+				currentMilestoneId: "m1",
+				currentFeatureId: "f2",
+				totalFeaturesCompleted: 1,
+			});
+			const plan = makeProtocolPlan();
+			const first = buildOrchestratorProtocol(state, plan, cavemanConfig, false, { turnCount: 1 }) as string;
+			const second = buildOrchestratorProtocol(state, plan, cavemanConfig, false, { turnCount: 2 }) as string;
+			expect(second.length).toBeLessThan(first.length);
+		});
+	});
 });

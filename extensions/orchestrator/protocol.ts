@@ -3,13 +3,29 @@ import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
 import { getCavemanOutputRule } from "./caveman-rules.js";
 
 const TERMINAL_STATUSES: ReadonlySet<string> = new Set(["completed", "failed", "aborted", "idle"]);
+const CONTEXT_USAGE_COMPACT_THRESHOLD = 60;
+
+export interface ProtocolOptions {
+	turnCount?: number;
+	contextUsagePercent?: number;
+}
 
 let protocolCache: { key: string; value: string | null } | null = null;
 
-function protocolCacheKey(state: MissionState, plan?: MissionPlan, config?: MissionConfig, compact?: boolean): string {
+function protocolCacheKey(
+	state: MissionState,
+	plan?: MissionPlan,
+	config?: MissionConfig,
+	compact?: boolean,
+	options?: ProtocolOptions,
+): string {
 	const autonomy = config?.autonomy ?? "medium";
 	const mode = resolvePromptingMode(config ?? {});
-	return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${plan?.planVersion ?? 0}|${autonomy}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}|${compact ? "c" : ""}|${mode}`;
+	const pv = state.protocolVersion ?? 0;
+	const tc = options?.turnCount ?? 1;
+	const cu = options?.contextUsagePercent;
+	const isCompact = compact || tc > 1 || (cu !== undefined && cu > CONTEXT_USAGE_COMPACT_THRESHOLD);
+	return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${plan?.planVersion ?? 0}|${autonomy}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}|${isCompact ? "c" : ""}|${mode}|pv${pv}|tc${tc <= 1 ? 1 : 2}|cu${cu ?? 0}`;
 }
 
 export function clearProtocolCache(): void {
@@ -215,20 +231,25 @@ export function buildOrchestratorProtocol(
 	plan?: MissionPlan,
 	config?: MissionConfig,
 	compact?: boolean,
+	options?: ProtocolOptions,
 ): string | null {
 	if (!state) return null;
 	if (TERMINAL_STATUSES.has(state.status)) return null;
 
-	const key = protocolCacheKey(state, plan, config, compact);
+	const key = protocolCacheKey(state, plan, config, compact, options);
 	if (protocolCache && protocolCache.key === key) {
 		return protocolCache.value;
 	}
 
 	const autonomy = config?.autonomy ?? "medium";
 	const mode = resolvePromptingMode(config ?? {});
+	const turnCount = options?.turnCount ?? 1;
+	const contextPercent = options?.contextUsagePercent;
+	const isCompact =
+		compact || turnCount > 1 || (contextPercent !== undefined && contextPercent > CONTEXT_USAGE_COMPACT_THRESHOLD);
 	let result: string | null;
 
-	if (compact && state.status === "executing") {
+	if (isCompact && state.status === "executing") {
 		result = buildCompactMissionSummary(state, plan);
 	} else if (mode === "caveman" || mode === "caveman-full") {
 		switch (state.status) {
@@ -281,6 +302,10 @@ export function buildOrchestratorProtocol(
 	}
 
 	if (result !== null) {
+		const pv = state.protocolVersion;
+		if (pv !== undefined && pv > 0) {
+			result = `[protocol:v${pv}]\n${result}`;
+		}
 		const outputRule = getCavemanOutputRule(mode);
 		if (outputRule) {
 			result = `${result}\n\n${outputRule}`;
