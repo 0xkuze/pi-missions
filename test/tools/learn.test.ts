@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { appendLibraryTopic, initLibrary, readLibraryTopic } from "../../extensions/state/library.js";
 import { learnFromResult } from "../../extensions/learn.js";
+import { appendLibraryTopic, initLibrary, readLibraryTopic } from "../../extensions/state/library.js";
 import type { WorkerResult } from "../../extensions/types.js";
 import type { TempDir } from "../helpers/index.js";
 import { createTempDir } from "../helpers/index.js";
@@ -361,9 +361,7 @@ describe("learnFromResult", () => {
 			learnFromResult(basePath, result1, true);
 
 			const result2 = makeSuccessResult({
-				discoveredIssues: [
-					{ severity: "medium" as const, description: "Needed workaround for bug in lib" },
-				],
+				discoveredIssues: [{ severity: "medium" as const, description: "Needed workaround for bug in lib" }],
 			});
 			learnFromResult(basePath, result2, true);
 
@@ -419,9 +417,7 @@ describe("learnFromResult", () => {
 			const basePath = makeBasePath();
 			initLibrary(basePath);
 			const result = makeSuccessResult({
-				discoveredIssues: [
-					{ severity: "medium" as const, description: "Used workaround for lib bug" },
-				],
+				discoveredIssues: [{ severity: "medium" as const, description: "Used workaround for lib bug" }],
 			});
 			learnFromResult(basePath, result, true, {
 				name: "auth-endpoint",
@@ -451,9 +447,7 @@ describe("learnFromResult", () => {
 			const basePath = makeBasePath();
 			initLibrary(basePath);
 			const result = makeSuccessResult({
-				discoveredIssues: [
-					{ severity: "medium" as const, description: "Same workaround again" },
-				],
+				discoveredIssues: [{ severity: "medium" as const, description: "Same workaround again" }],
 			});
 			learnFromResult(basePath, result, true);
 			learnFromResult(basePath, result, true);

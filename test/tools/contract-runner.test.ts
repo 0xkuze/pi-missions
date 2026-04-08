@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExecFn } from "../../extensions/tools/run-validation.js";
-import { runContractAssertions, type AssertionResult } from "../../extensions/tools/contract-runner.js";
 import { saveContract } from "../../extensions/state/manager.js";
+import { type AssertionResult, runContractAssertions } from "../../extensions/tools/contract-runner.js";
+import type { ExecFn } from "../../extensions/tools/run-validation.js";
 import type { Feature, MissionPlan, ValidationAssertion, ValidationContract } from "../../extensions/types.js";
 
 function makeAssertion(overrides: Partial<ValidationAssertion> = {}): ValidationAssertion {
@@ -47,9 +47,7 @@ describe("runContractAssertions", () => {
 
 	describe("VAL-RUNNER-001: command-type assertions executed via exec", () => {
 		it("executes command-type assertion and captures stdout/stderr/exitCode", async () => {
-			const { exec, calls } = makeMockExec([
-				{ exitCode: 0, stdout: "hello\n", stderr: "", timedOut: false },
-			]);
+			const { exec, calls } = makeMockExec([{ exitCode: 0, stdout: "hello\n", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ type: "command", command: "echo hello" })];
 			const results = await runContractAssertions(assertions, exec, {
@@ -69,9 +67,7 @@ describe("runContractAssertions", () => {
 
 	describe("VAL-RUNNER-002: script-type assertions executed identically", () => {
 		it("executes script-type assertion via exec with same interface", async () => {
-			const { exec, calls } = makeMockExec([
-				{ exitCode: 0, stdout: "42\n", stderr: "", timedOut: false },
-			]);
+			const { exec, calls } = makeMockExec([{ exitCode: 0, stdout: "42\n", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ type: "script", command: "node -e 'console.log(42)'" })];
 			await runContractAssertions(assertions, exec, {
@@ -87,9 +83,7 @@ describe("runContractAssertions", () => {
 
 	describe("VAL-RUNNER-003: exit code checked against expect.exitCode", () => {
 		it("passes when exit code matches", async () => {
-			const { exec } = makeMockExec([
-				{ exitCode: 0, stdout: "", stderr: "", timedOut: false },
-			]);
+			const { exec } = makeMockExec([{ exitCode: 0, stdout: "", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ expect: { exitCode: 0 } })];
 			const results = await runContractAssertions(assertions, exec, {
@@ -102,9 +96,7 @@ describe("runContractAssertions", () => {
 		});
 
 		it("fails when exit code does not match", async () => {
-			const { exec } = makeMockExec([
-				{ exitCode: 1, stdout: "", stderr: "", timedOut: false },
-			]);
+			const { exec } = makeMockExec([{ exitCode: 1, stdout: "", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ expect: { exitCode: 0 } })];
 			const results = await runContractAssertions(assertions, exec, {
@@ -117,9 +109,7 @@ describe("runContractAssertions", () => {
 		});
 
 		it("passes when expecting non-zero exit code", async () => {
-			const { exec } = makeMockExec([
-				{ exitCode: 1, stdout: "", stderr: "", timedOut: false },
-			]);
+			const { exec } = makeMockExec([{ exitCode: 1, stdout: "", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ expect: { exitCode: 1 } })];
 			const results = await runContractAssertions(assertions, exec, {
@@ -134,9 +124,7 @@ describe("runContractAssertions", () => {
 
 	describe("VAL-RUNNER-004: stdout checked against expect.stdoutContains", () => {
 		it("passes when stdout contains expected substring", async () => {
-			const { exec } = makeMockExec([
-				{ exitCode: 0, stdout: "build success in 2s", stderr: "", timedOut: false },
-			]);
+			const { exec } = makeMockExec([{ exitCode: 0, stdout: "build success in 2s", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ expect: { exitCode: 0, stdoutContains: "success" } })];
 			const results = await runContractAssertions(assertions, exec, {
@@ -149,9 +137,7 @@ describe("runContractAssertions", () => {
 		});
 
 		it("fails when stdout does not contain expected substring", async () => {
-			const { exec } = makeMockExec([
-				{ exitCode: 0, stdout: "build failed", stderr: "", timedOut: false },
-			]);
+			const { exec } = makeMockExec([{ exitCode: 0, stdout: "build failed", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ expect: { exitCode: 0, stdoutContains: "success" } })];
 			const results = await runContractAssertions(assertions, exec, {
@@ -162,13 +148,41 @@ describe("runContractAssertions", () => {
 
 			expect(results[0].status).toBe("fail");
 		});
+
+		it("passes when expected substring is only in stderr (npm/npx output)", async () => {
+			const { exec } = makeMockExec([
+				{ exitCode: 0, stdout: "", stderr: "Tests: 5 passed, 5 total", timedOut: false },
+			]);
+
+			const assertions = [makeAssertion({ expect: { exitCode: 0, stdoutContains: "passed" } })];
+			const results = await runContractAssertions(assertions, exec, {
+				basePath: tmpDir,
+				milestoneId: "m1",
+				projectDir: tmpDir,
+			});
+
+			expect(results[0].status).toBe("pass");
+		});
+
+		it("passes when expected substring spans both stdout and stderr", async () => {
+			const { exec } = makeMockExec([
+				{ exitCode: 0, stdout: "building...", stderr: "FizzBuzz output here", timedOut: false },
+			]);
+
+			const assertions = [makeAssertion({ expect: { exitCode: 0, stdoutContains: "FizzBuzz" } })];
+			const results = await runContractAssertions(assertions, exec, {
+				basePath: tmpDir,
+				milestoneId: "m1",
+				projectDir: tmpDir,
+			});
+
+			expect(results[0].status).toBe("pass");
+		});
 	});
 
 	describe("VAL-RUNNER-005: stdout checked against expect.stdoutNotContains", () => {
 		it("passes when stdout does not contain the excluded substring", async () => {
-			const { exec } = makeMockExec([
-				{ exitCode: 0, stdout: "all tests passed", stderr: "", timedOut: false },
-			]);
+			const { exec } = makeMockExec([{ exitCode: 0, stdout: "all tests passed", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ expect: { exitCode: 0, stdoutNotContains: "error" } })];
 			const results = await runContractAssertions(assertions, exec, {
@@ -181,8 +195,21 @@ describe("runContractAssertions", () => {
 		});
 
 		it("fails when stdout contains the excluded substring", async () => {
+			const { exec } = makeMockExec([{ exitCode: 0, stdout: "found error in module", stderr: "", timedOut: false }]);
+
+			const assertions = [makeAssertion({ expect: { exitCode: 0, stdoutNotContains: "error" } })];
+			const results = await runContractAssertions(assertions, exec, {
+				basePath: tmpDir,
+				milestoneId: "m1",
+				projectDir: tmpDir,
+			});
+
+			expect(results[0].status).toBe("fail");
+		});
+
+		it("fails when excluded substring is only in stderr", async () => {
 			const { exec } = makeMockExec([
-				{ exitCode: 0, stdout: "found error in module", stderr: "", timedOut: false },
+				{ exitCode: 0, stdout: "clean output", stderr: "found error in stderr", timedOut: false },
 			]);
 
 			const assertions = [makeAssertion({ expect: { exitCode: 0, stdoutNotContains: "error" } })];
@@ -213,9 +240,7 @@ describe("runContractAssertions", () => {
 		});
 
 		it("fails when stderr does not contain expected substring", async () => {
-			const { exec } = makeMockExec([
-				{ exitCode: 0, stdout: "", stderr: "", timedOut: false },
-			]);
+			const { exec } = makeMockExec([{ exitCode: 0, stdout: "", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ expect: { exitCode: 0, stderrContains: "warning" } })];
 			const results = await runContractAssertions(assertions, exec, {
@@ -264,10 +289,7 @@ describe("runContractAssertions", () => {
 				{ exitCode: 0, stdout: "ok", stderr: "", timedOut: false },
 			]);
 
-			const assertions = [
-				makeAssertion({ id: "a1" }),
-				makeAssertion({ id: "a2" }),
-			];
+			const assertions = [makeAssertion({ id: "a1" }), makeAssertion({ id: "a2" })];
 			const results = await runContractAssertions(assertions, exec, {
 				basePath: tmpDir,
 				milestoneId: "m1",
@@ -282,9 +304,7 @@ describe("runContractAssertions", () => {
 
 	describe("VAL-RUNNER-011: contract assertions filtered by milestone features", () => {
 		it("only runs assertions whose featureIds are in the provided milestoneFeatures list", async () => {
-			const { exec, calls } = makeMockExec([
-				{ exitCode: 0, stdout: "ok", stderr: "", timedOut: false },
-			]);
+			const { exec, calls } = makeMockExec([{ exitCode: 0, stdout: "ok", stderr: "", timedOut: false }]);
 
 			const assertions = [
 				makeAssertion({ id: "a1", featureId: "f1" }),
@@ -334,9 +354,7 @@ describe("runContractAssertions", () => {
 
 	describe("VAL-RUNNER-013: assertions for skipped/blocked features not executed", () => {
 		it("skips assertions for features in the skippedFeatures set", async () => {
-			const { exec, calls } = makeMockExec([
-				{ exitCode: 0, stdout: "ok", stderr: "", timedOut: false },
-			]);
+			const { exec, calls } = makeMockExec([{ exitCode: 0, stdout: "ok", stderr: "", timedOut: false }]);
 
 			const assertions = [
 				makeAssertion({ id: "a1", featureId: "f1" }),
@@ -357,9 +375,7 @@ describe("runContractAssertions", () => {
 		});
 
 		it("skips assertions for features in the blockedFeatures set", async () => {
-			const { exec, calls } = makeMockExec([
-				{ exitCode: 0, stdout: "ok", stderr: "", timedOut: false },
-			]);
+			const { exec, calls } = makeMockExec([{ exitCode: 0, stdout: "ok", stderr: "", timedOut: false }]);
 
 			const assertions = [
 				makeAssertion({ id: "a1", featureId: "f1" }),
@@ -386,10 +402,7 @@ describe("runContractAssertions", () => {
 				{ exitCode: 0, stdout: "world output", stderr: "", timedOut: false },
 			]);
 
-			const assertions = [
-				makeAssertion({ id: "a1" }),
-				makeAssertion({ id: "a2" }),
-			];
+			const assertions = [makeAssertion({ id: "a1" }), makeAssertion({ id: "a2" })];
 			await runContractAssertions(assertions, exec, {
 				basePath: tmpDir,
 				milestoneId: "m1",
@@ -410,9 +423,7 @@ describe("runContractAssertions", () => {
 
 	describe("VAL-EVIDENCE-003: result.json includes all required fields", () => {
 		it("writes result.json with assertionId, command, exitCode, timestamp, status, durationMs", async () => {
-			const { exec } = makeMockExec([
-				{ exitCode: 0, stdout: "ok", stderr: "", timedOut: false },
-			]);
+			const { exec } = makeMockExec([{ exitCode: 0, stdout: "ok", stderr: "", timedOut: false }]);
 
 			const assertions = [makeAssertion({ id: "a1", command: "echo hello" })];
 			const results = await runContractAssertions(assertions, exec, {
@@ -513,9 +524,7 @@ describe("runContractAssertions", () => {
 
 	describe("default timeout", () => {
 		it("uses default timeout of 120000ms when not specified", async () => {
-			const { exec, calls } = makeMockExec([
-				{ exitCode: 0, stdout: "", stderr: "", timedOut: false },
-			]);
+			const { exec, calls } = makeMockExec([{ exitCode: 0, stdout: "", stderr: "", timedOut: false }]);
 
 			await runContractAssertions([makeAssertion()], exec, {
 				basePath: tmpDir,
@@ -527,9 +536,7 @@ describe("runContractAssertions", () => {
 		});
 
 		it("uses custom timeout when specified", async () => {
-			const { exec, calls } = makeMockExec([
-				{ exitCode: 0, stdout: "", stderr: "", timedOut: false },
-			]);
+			const { exec, calls } = makeMockExec([{ exitCode: 0, stdout: "", stderr: "", timedOut: false }]);
 
 			await runContractAssertions([makeAssertion()], exec, {
 				basePath: tmpDir,

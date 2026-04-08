@@ -1,9 +1,7 @@
 import { describe, expect, it } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { transitionState } from "../extensions/state/transitions.js";
 
 describe("evidence preservation on abort (VAL-EVIDENCE-006)", () => {

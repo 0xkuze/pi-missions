@@ -158,6 +158,7 @@ export function registerCommitChangesTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const updatedState: MissionState = {
 				...state,
+				gitSnapshot: snapshot ? { ...snapshot, headCommit: sha } : state.gitSnapshot,
 				progressLog: [
 					...state.progressLog,
 					{

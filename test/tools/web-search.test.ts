@@ -1,22 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { Type } from "@sinclair/typebox";
+import type { Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { initLibrary } from "../../extensions/state/library.js";
-import type { MockPi } from "../helpers/index.js";
-import { createMockPi } from "../helpers/index.js";
-import type { TempDir } from "../helpers/index.js";
-import { createTempDir } from "../helpers/index.js";
 import {
-	registerWebSearchTool,
-	searchWeb,
-	type SearchResult,
-	type SearchResponse,
-	parseSearchResults,
 	formatResultsAsText,
+	parseSearchResults,
+	registerWebSearchTool,
+	type SearchResponse,
+	type SearchResult,
 	saveResultsToLibrary,
+	searchWeb,
 } from "../../extensions/tools/web-search.js";
+import type { MockPi, TempDir } from "../helpers/index.js";
+import { createMockPi, createTempDir } from "../helpers/index.js";
 
 let tmp: TempDir;
 
@@ -59,7 +57,10 @@ function mockFetchSuccess(results: SearchResult[]): (url: string) => Promise<Res
 function mockFetchEmpty(): (url: string) => Promise<Response> {
 	return (_url: string) =>
 		Promise.resolve(
-			new Response(JSON.stringify({ results: [] }), { status: 200, headers: { "Content-Type": "application/json" } }),
+			new Response(JSON.stringify({ results: [] }), {
+				status: 200,
+				headers: { "Content-Type": "application/json" },
+			}),
 		);
 }
 
@@ -271,13 +272,7 @@ describe("saveResultsToLibrary (VAL-SEARCH-003)", () => {
 		registerWebSearchTool(mockPi.pi, { basePath, fetchFn: mockFetchSuccess(mockResults) });
 
 		const tool = mockPi.getRegisteredTool("web_search")!;
-		await tool.execute(
-			"tc-1",
-			{ query: "new query", saveToLibrary: true },
-			undefined,
-			undefined,
-			undefined as never,
-		);
+		await tool.execute("tc-1", { query: "new query", saveToLibrary: true }, undefined, undefined, undefined as never);
 
 		const content = readFileSync(researchPath, "utf8");
 		expect(content).toContain("Existing content");
@@ -469,9 +464,7 @@ describe("saveResultsToLibrary function", () => {
 		initLibrary(basePath);
 		writeFileSync(join(basePath, "library", "research.md"), "# Research\n\nPrevious findings");
 
-		saveResultsToLibrary(basePath, "new topic", [
-			{ title: "New", url: "https://new.com", snippet: "New info" },
-		]);
+		saveResultsToLibrary(basePath, "new topic", [{ title: "New", url: "https://new.com", snippet: "New info" }]);
 
 		const content = readFileSync(join(basePath, "library", "research.md"), "utf8");
 		expect(content).toContain("Previous findings");

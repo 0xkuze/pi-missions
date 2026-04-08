@@ -3,7 +3,11 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { saveConfig, savePlan, saveState } from "../../extensions/state/manager.js";
-import { killActiveWorker, registerSpawnWorkerTool } from "../../extensions/tools/spawn-worker.js";
+import {
+	killActiveWorker,
+	REPORT_RESULT_EXTENSION_SOURCE,
+	registerSpawnWorkerTool,
+} from "../../extensions/tools/spawn-worker.js";
 import { createMockPi, makeFeature, makeMilestone, makePlan, makeState } from "../helpers/index.js";
 
 function makeMessageEndLine(role: string, text: string): string {
@@ -2141,5 +2145,39 @@ describe("registerSpawnWorkerTool", () => {
 			const savedPlan = loadPlan(testDir)!;
 			expect(savedPlan.milestones[0].status).toBe("done");
 		});
+	});
+});
+
+describe("REPORT_RESULT_EXTENSION_SOURCE schema coercion", () => {
+	it("includes prepareArguments hook for coercion", () => {
+		expect(REPORT_RESULT_EXTENSION_SOURCE).toContain("prepareArguments");
+	});
+
+	it("makes commandsRun optional in the schema", () => {
+		expect(REPORT_RESULT_EXTENSION_SOURCE).toContain("Type.Optional");
+		expect(REPORT_RESULT_EXTENSION_SOURCE).toMatch(/commandsRun.*Type\.Optional|Type\.Optional.*commandsRun/s);
+	});
+
+	it("makes testsAdded optional in the schema", () => {
+		expect(REPORT_RESULT_EXTENSION_SOURCE).toMatch(/testsAdded.*Type\.Optional|Type\.Optional.*testsAdded/s);
+	});
+
+	it("makes discoveredIssues optional in the schema", () => {
+		expect(REPORT_RESULT_EXTENSION_SOURCE).toMatch(
+			/discoveredIssues.*Type\.Optional|Type\.Optional.*discoveredIssues/s,
+		);
+	});
+
+	it("only whatWasImplemented and whatWasLeftUndone are required", () => {
+		expect(REPORT_RESULT_EXTENSION_SOURCE).toContain("whatWasImplemented: Type.String()");
+		expect(REPORT_RESULT_EXTENSION_SOURCE).toContain("whatWasLeftUndone: Type.String()");
+	});
+
+	it("coerces string-encoded JSON arrays in prepareArguments", () => {
+		expect(REPORT_RESULT_EXTENSION_SOURCE).toContain("JSON.parse");
+	});
+
+	it("defaults unparseable strings to empty arrays", () => {
+		expect(REPORT_RESULT_EXTENSION_SOURCE).toContain("[]");
 	});
 });

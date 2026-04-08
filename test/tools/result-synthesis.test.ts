@@ -1227,3 +1227,118 @@ describe("auto-legacy fallback when report_result missing but work was done", ()
 		expect(result.status).toBe("failure");
 	});
 });
+
+describe("schema coercion for weaker models", () => {
+	it("coerces discoveredIssues as string '[]' to empty array", () => {
+		const handoffData = {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: [],
+			testsAdded: [],
+			discoveredIssues: "[]",
+		};
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.handoff).toBeDefined();
+		expect(result.handoff?.discoveredIssues).toEqual([]);
+	});
+
+	it("coerces commandsRun as string to parsed array", () => {
+		const commandsRun = [{ command: "bun test", exitCode: 0, observation: "all pass" }];
+		const handoffData = {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: JSON.stringify(commandsRun),
+			testsAdded: [],
+			discoveredIssues: [],
+		};
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.handoff).toBeDefined();
+		expect(result.handoff?.commandsRun).toEqual(commandsRun);
+	});
+
+	it("coerces testsAdded as string to parsed array", () => {
+		const testsAdded = [{ file: "test.ts", cases: ["works"] }];
+		const handoffData = {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: [],
+			testsAdded: JSON.stringify(testsAdded),
+			discoveredIssues: [],
+		};
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.handoff).toBeDefined();
+		expect(result.handoff?.testsAdded).toEqual(testsAdded);
+	});
+
+	it("defaults to empty array when string field fails to parse", () => {
+		const handoffData = {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: "not valid json",
+			testsAdded: "{broken",
+			discoveredIssues: "also broken",
+		};
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.handoff).toBeDefined();
+		expect(result.handoff?.commandsRun).toEqual([]);
+		expect(result.handoff?.testsAdded).toEqual([]);
+		expect(result.handoff?.discoveredIssues).toEqual([]);
+	});
+
+	it("defaults to empty array when optional array fields are missing entirely", () => {
+		const handoffData = {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+		};
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.handoff).toBeDefined();
+		expect(result.handoff?.commandsRun).toEqual([]);
+		expect(result.handoff?.testsAdded).toEqual([]);
+		expect(result.handoff?.discoveredIssues).toEqual([]);
+	});
+
+	it("handles all three fields as strings simultaneously", () => {
+		const commandsRun = [{ command: "bun test", exitCode: 0, observation: "ok" }];
+		const testsAdded = [{ file: "a.test.ts", cases: ["case1"] }];
+		const discoveredIssues = [{ severity: "low" as const, description: "typo" }];
+		const handoffData = {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: JSON.stringify(commandsRun),
+			testsAdded: JSON.stringify(testsAdded),
+			discoveredIssues: JSON.stringify(discoveredIssues),
+		};
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.handoff?.commandsRun).toEqual(commandsRun);
+		expect(result.handoff?.testsAdded).toEqual(testsAdded);
+		expect(result.handoff?.discoveredIssues).toEqual(discoveredIssues);
+	});
+
+	it("leaves already-correct array fields untouched", () => {
+		const handoffData = {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: [{ command: "bun test", exitCode: 0, observation: "pass" }],
+			testsAdded: [{ file: "a.test.ts", cases: ["case1"] }],
+			discoveredIssues: [{ severity: "high" as const, description: "bug", suggestedFix: "fix it" }],
+		};
+		const stdout = makeStdout([makeReportResultEnd(handoffData), makeMessageEnd("assistant", "Done.")]);
+		const result = synthesizeWorkerResult(stdout, "", 0, null, Date.now() - 100);
+		expect(result.status).toBe("success");
+		expect(result.handoff?.commandsRun).toEqual(handoffData.commandsRun);
+		expect(result.handoff?.testsAdded).toEqual(handoffData.testsAdded);
+		expect(result.handoff?.discoveredIssues).toEqual(handoffData.discoveredIssues);
+	});
+});

@@ -201,7 +201,13 @@ export interface PlanMutation {
 	payload: Record<string, unknown>;
 }
 
-export type WorkerHandoff = Static<typeof ReportResultSchema>;
+export interface WorkerHandoff {
+	whatWasImplemented: string;
+	whatWasLeftUndone: string;
+	commandsRun: Array<{ command: string; exitCode: number; observation: string }>;
+	testsAdded: Array<{ file: string; cases: string[] }>;
+	discoveredIssues: Array<{ severity: "low" | "medium" | "high"; description: string; suggestedFix?: string }>;
+}
 
 export interface WorkerResult {
 	status: "success" | "failure" | "blocked";
@@ -565,25 +571,31 @@ export const ValidationContractSchema = Type.Object({
 export const ReportResultSchema = Type.Object({
 	whatWasImplemented: Type.String(),
 	whatWasLeftUndone: Type.String(),
-	commandsRun: Type.Array(
-		Type.Object({
-			command: Type.String(),
-			exitCode: Type.Number(),
-			observation: Type.String(),
-		}),
+	commandsRun: Type.Optional(
+		Type.Array(
+			Type.Object({
+				command: Type.String(),
+				exitCode: Type.Number(),
+				observation: Type.String(),
+			}),
+		),
 	),
-	testsAdded: Type.Array(
-		Type.Object({
-			file: Type.String(),
-			cases: Type.Array(Type.String()),
-		}),
+	testsAdded: Type.Optional(
+		Type.Array(
+			Type.Object({
+				file: Type.String(),
+				cases: Type.Array(Type.String()),
+			}),
+		),
 	),
-	discoveredIssues: Type.Array(
-		Type.Object({
-			severity: Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]),
-			description: Type.String(),
-			suggestedFix: Type.Optional(Type.String()),
-		}),
+	discoveredIssues: Type.Optional(
+		Type.Array(
+			Type.Object({
+				severity: Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]),
+				description: Type.String(),
+				suggestedFix: Type.Optional(Type.String()),
+			}),
+		),
 	),
 });
 

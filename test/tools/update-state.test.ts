@@ -619,7 +619,12 @@ describe("registerUpdateStateTool", () => {
 					}),
 				],
 			});
-			await callTool(tmpDir, { action: "complete_feature", targetId: "feature-1", reason: "work verified" }, state, plan);
+			await callTool(
+				tmpDir,
+				{ action: "complete_feature", targetId: "feature-1", reason: "work verified" },
+				state,
+				plan,
+			);
 
 			const savedPlan = loadPlan(tmpDir)!;
 			expect(savedPlan.milestones[0]!.features[0]!.status).toBe("done");
@@ -688,13 +693,7 @@ describe("registerUpdateStateTool", () => {
 				],
 			});
 			const updateWidget = mock((_s: MissionState, _p?: MissionPlan) => {});
-			await callTool(
-				tmpDir,
-				{ action: "complete_feature", targetId: "feature-1" },
-				state,
-				plan,
-				updateWidget,
-			);
+			await callTool(tmpDir, { action: "complete_feature", targetId: "feature-1" }, state, plan, updateWidget);
 
 			expect(updateWidget).toHaveBeenCalledTimes(1);
 		});
@@ -702,12 +701,7 @@ describe("registerUpdateStateTool", () => {
 		it("returns error for unknown featureId", async () => {
 			const state = makeExecutingState();
 			const plan = localMakePlan();
-			const result = await callTool(
-				tmpDir,
-				{ action: "complete_feature", targetId: "nonexistent" },
-				state,
-				plan,
-			);
+			const result = await callTool(tmpDir, { action: "complete_feature", targetId: "nonexistent" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
 			expect(result.content[0].text).toContain("nonexistent");
@@ -722,12 +716,7 @@ describe("registerUpdateStateTool", () => {
 					}),
 				],
 			});
-			const result = await callTool(
-				tmpDir,
-				{ action: "complete_feature", targetId: "feature-1" },
-				state,
-				plan,
-			);
+			const result = await callTool(tmpDir, { action: "complete_feature", targetId: "feature-1" }, state, plan);
 
 			expect(result.content[0].text).toContain("Error");
 			expect(result.content[0].text).toContain("already completed");
@@ -773,12 +762,7 @@ describe("registerUpdateStateTool", () => {
 						}),
 					],
 				});
-				const result = await callTool(
-					tmpDir,
-					{ action: "complete_feature", targetId: "feature-1" },
-					state,
-					plan,
-				);
+				const result = await callTool(tmpDir, { action: "complete_feature", targetId: "feature-1" }, state, plan);
 				expect(result.content[0].text).toContain("Error");
 				expect(result.content[0].text).toContain(status);
 			}

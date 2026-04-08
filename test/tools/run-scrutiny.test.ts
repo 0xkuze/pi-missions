@@ -222,7 +222,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(capturedSkillContent).toContain("b.ts");
 			expect(capturedSkillContent).toContain("c.ts");
 		});
-	})
+	});
 
 	describe("VAL-SCRUTINY-003: reviewer receives plan with criteria and validation contract", () => {
 		it("includes milestone description, feature criteria, and contract assertions", async () => {
@@ -281,7 +281,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(capturedSkillContent).toContain("VAL-TEST-001");
 			expect(capturedSkillContent).toContain("All tests pass");
 		});
-	})
+	});
 
 	describe("VAL-SCRUTINY-004: reviewer receives library context", () => {
 		it("includes pitfalls and conventions from library", async () => {
@@ -310,7 +310,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(capturedSkillContent).toContain("Never use global state");
 			expect(capturedSkillContent).toContain("Use camelCase");
 		});
-	})
+	});
 
 	describe("VAL-SCRUTINY-005: reviewer produces structured report", () => {
 		it("parses issues with severity, description, location, suggestedFix", async () => {
@@ -343,13 +343,11 @@ describe("registerRunScrutinyTool", () => {
 			expect(parsed.issues[1].severity).toBe("warning");
 			expect(parsed.issues[1].suggestedFix).toBeUndefined();
 		});
-	})
+	});
 
 	describe("VAL-SCRUTINY-006: scrutiny report written to runtime directory", () => {
 		it("writes report.json and stdout.log to runtime/validation/{milestoneId}/scrutiny/", async () => {
-			const issues: ScrutinyIssue[] = [
-				{ severity: "info", description: "Consider refactoring", location: "a.ts" },
-			];
+			const issues: ScrutinyIssue[] = [{ severity: "info", description: "Consider refactoring", location: "a.ts" }];
 
 			const mockSpawn = createMockSpawn({
 				stdoutLines: [makeScrutinyNdjson(issues)],
@@ -370,7 +368,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(typeof report.timestamp).toBe("string");
 			expect(typeof report.durationMs).toBe("number");
 		});
-	})
+	});
 
 	describe("VAL-SCRUTINY-009: handles reviewer timeout gracefully", () => {
 		it("returns warning result on timeout without crashing", async () => {
@@ -391,7 +389,8 @@ describe("registerRunScrutinyTool", () => {
 						},
 					},
 					on: (event: string, handler: (...args: unknown[]) => void) => {
-						if (event === "close") closeHandlers.push(handler as (code: number | null, signal: string | null) => void);
+						if (event === "close")
+							closeHandlers.push(handler as (code: number | null, signal: string | null) => void);
 					},
 				};
 
@@ -465,7 +464,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(killCalls.length).toBeGreaterThanOrEqual(1);
 			expect(killCalls[0]).toBe("SIGTERM");
 		});
-	})
+	});
 
 	describe("VAL-SCRUTINY-010: parses empty/no-issues output", () => {
 		it("returns clean status with empty issues array", async () => {
@@ -479,7 +478,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(parsed.issues.length).toBe(0);
 			expect(parsed.status).toBe("clean");
 		});
-	})
+	});
 
 	describe("VAL-RUNNER-014: handles malformed output", () => {
 		it("returns graceful error with empty issues for unparseable output", async () => {
@@ -505,7 +504,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(parsed.issues.length).toBe(0);
 			expect(parsed.status).toBe("error");
 		});
-	})
+	});
 
 	describe("VAL-TOOLREG-003: tool registered via registerTool", () => {
 		it("is registered with correct schema requiring milestoneId", () => {
@@ -522,7 +521,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(tool!.name).toBe("run_scrutiny");
 			expect(tool!.parameters).toBeDefined();
 		});
-	})
+	});
 
 	describe("VAL-TOOLREG-004: rejects invalid milestone ID", () => {
 		it("returns error for nonexistent milestone ID", async () => {
@@ -530,7 +529,7 @@ describe("registerRunScrutinyTool", () => {
 
 			expect(result.content[0].text).toMatch(/error|not found/i);
 		});
-	})
+	});
 
 	describe("precondition checks", () => {
 		it("returns error when no state exists", async () => {
@@ -557,9 +556,13 @@ describe("registerRunScrutinyTool", () => {
 			saveState(tmpDir, makeState({ status: "planning" }));
 			savePlan(tmpDir, localMakePlan());
 
-			const result = await callTool(tmpDir, { milestoneId: "ms-1" }, {
-				state: makeState({ status: "planning" }),
-			});
+			const result = await callTool(
+				tmpDir,
+				{ milestoneId: "ms-1" },
+				{
+					state: makeState({ status: "planning" }),
+				},
+			);
 
 			expect(result.content[0].text).toMatch(/error|executing/i);
 		});
@@ -645,7 +648,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(parsed.issues.length).toBe(0);
 			expect(parsed.status).toBe("clean");
 		});
-	})
+	});
 
 	describe("VAL-CROSS-009: worker handoff data available in scrutiny review", () => {
 		it("includes worker summaries from completed features", async () => {
@@ -709,7 +712,7 @@ describe("registerRunScrutinyTool", () => {
 			expect(capturedSkillContent).toContain("Added retry logic");
 			expect(capturedSkillContent).toContain("retry.ts");
 		});
-	})
+	});
 
 	describe("VAL-EVIDENCE-004: scrutiny report stored as evidence", () => {
 		it("report.json contains milestoneId, timestamp, issues, reviewerModel, durationMs", async () => {
@@ -717,11 +720,7 @@ describe("registerRunScrutinyTool", () => {
 				stdoutLines: [makeScrutinyNdjson([])],
 			});
 
-			await callTool(
-				tmpDir,
-				{ milestoneId: "ms-1" },
-				{ spawnFn: mockSpawn, reviewerModel: "test-reviewer-model" },
-			);
+			await callTool(tmpDir, { milestoneId: "ms-1" }, { spawnFn: mockSpawn, reviewerModel: "test-reviewer-model" });
 
 			const reportPath = join(tmpDir, "runtime", "validation", "ms-1", "scrutiny", "report.json");
 			expect(existsSync(reportPath)).toBe(true);
@@ -733,14 +732,12 @@ describe("registerRunScrutinyTool", () => {
 			expect(report.reviewerModel).toBe("test-reviewer-model");
 			expect(typeof report.durationMs).toBe("number");
 		});
-	})
-})
+	});
+});
 
 describe("parseScrutinyOutput", () => {
 	it("extracts issues from message_end with JSON text", () => {
-		const issues: ScrutinyIssue[] = [
-			{ severity: "error", description: "Bug found", location: "file.ts:10" },
-		];
+		const issues: ScrutinyIssue[] = [{ severity: "error", description: "Bug found", location: "file.ts:10" }];
 		const output = makeScrutinyNdjson(issues);
 
 		const result = parseScrutinyOutput(output);
@@ -748,7 +745,7 @@ describe("parseScrutinyOutput", () => {
 		expect(result.issues.length).toBe(1);
 		expect(result.issues[0].severity).toBe("error");
 		expect(result.issues[0].description).toBe("Bug found");
-	})
+	});
 
 	it("returns clean for empty issues", () => {
 		const output = makeScrutinyNdjson([]);
@@ -756,14 +753,14 @@ describe("parseScrutinyOutput", () => {
 
 		expect(result.issues.length).toBe(0);
 		expect(result.status).toBe("clean");
-	})
+	});
 
 	it("returns error for unparseable output", () => {
 		const result = parseScrutinyOutput("not json {{{");
 
 		expect(result.issues.length).toBe(0);
 		expect(result.status).toBe("error");
-	})
+	});
 
 	it("returns error for message_end with invalid JSON text", () => {
 		const output = [
@@ -775,7 +772,7 @@ describe("parseScrutinyOutput", () => {
 
 		expect(result.issues.length).toBe(0);
 		expect(result.status).toBe("error");
-	})
+	});
 
 	it("returns error for output with no message_end", () => {
 		const output = [
@@ -787,5 +784,5 @@ describe("parseScrutinyOutput", () => {
 
 		expect(result.issues.length).toBe(0);
 		expect(result.status).toBe("error");
-	})
-})
+	});
+});

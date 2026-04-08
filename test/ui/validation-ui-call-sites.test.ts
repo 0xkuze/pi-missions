@@ -7,8 +7,8 @@ import { saveContract } from "../../extensions/state/manager.js";
 import type {
 	AssertionResultData,
 	Feature,
-	MissionPlan,
 	Milestone,
+	MissionPlan,
 	MissionState,
 	ValidationContract,
 } from "../../extensions/types.js";
@@ -57,7 +57,10 @@ function makeContract(overrides: Partial<ValidationContract> = {}): ValidationCo
 	};
 }
 
-function makeScrutinyReportJson(milestoneId: string, issues: Array<{ severity: string; description: string; location: string }> = []) {
+function makeScrutinyReportJson(
+	milestoneId: string,
+	issues: Array<{ severity: string; description: string; location: string }> = [],
+) {
 	return JSON.stringify({
 		status: "clean",
 		milestoneId,
@@ -83,8 +86,24 @@ describe("validation UI call sites integration", () => {
 		it("renders assertion section when contract has completed assertions", () => {
 			const contract = makeContract({
 				assertions: [
-					{ id: "a1", featureId: "f1", type: "command", command: "bun test", expect: { exitCode: 0 }, description: "tests", status: "pass" },
-					{ id: "a2", featureId: "f1", type: "command", command: "lint", expect: { exitCode: 0 }, description: "lint", status: "fail" },
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "bun test",
+						expect: { exitCode: 0 },
+						description: "tests",
+						status: "pass",
+					},
+					{
+						id: "a2",
+						featureId: "f1",
+						type: "command",
+						command: "lint",
+						expect: { exitCode: 0 },
+						description: "lint",
+						status: "fail",
+					},
 				],
 			});
 			saveContract(tmpDir, contract);
@@ -92,11 +111,13 @@ describe("validation UI call sites integration", () => {
 			const loadedContract = makeContract();
 			const assertions: AssertionResultData[] = loadedContract.assertions
 				.filter((a) => a.status === "pass" || a.status === "fail" || a.status === "error")
-				.map((a) => makeAssertionResult({
-					assertionId: a.id,
-					status: a.status as AssertionResultData["status"],
-					command: a.command,
-				}));
+				.map((a) =>
+					makeAssertionResult({
+						assertionId: a.id,
+						status: a.status as AssertionResultData["status"],
+						command: a.command,
+					}),
+				);
 
 			const lines = renderValidationView("Auth", [], false, 80, undefined, 40, 0, assertions);
 			const text = lines.join("\n");
@@ -124,9 +145,7 @@ describe("validation UI call sites integration", () => {
 		});
 
 		it("renders both assertions and scrutiny when both are available", () => {
-			const assertions = [
-				makeAssertionResult({ assertionId: "a1", status: "pass" }),
-			];
+			const assertions = [makeAssertionResult({ assertionId: "a1", status: "pass" })];
 			const reportJson = {
 				status: "clean" as const,
 				milestoneId: "m1",
@@ -266,25 +285,47 @@ describe("validation UI call sites integration", () => {
 		it("contract assertions appear in validation view, widget, and report", () => {
 			const contract = makeContract({
 				assertions: [
-					{ id: "a1", featureId: "f1", type: "command", command: "bun test", expect: { exitCode: 0 }, description: "tests pass", status: "pass" },
-					{ id: "a2", featureId: "f1", type: "command", command: "bun lint", expect: { exitCode: 0 }, description: "lint passes", status: "fail" },
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "bun test",
+						expect: { exitCode: 0 },
+						description: "tests pass",
+						status: "pass",
+					},
+					{
+						id: "a2",
+						featureId: "f1",
+						type: "command",
+						command: "bun lint",
+						expect: { exitCode: 0 },
+						description: "lint passes",
+						status: "fail",
+					},
 				],
 			});
 			saveContract(tmpDir, contract);
 
 			const assertions: AssertionResultData[] = contract.assertions
 				.filter((a) => a.status === "pass" || a.status === "fail" || a.status === "error")
-				.map((a) => makeAssertionResult({
-					assertionId: a.id,
-					status: a.status as AssertionResultData["status"],
-					command: a.command,
-				}));
+				.map((a) =>
+					makeAssertionResult({
+						assertionId: a.id,
+						status: a.status as AssertionResultData["status"],
+						command: a.command,
+					}),
+				);
 
 			const validationLines = renderValidationView("Auth", [], false, 80, undefined, 40, 0, assertions);
 			expect(validationLines.join("\n")).toContain("a1");
 			expect(validationLines.join("\n")).toContain("a2");
 
-			const plan = makePlan({ milestones: [makeMilestone({ id: "m1", features: [makeFeature({ id: "f1", status: "done" })], status: "active" })] });
+			const plan = makePlan({
+				milestones: [
+					makeMilestone({ id: "m1", features: [makeFeature({ id: "f1", status: "done" })], status: "active" }),
+				],
+			});
 			const widgetState = makeState({
 				status: "validating",
 				currentMilestoneId: "m1",

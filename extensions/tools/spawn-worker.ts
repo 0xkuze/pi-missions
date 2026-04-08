@@ -194,17 +194,18 @@ function checkDependencies(feature: Feature, allFeatures: Map<string, Feature>):
 	return null;
 }
 
-const REPORT_RESULT_EXTENSION_SOURCE = `import { Type } from "@sinclair/typebox";
+export const REPORT_RESULT_EXTENSION_SOURCE = `import { Type } from "@sinclair/typebox";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 const S = Type.Object({
   whatWasImplemented: Type.String(),
   whatWasLeftUndone: Type.String(),
-  commandsRun: Type.Array(Type.Object({ command: Type.String(), exitCode: Type.Number(), observation: Type.String() })),
-  testsAdded: Type.Array(Type.Object({ file: Type.String(), cases: Type.Array(Type.String()) })),
-  discoveredIssues: Type.Array(Type.Object({ severity: Type.Union([Type.Literal("low"),Type.Literal("medium"),Type.Literal("high")]), description: Type.String(), suggestedFix: Type.Optional(Type.String()) })),
+  commandsRun: Type.Optional(Type.Array(Type.Object({ command: Type.String(), exitCode: Type.Number(), observation: Type.String() }))),
+  testsAdded: Type.Optional(Type.Array(Type.Object({ file: Type.String(), cases: Type.Array(Type.String()) }))),
+  discoveredIssues: Type.Optional(Type.Array(Type.Object({ severity: Type.Union([Type.Literal("low"),Type.Literal("medium"),Type.Literal("high")]), description: Type.String(), suggestedFix: Type.Optional(Type.String()) }))),
 });
+function coerceArrayField(v: unknown): unknown[] { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; }
 export default function register(pi: ExtensionAPI): void {
-  pi.registerTool({ name: "report_result", label: "Report Result", description: "Report your work results. You MUST call this tool when done.", parameters: S, async execute(_: string, p: typeof S._static) { return { content: [{ type: "text" as const, text: "Result reported successfully.\\nImplemented: " + p.whatWasImplemented }] }; } });
+  pi.registerTool({ name: "report_result", label: "Report Result", description: "Report your work results. You MUST call this tool when done.", parameters: S, prepareArguments(args: Record<string, unknown>) { return { ...args, commandsRun: coerceArrayField(args.commandsRun), testsAdded: coerceArrayField(args.testsAdded), discoveredIssues: coerceArrayField(args.discoveredIssues) }; }, async execute(_: string, p: typeof S._static) { return { content: [{ type: "text" as const, text: "Result reported successfully.\\nImplemented: " + p.whatWasImplemented }] }; } });
 }`;
 
 function writeReportResultExtension(runtimeDir: string): string {
@@ -449,7 +450,7 @@ function performSelfCorrection(
 	}
 
 	const hasUndone = handoff.whatWasLeftUndone.trim().length > 0;
-	const highSeverityIssues = handoff.discoveredIssues.filter((i) => i.severity === "high");
+	const highSeverityIssues = (handoff.discoveredIssues ?? []).filter((i) => i.severity === "high");
 
 	if (!hasUndone && highSeverityIssues.length === 0) {
 		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };

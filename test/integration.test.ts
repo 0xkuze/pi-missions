@@ -343,7 +343,7 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 				isMissionModeActive: () => true,
 				setMissionModeActive: () => {},
 				onActivate: async () => {},
-				onDeactivate: () => {}
+				onDeactivate: () => {},
 			});
 
 			const approvedState = makeState("approved");

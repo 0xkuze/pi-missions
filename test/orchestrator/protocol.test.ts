@@ -1475,25 +1475,27 @@ describe("buildOrchestratorProtocol", () => {
 			const validationPassIdx = result.toLowerCase().indexOf("validation");
 			expect(scrutinyIdx).toBeGreaterThan(0);
 			expect(validationPassIdx).toBeGreaterThan(0);
-		})
+		});
 
 		it("states validation must pass before scrutiny", () => {
 			const state = makeState({ status: "executing" });
 			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 1 }) as string;
 			expect(result).toMatch(/validation.*pass.*scrutiny|scrutiny.*validation.*pass/i);
-		})
+		});
 
 		it("includes fix feature instructions for error-severity scrutiny issues", () => {
 			const state = makeState({ status: "executing" });
 			const result = buildOrchestratorProtocol(state, undefined, VERBOSE, false, { turnCount: 1 }) as string;
 			expect(result).toContain("scrutiny");
 			expect(result).toMatch(/error.*severity|error-severity/i);
-		})
+		});
 
 		it("caveman executing includes run_scrutiny", () => {
 			const state = makeState({ status: "executing" });
-			const result = buildOrchestratorProtocol(state, undefined, { promptingMode: "caveman" }, false, { turnCount: 1 }) as string;
+			const result = buildOrchestratorProtocol(state, undefined, { promptingMode: "caveman" }, false, {
+				turnCount: 1,
+			}) as string;
 			expect(result).toContain("run_scrutiny");
-		})
+		});
 	});
 });

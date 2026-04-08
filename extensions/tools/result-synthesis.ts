@@ -253,26 +253,40 @@ function extractHandoffArgs(events: ParsedEvent[]): Record<string, unknown> | nu
 	return null;
 }
 
+function coerceArrayField(value: unknown): unknown[] {
+	if (Array.isArray(value)) return value;
+	if (typeof value === "string") {
+		try {
+			const parsed = JSON.parse(value) as unknown;
+			return Array.isArray(parsed) ? parsed : [];
+		} catch {
+			return [];
+		}
+	}
+	return [];
+}
+
 function validateHandoff(args: Record<string, unknown>): WorkerHandoff | null {
 	if (typeof args.whatWasImplemented !== "string") return null;
 	if (typeof args.whatWasLeftUndone !== "string") return null;
-	if (!Array.isArray(args.commandsRun)) return null;
-	if (!Array.isArray(args.testsAdded)) return null;
-	if (!Array.isArray(args.discoveredIssues)) return null;
+
+	const commandsRun = coerceArrayField(args.commandsRun);
+	const testsAdded = coerceArrayField(args.testsAdded);
+	const discoveredIssues = coerceArrayField(args.discoveredIssues);
 
 	const validSeverities = new Set(["low", "medium", "high"]);
-	for (const cmd of args.commandsRun as Array<Record<string, unknown>>) {
+	for (const cmd of commandsRun as Array<Record<string, unknown>>) {
 		if (typeof cmd.command !== "string" || typeof cmd.exitCode !== "number" || typeof cmd.observation !== "string") {
 			return null;
 		}
 	}
-	for (const test of args.testsAdded as Array<Record<string, unknown>>) {
+	for (const test of testsAdded as Array<Record<string, unknown>>) {
 		if (typeof test.file !== "string" || !Array.isArray(test.cases)) return null;
 		for (const c of test.cases as unknown[]) {
 			if (typeof c !== "string") return null;
 		}
 	}
-	for (const issue of args.discoveredIssues as Array<Record<string, unknown>>) {
+	for (const issue of discoveredIssues as Array<Record<string, unknown>>) {
 		if (typeof issue.severity !== "string" || !validSeverities.has(issue.severity)) return null;
 		if (typeof issue.description !== "string") return null;
 		if (issue.suggestedFix !== undefined && typeof issue.suggestedFix !== "string") return null;
@@ -281,9 +295,9 @@ function validateHandoff(args: Record<string, unknown>): WorkerHandoff | null {
 	return {
 		whatWasImplemented: args.whatWasImplemented,
 		whatWasLeftUndone: args.whatWasLeftUndone,
-		commandsRun: args.commandsRun as WorkerHandoff["commandsRun"],
-		testsAdded: args.testsAdded as WorkerHandoff["testsAdded"],
-		discoveredIssues: args.discoveredIssues as WorkerHandoff["discoveredIssues"],
+		commandsRun: commandsRun as WorkerHandoff["commandsRun"],
+		testsAdded: testsAdded as WorkerHandoff["testsAdded"],
+		discoveredIssues: discoveredIssues as WorkerHandoff["discoveredIssues"],
 	};
 }
 

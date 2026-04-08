@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { initLibrary, readLibraryTopic, writeLibraryTopic } from "../../extensions/state/library.js";
 import {
 	generateWorkerContext,
 	generateWorkerPrompt,
 	generateWorkerSkill,
 	writeWorkerFiles,
 } from "../../extensions/orchestrator/worker-prompt.js";
+import { initLibrary, readLibraryTopic, writeLibraryTopic } from "../../extensions/state/library.js";
 import type { Feature } from "../../extensions/types.js";
 import { createTempDir, makeFeature } from "../helpers/index.js";
 
@@ -367,10 +367,7 @@ describe("generateWorkerContext with project info", () => {
 
 	it("includes Project Info with commonjs type", () => {
 		const projectDir = tmp.path;
-		writeFileSync(
-			join(projectDir, "package.json"),
-			JSON.stringify({ name: "cjs-app", type: "commonjs" }),
-		);
+		writeFileSync(join(projectDir, "package.json"), JSON.stringify({ name: "cjs-app", type: "commonjs" }));
 		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
 		expect(ctx).toContain("type: commonjs");
 	});
@@ -399,30 +396,21 @@ describe("generateWorkerContext with project info", () => {
 
 	it("omits TypeScript config when no tsconfig.json", () => {
 		const projectDir = tmp.path;
-		writeFileSync(
-			join(projectDir, "package.json"),
-			JSON.stringify({ name: "no-ts" }),
-		);
+		writeFileSync(join(projectDir, "package.json"), JSON.stringify({ name: "no-ts" }));
 		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
 		expect(ctx).not.toContain("TypeScript Configuration");
 	});
 
 	it("omits Project Info when no package.json", () => {
 		const projectDir = tmp.path;
-		writeFileSync(
-			join(projectDir, "tsconfig.json"),
-			JSON.stringify({ compilerOptions: { strict: true } }),
-		);
+		writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true } }));
 		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
 		expect(ctx).not.toContain("Project Info");
 	});
 
 	it("omits Project Structure when no src/ or extensions/ directories", () => {
 		const projectDir = tmp.path;
-		writeFileSync(
-			join(projectDir, "package.json"),
-			JSON.stringify({ name: "minimal" }),
-		);
+		writeFileSync(join(projectDir, "package.json"), JSON.stringify({ name: "minimal" }));
 		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
 		expect(ctx).not.toContain("Project Structure");
 	});
@@ -432,14 +420,8 @@ describe("generateWorkerContext with project info", () => {
 		const basePath = tmp.path;
 		initLibrary(basePath);
 		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\nAvoid global state");
-		writeFileSync(
-			join(projectDir, "tsconfig.json"),
-			JSON.stringify({ compilerOptions: { strict: true } }),
-		);
-		writeFileSync(
-			join(projectDir, "package.json"),
-			JSON.stringify({ name: "combo", type: "module" }),
-		);
+		writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true } }));
+		writeFileSync(join(projectDir, "package.json"), JSON.stringify({ name: "combo", type: "module" }));
 		mkdirSync(join(projectDir, "src"));
 		writeFileSync(join(projectDir, "src", "main.ts"), "");
 		const agentsMd = "## Conventions\n\nUse strict mode.";
@@ -686,7 +668,11 @@ describe("generateWorkerContext with library injection", () => {
 	it("accumulated pitfalls from multiple workers appear in context (VAL-SKILLS-004)", () => {
 		const basePath = tmp.path;
 		initLibrary(basePath);
-		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\n- Pin dep@2.1.0 due to breaking change\n- Always run migrations first");
+		writeLibraryTopic(
+			basePath,
+			"pitfalls",
+			"# Pitfalls\n\n- Pin dep@2.1.0 due to breaking change\n- Always run migrations first",
+		);
 		const ctx = generateWorkerContext(undefined, [], basePath);
 		expect(ctx).toContain("Pin dep@2.1.0");
 		expect(ctx).toContain("Always run migrations first");

@@ -41,19 +41,19 @@ describe("ReportResultSchema", () => {
 			expect(Value.Check(ReportResultSchema, missing)).toBe(false);
 		});
 
-		it("rejects object missing commandsRun", () => {
+		it("accepts object missing commandsRun (optional field)", () => {
 			const { commandsRun: _, ...missing } = VALID_REPORT_RESULT;
-			expect(Value.Check(ReportResultSchema, missing)).toBe(false);
+			expect(Value.Check(ReportResultSchema, missing)).toBe(true);
 		});
 
-		it("rejects object missing testsAdded", () => {
+		it("accepts object missing testsAdded (optional field)", () => {
 			const { testsAdded: _, ...missing } = VALID_REPORT_RESULT;
-			expect(Value.Check(ReportResultSchema, missing)).toBe(false);
+			expect(Value.Check(ReportResultSchema, missing)).toBe(true);
 		});
 
-		it("rejects object missing discoveredIssues", () => {
+		it("accepts object missing discoveredIssues (optional field)", () => {
 			const { discoveredIssues: _, ...missing } = VALID_REPORT_RESULT;
-			expect(Value.Check(ReportResultSchema, missing)).toBe(false);
+			expect(Value.Check(ReportResultSchema, missing)).toBe(true);
 		});
 
 		it("rejects object with wrong whatWasImplemented type", () => {

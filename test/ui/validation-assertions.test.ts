@@ -1,8 +1,8 @@
 import { describe, expect, it } from "bun:test";
+import type { ScrutinyIssue, ScrutinyReport } from "../../extensions/tools/run-scrutiny.js";
 import type { AssertionResultData, ValidationAssertion } from "../../extensions/types.js";
 import type { CommandDisplayEntry } from "../../extensions/ui/validation-view.js";
 import { renderValidationView } from "../../extensions/ui/validation-view.js";
-import type { ScrutinyIssue, ScrutinyReport } from "../../extensions/tools/run-scrutiny.js";
 
 function makeAssertionResult(overrides: Partial<AssertionResultData> = {}): AssertionResultData {
 	return {
