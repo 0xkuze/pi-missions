@@ -92,6 +92,22 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 				};
 			}
 
+			if (state.totalFeaturesFailed > 0 && !params.force) {
+				const contract = loadContract(deps.basePath);
+				const hasPassedValidation = contract?.assertions.some((a) => a.status === "pass");
+				if (!hasPassedValidation) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error: ${state.totalFeaturesFailed} feature(s) failed and no validation has been run. Run run_validation first, or pass force=true to override.`,
+							},
+						],
+						details: {},
+					};
+				}
+			}
+
 			const contract = loadContract(deps.basePath);
 			if (contract) {
 				const failedAssertions = contract.assertions.filter((a) => a.status === "fail" || a.status === "error");

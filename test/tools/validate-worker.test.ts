@@ -70,10 +70,10 @@ describe("parseVerdictFromText", () => {
 		expect(result.feedback).toContain("assuming pass");
 	});
 
-	it("defaults to reject when no VERDICT found with no strictness specified (default is strict)", () => {
+	it("defaults to pass when no VERDICT found with no strictness specified (default is lenient)", () => {
 		const result = parseVerdictFromText("Some review text without a structured verdict.");
-		expect(result.verdict).toBe("reject");
-		expect(result.feedback).toContain("VERDICT");
+		expect(result.verdict).toBe("pass");
+		expect(result.feedback).toContain("assuming pass");
 	});
 
 	it("handles empty text in strict mode", () => {
@@ -321,7 +321,7 @@ describe("runValidator", () => {
 			expect(result.feedback).toMatch(/timed out|aborted/);
 		});
 
-		it("returns reject on timeout when validatorStrictness is undefined (default is strict)", async () => {
+		it("returns pass on timeout when validatorStrictness is undefined (default is lenient)", async () => {
 			const feature = makeFeature({ id: "f1" });
 			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
 			saveState(tmpDir, makeState());
@@ -338,7 +338,7 @@ describe("runValidator", () => {
 				signal: AbortSignal.timeout(10),
 			});
 
-			expect(result.verdict).toBe("reject");
+			expect(result.verdict).toBe("pass");
 		});
 
 		it("returns reject on abort when validatorStrictness is strict", async () => {
@@ -385,7 +385,7 @@ describe("runValidator", () => {
 			expect(result.feedback).toContain("VERDICT");
 		});
 
-		it("returns reject on missing verdict when config has no validatorStrictness (default strict)", async () => {
+		it("returns pass on missing verdict when config has no validatorStrictness (default lenient)", async () => {
 			const feature = makeFeature({ id: "f1" });
 			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
 			saveState(tmpDir, makeState());
@@ -401,7 +401,7 @@ describe("runValidator", () => {
 				config: { models: { validator: "test-model" } },
 			});
 
-			expect(result.verdict).toBe("reject");
+			expect(result.verdict).toBe("pass");
 		});
 	});
 

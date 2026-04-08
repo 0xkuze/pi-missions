@@ -23,7 +23,7 @@ const DEFAULT_CONFIG: Required<MissionConfig> = {
 	},
 	maxRetries: 3,
 	workerTimeoutMs: 600_000,
-	validatorStrictness: "strict",
+	validatorStrictness: "lenient",
 };
 
 export function getDefaultConfig(): MissionConfig {

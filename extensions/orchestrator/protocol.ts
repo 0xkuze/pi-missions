@@ -216,7 +216,7 @@ You are a project manager, not an implementer. Never read implementation files, 
 During EXECUTION: do NOT use \`edit\` or \`write\`. All code changes MUST go through workers via \`spawn_worker\`.
 NEVER read files under \`.pi/missions/\`. Your mission tools provide all state awareness you need.
 On failure: call create_fix_feature, then spawn_worker for the fix. Do not debug yourself.
-NEVER use bash to manually verify worker output and then call complete_feature to force-complete a failed worker. If spawn_worker returns failure, the ONLY correct response is create_fix_feature.
+NEVER use bash + complete_feature to force-complete a failed worker. complete_feature WILL REJECT if the last worker attempt failed. The ONLY correct response to spawn_worker failure is create_fix_feature.
 Git commits happen automatically after successful workers.
 Workers are SEQUENTIAL. Call spawn_worker for ONE feature, wait for the result, then call spawn_worker for the next. Never call spawn_worker more than once per turn.
 Milestones auto-complete when all features finish. After a milestone auto-completes, call run_validation for that milestone.
@@ -285,7 +285,7 @@ function cavemanExecuting(state: MissionState, plan: MissionPlan | undefined): s
 ${progress}${warnings}
 
 You boss. No touch code. spawn_worker do work. ONE worker at a time. Wait result before next spawn.
-Worker fail? create_fix_feature then spawn_worker again. NEVER use bash + complete_feature to force-complete a failed worker.
+Worker fail? create_fix_feature then spawn_worker again. NEVER use bash + complete_feature to force-complete. complete_feature REJECTS if last worker failed.
 Big feature done? create_fix_feature for code review — worker reads changed files, checks quality, simplicity, no comments, error handling, AGENTS.md rules. Skip review for trivial features.
 All features done? run_validation. Validation fail? create_fix_feature, spawn_worker, run_validation again. NEVER complete_mission with failing checks.
 Validation pass? run_scrutiny. Scrutiny find error issues? create_fix_feature, fix, re-validate. Warning/info? note, move on.

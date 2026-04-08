@@ -61,11 +61,16 @@ function completeFeature(
 	state: MissionState,
 	featureId: string,
 	reason: string | undefined,
+	force?: boolean,
 ): string | { plan: MissionPlan; state: MissionState } {
 	const found = findFeatureWithMilestone(plan, featureId);
 	if (!found) return `Feature '${featureId}' not found in plan.`;
 	if (found.feature.status === "done") {
 		return `Cannot complete feature '${featureId}': feature is already completed.`;
+	}
+	const lastAttempt = found.feature.attempts[found.feature.attempts.length - 1];
+	if (lastAttempt && lastAttempt.status === "failure" && !force) {
+		return `Cannot complete feature '${featureId}': last worker attempt failed. Use create_fix_feature to fix the failure, or pass force=true to override.`;
 	}
 
 	const now = nowISO();
@@ -246,6 +251,7 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				Type.Array(Type.String(), { description: "Acceptance criteria (required for add_feature)" }),
 			),
 			relevantFiles: Type.Optional(Type.Array(Type.String(), { description: "Relevant files (for add_feature)" })),
+			force: Type.Optional(Type.Boolean({ description: "Force action even when safeguards would block it" })),
 		}),
 		async execute(_toolCallId, params) {
 			const state = loadState(deps.basePath);
@@ -256,7 +262,7 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			const { action, targetId, reason } = params;
+			const { action, targetId, reason, force } = params;
 
 			const validStates = VALID_STATES_FOR_ACTION[action];
 			if (validStates && !validStates.has(state.status)) {
@@ -286,15 +292,17 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			const featureActions: Record<string, { apply: typeof skipFeature; verb: string }> = {
+			const simpleFeatureActions: Record<string, { apply: typeof skipFeature; verb: string }> = {
 				skip_feature: { apply: skipFeature, verb: "skipped" },
-				complete_feature: { apply: completeFeature, verb: "manually completed" },
 				block_feature: { apply: blockFeature, verb: "blocked" },
 			};
 
-			const featureAction = featureActions[action];
-			if (featureAction) {
-				const result = featureAction.apply(plan, state, targetId, reason);
+			const simpleAction = simpleFeatureActions[action];
+			if (simpleAction || action === "complete_feature") {
+				const verb = simpleAction ? simpleAction.verb : "manually completed";
+				const result = simpleAction
+					? simpleAction.apply(plan, state, targetId, reason)
+					: completeFeature(plan, state, targetId, reason, force);
 				if (typeof result === "string") {
 					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
 				}
@@ -303,7 +311,7 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				saveState(deps.basePath, finalState);
 				deps.updateWidget(finalState, finalPlan);
 				return {
-					content: [{ type: "text", text: `Feature '${targetId}' ${featureAction.verb}.` }],
+					content: [{ type: "text", text: `Feature '${targetId}' ${verb}.` }],
 					details: {},
 				};
 			}

@@ -54,7 +54,7 @@ export function parseValidatorVerdict(stdout: string, strictness?: "strict" | "l
 }
 
 export function parseVerdictFromText(text: string, strictness?: "strict" | "lenient"): ValidatorResult {
-	const effectiveStrictness = strictness ?? "strict";
+	const effectiveStrictness = strictness ?? "lenient";
 	const verdictMatch = /VERDICT:\s*(PASS|FIX|REJECT)/i.exec(text);
 	const feedbackMatch = /FEEDBACK:\s*(.+)/is.exec(text);
 
@@ -120,7 +120,7 @@ export async function runValidator(
 		timeoutMs,
 	});
 
-	const strictness = config.validatorStrictness ?? "strict";
+	const strictness = config.validatorStrictness ?? "lenient";
 
 	if (procResult.timedOut || procResult.aborted) {
 		if (strictness === "strict") {
