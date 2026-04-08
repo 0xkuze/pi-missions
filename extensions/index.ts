@@ -8,6 +8,7 @@ import { resolveModel } from "./config.js";
 import { captureGitSnapshot, ensureGitRepo, isGitAvailable } from "./git.js";
 import { handleMissionInput } from "./input-handler.js";
 import { buildCompactMissionSummary, buildOrchestratorProtocol, clearProtocolCache } from "./orchestrator/protocol.js";
+import { findFeature, hasPendingFeatures } from "./plan-helpers.js";
 import { isOnboardingCompleted, saveGlobalConfig } from "./state/global-config.js";
 import { initLibrary } from "./state/library.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
@@ -36,6 +37,7 @@ import { registerUpdateLibraryTool } from "./tools/update-library.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
 import { registerWebSearchTool } from "./tools/web-search.js";
 import type { Feature, GlobalConfig, MissionPlan, MissionState, WorkerResult } from "./types.js";
+import { TERMINAL_STATUSES } from "./types.js";
 import { DraftReviewComponent } from "./ui/draft-review.js";
 import { MissionControlComponent } from "./ui/mission-control.js";
 import { OnboardingOverlayComponent } from "./ui/onboarding-overlay.js";
@@ -46,21 +48,16 @@ import { generateId, nowISO } from "./utils.js";
 import { checkOrphanedWorker, killOrphanedWorker } from "./worker-pid.js";
 
 const SESSION_CACHE_KEY = "mission-state-cache";
-const TERMINAL_STATUSES = new Set(["completed", "failed", "aborted"]);
+const PAUSABLE_STATUSES = new Set(["planning", "draft_review", "approved", "validating"]);
 
 function cachePayload(state: MissionState): MissionState {
 	return { ...state, progressLog: [] };
 }
 
-function hasPendingFeatures(basePath: string): boolean {
+function hasPendingWork(basePath: string): boolean {
 	const plan = loadPlan(basePath);
 	if (!plan) return false;
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.status === "pending" || feature.status === "active") return true;
-		}
-	}
-	return false;
+	return hasPendingFeatures(plan);
 }
 
 type RecoveryAction =
@@ -81,15 +78,6 @@ function readResultJson(resultPath: string): WorkerResult | null {
 	}
 }
 
-function findFeatureInPlan(plan: MissionPlan, featureId: string): Feature | null {
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.id === featureId) return feature;
-		}
-	}
-	return null;
-}
-
 function determineRecovery(state: MissionState, plan: MissionPlan | null, basePath: string): RecoveryAction {
 	if (state.status === "executing") {
 		const featureId = state.currentFeatureId;
@@ -99,7 +87,7 @@ function determineRecovery(state: MissionState, plan: MissionPlan | null, basePa
 		if (!plan) {
 			return { kind: "mission_failed", reason: "Plan missing during recovery" };
 		}
-		const feature = findFeatureInPlan(plan, featureId);
+		const feature = findFeature(plan, featureId);
 		if (!feature) {
 			return { kind: "missing_feature", featureId };
 		}
@@ -598,9 +586,8 @@ export default function (pi: ExtensionAPI): void {
 		if (!missionModeActive) return;
 		const state = loadState(basePath);
 		if (!state) return;
-		const pausableStatuses = new Set(["planning", "draft_review", "approved", "validating"]);
 		const shouldPause =
-			pausableStatuses.has(state.status) || (state.status === "executing" && hasPendingFeatures(basePath));
+			PAUSABLE_STATUSES.has(state.status) || (state.status === "executing" && hasPendingWork(basePath));
 		if (!shouldPause) return;
 		try {
 			const newState = transitionState(state, "paused");
@@ -881,9 +868,8 @@ export default function (pi: ExtensionAPI): void {
 	function deactivateMissionMode(): void {
 		const state = loadState(basePath);
 		if (state) {
-			const pausableStatuses = new Set(["planning", "draft_review", "approved", "validating"]);
 			const shouldPause =
-				pausableStatuses.has(state.status) || (state.status === "executing" && hasPendingFeatures(basePath));
+				PAUSABLE_STATUSES.has(state.status) || (state.status === "executing" && hasPendingWork(basePath));
 			if (shouldPause) {
 				try {
 					const newState = transitionState(state, "paused");
@@ -1026,7 +1012,7 @@ function cleanupOrphanedWorker(state: MissionState, basePath: string): void {
 	if (state.status !== "executing" || !state.currentFeatureId) return;
 	const plan = loadPlan(basePath);
 	if (!plan) return;
-	const feature = findFeatureInPlan(plan, state.currentFeatureId);
+	const feature = findFeature(plan, state.currentFeatureId);
 	if (!feature) return;
 	const attemptNumber = feature.attempts.length + 1;
 	const workerStatus = checkOrphanedWorker(basePath, state.currentFeatureId, attemptNumber);

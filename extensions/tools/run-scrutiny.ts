@@ -4,6 +4,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { loadMissionConfig, resolveModel } from "../config.js";
+import type { ProcLike, SpawnFn } from "../process-types.js";
 import { readLibraryTopic } from "../state/library.js";
 import { loadContract, loadPlan, loadState } from "../state/manager.js";
 import type { Milestone, MissionPlan, MissionState, WorkerResult } from "../types.js";
@@ -24,19 +25,6 @@ export interface ScrutinyReport {
 	durationMs: number;
 	issues: ScrutinyIssue[];
 }
-
-interface StreamLike {
-	on(event: string, handler: (data: Buffer) => void): unknown;
-}
-
-interface ProcLike {
-	stdout: StreamLike | null;
-	stderr: StreamLike | null;
-	kill?: (signal: string) => void;
-	on(event: string, handler: (...args: unknown[]) => void): unknown;
-}
-
-type SpawnFn = (command: string, args: string[], options: Record<string, unknown>) => ProcLike;
 
 const DEFAULT_SCRUTINY_TIMEOUT_MS = 600_000;
 

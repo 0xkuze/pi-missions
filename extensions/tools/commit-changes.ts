@@ -4,6 +4,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { detectOutOfScopeChanges, getChangedFiles, isGitAvailable, stageAndCommit } from "../git.js";
+import { findFeature } from "../plan-helpers.js";
 import { loadPlan, loadState, saveState } from "../state/manager.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
 import { nowISO } from "../utils.js";
@@ -15,23 +16,6 @@ interface Deps {
 	_isGitAvailableOverride?: (cwd: string) => boolean;
 	_getChangedFilesOverride?: (cwd: string, baseCommit?: string) => string[];
 	_stageAndCommitOverride?: (cwd: string, files: string[], message: string) => string;
-}
-
-function findFeatureInPlan(
-	plan: MissionPlan,
-	featureId: string,
-): {
-	name: string;
-	relevantFiles: string[];
-	fixOrigin?: MissionPlan["milestones"][number]["features"][number]["fixOrigin"];
-} | null {
-	for (const milestone of plan.milestones) {
-		const feature = milestone.features.find((f) => f.id === featureId);
-		if (feature) {
-			return { name: feature.name, relevantFiles: feature.relevantFiles, fixOrigin: feature.fixOrigin };
-		}
-	}
-	return null;
 }
 
 function readRawConfig(basePath: string): MissionConfig {
@@ -127,7 +111,7 @@ export function registerCommitChangesTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			const feature = findFeatureInPlan(plan, params.featureId);
+			const feature = findFeature(plan, params.featureId);
 			if (!feature) {
 				return {
 					content: [{ type: "text", text: `Skipped: feature '${params.featureId}' not found in plan.` }],

@@ -13,6 +13,8 @@ export type MissionStatus =
 	| "failed"
 	| "aborted";
 
+export const TERMINAL_STATUSES: ReadonlySet<MissionStatus> = new Set(["completed", "failed", "aborted"]);
+
 export type ResumeTargetState = "planning" | "draft_review" | "executing" | "validating";
 
 export type ProgressEventType =

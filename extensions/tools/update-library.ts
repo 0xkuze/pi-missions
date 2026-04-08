@@ -3,10 +3,9 @@ import { Type } from "@sinclair/typebox";
 import { clearProtocolCache } from "../orchestrator/protocol.js";
 import { appendLibraryTopic } from "../state/library.js";
 import { loadState } from "../state/manager.js";
+import { TERMINAL_STATUSES } from "../types.js";
 
 const TOPIC_NAME_RE = /^[a-zA-Z0-9-]+$/;
-
-const TERMINAL_STATUSES = new Set(["completed", "failed", "aborted"]);
 
 interface Deps {
 	basePath: string;

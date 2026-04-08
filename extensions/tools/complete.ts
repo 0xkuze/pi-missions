@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
+import { countPendingFeatures, hasPendingFeatures } from "../plan-helpers.js";
 import { generateReport, type ReportValidationInfo } from "../report.js";
 import { loadContract, loadPlan, loadState, saveState } from "../state/manager.js";
 import { transitionState } from "../state/transitions.js";
@@ -11,29 +12,6 @@ import type { MissionPlan, MissionState } from "../types.js";
 interface Deps {
 	basePath: string;
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
-}
-
-function hasPendingWork(plan: MissionPlan): boolean {
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.status === "pending" || feature.status === "active") {
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
-function countPendingFeatures(plan: MissionPlan): number {
-	let count = 0;
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.status === "pending" || feature.status === "active") {
-				count++;
-			}
-		}
-	}
-	return count;
 }
 
 export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void {
@@ -101,7 +79,7 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 
 			const hasAnyFeatures = plan ? plan.milestones.some((m) => m.features.length > 0) : false;
 			const allSkipped =
-				state.totalFeaturesCompleted === 0 && state.totalFeaturesSkipped > 0 && !hasPendingWork(plan!);
+				state.totalFeaturesCompleted === 0 && state.totalFeaturesSkipped > 0 && !hasPendingFeatures(plan!);
 			if (hasAnyFeatures && state.totalFeaturesCompleted === 0 && !allSkipped) {
 				return {
 					content: [
@@ -134,7 +112,7 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 			}
 
 			const warnings: string[] = [];
-			if (plan && hasPendingWork(plan)) {
+			if (plan && hasPendingFeatures(plan)) {
 				const pendingCount = countPendingFeatures(plan);
 				warnings.push(
 					`Warning: ${pendingCount} feature(s) are still pending or active and have not been completed.`,

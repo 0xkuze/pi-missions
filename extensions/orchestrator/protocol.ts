@@ -1,8 +1,8 @@
 import { resolvePromptingMode } from "../config.js";
 import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
+import { TERMINAL_STATUSES } from "../types.js";
 import { getCavemanOutputRule } from "./caveman-rules.js";
 
-const TERMINAL_STATUSES: ReadonlySet<string> = new Set(["completed", "failed", "aborted", "idle"]);
 const CONTEXT_USAGE_COMPACT_THRESHOLD = 60;
 
 export interface ProtocolOptions {

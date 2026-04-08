@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { findFeature } from "../plan-helpers.js";
 import type { MissionPlan, PlanMutation } from "../types.js";
 import { loadPlan } from "./manager.js";
 
@@ -11,17 +12,6 @@ function historyPath(basePath: string): string {
 
 function ensureDir(filePath: string): void {
 	mkdirSync(dirname(filePath), { recursive: true });
-}
-
-function findFeatureInPlan(plan: MissionPlan, featureId: string): { status: string } | null {
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.id === featureId) {
-				return feature;
-			}
-		}
-	}
-	return null;
 }
 
 function rejectIfCompletedFeature(basePath: string, mutation: PlanMutation): void {
@@ -36,7 +26,7 @@ function rejectIfCompletedFeature(basePath: string, mutation: PlanMutation): voi
 	if (plan === null) {
 		return;
 	}
-	const feature = findFeatureInPlan(plan, featureId);
+	const feature = findFeature(plan, featureId);
 	if (feature !== null && feature.status === "done") {
 		throw new Error(`Cannot apply '${mutation.kind}' to completed feature '${featureId}'`);
 	}

@@ -5,6 +5,7 @@ import {
 	generateValidatorSkill,
 	writeValidatorFiles,
 } from "../orchestrator/validator-prompt.js";
+import type { ProcLike, SpawnFn } from "../process-types.js";
 import { loadConfig } from "../state/manager.js";
 import type { Feature, MissionConfig, MissionPlan, WorkerResult } from "../types.js";
 import { getPiInvocation } from "../utils.js";
@@ -15,21 +16,6 @@ interface ValidatorResult {
 	verdict: ValidatorVerdict;
 	feedback: string;
 	raw: string;
-}
-
-type SpawnFn = (command: string, args: string[], options: Record<string, unknown>) => ProcLike;
-
-interface StreamLike {
-	on(event: string, handler: (data: Buffer) => void): unknown;
-}
-
-interface ProcLike {
-	stdout: StreamLike | null;
-	stderr: StreamLike | null;
-	kill?: (signal: string) => void;
-	killed?: boolean;
-	pid?: number;
-	on(event: string, handler: (...args: unknown[]) => void): unknown;
 }
 
 const DEFAULT_VALIDATOR_TIMEOUT_MS = 300_000;

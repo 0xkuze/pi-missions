@@ -14,6 +14,7 @@ import type {
 	PlanMutation,
 	ProgressEvent,
 } from "../types.js";
+import { TERMINAL_STATUSES } from "../types.js";
 import { nowISO } from "../utils.js";
 import { handleBlockedViewKey, type LastFailureDetails, renderBlockedView } from "./blocked-view.js";
 import { countProgress } from "./count-progress.js";
@@ -229,7 +230,6 @@ export type OverlayAction =
 	| { kind: "warn"; message: string }
 	| { kind: "noop" };
 
-const TERMINAL_STATUSES = new Set(["completed", "failed", "aborted"]);
 const PAUSABLE_STATUSES = new Set(["planning", "draft_review", "approved", "executing", "validating"]);
 const ACTIVE_STATUSES = new Set(["planning", "draft_review", "approved", "executing", "validating", "paused"]);
 

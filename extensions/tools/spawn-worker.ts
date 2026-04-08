@@ -15,6 +15,8 @@ import {
 	generateWorkerSkill,
 	writeWorkerFiles,
 } from "../orchestrator/worker-prompt.js";
+import { findFeature } from "../plan-helpers.js";
+import type { ProcLike, SpawnFn } from "../process-types.js";
 import { loadConfig, loadEnvironment, loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
 import { autoCompleteMilestone, autoStartMilestone, findMilestoneForFeature } from "../state/milestone-lifecycle.js";
 import { transitionState } from "../state/transitions.js";
@@ -34,21 +36,6 @@ interface SetupCommandResult {
 }
 
 type RunSetupCommandFn = (command: string, cwd: string, timeoutMs: number) => Promise<SetupCommandResult>;
-
-interface StreamLike {
-	on(event: string, handler: (data: Buffer) => void): unknown;
-}
-
-interface ProcLike {
-	stdout: StreamLike | null;
-	stderr: StreamLike | null;
-	kill?: (signal: string) => void;
-	killed?: boolean;
-	pid?: number;
-	on(event: string, handler: (...args: unknown[]) => void): unknown;
-}
-
-type SpawnFn = (command: string, args: string[], options: Record<string, unknown>) => ProcLike;
 type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 interface Deps {
@@ -77,15 +64,6 @@ export function killActiveWorker(): void {
 		activeWorkerProcess.kill();
 		activeWorkerProcess = null;
 	}
-}
-
-function findFeature(plan: MissionPlan, featureId: string): Feature | null {
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.id === featureId) return feature;
-		}
-	}
-	return null;
 }
 
 function findAllFeatures(plan: MissionPlan): Map<string, Feature> {
@@ -483,13 +461,13 @@ function runSetupCommand(command: string, cwd: string, timeoutMs: number): Promi
 	});
 }
 
-export interface EnvironmentSetupResult {
+interface EnvironmentSetupResult {
 	ran: boolean;
 	success: boolean;
 	error?: string;
 }
 
-export async function runEnvironmentSetup(
+async function runEnvironmentSetup(
 	basePath: string,
 	projectDir: string,
 	state: MissionState,

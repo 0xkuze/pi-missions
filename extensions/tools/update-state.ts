@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { findFeatureWithMilestone } from "../plan-helpers.js";
 import { loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
 import { autoCompleteMilestone } from "../state/milestone-lifecycle.js";
 import { appendMutation } from "../state/plan-history.js";
@@ -19,31 +20,13 @@ interface Deps {
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
 }
 
-type MilestoneEntry = MissionPlan["milestones"][number];
-type FeatureEntry = MilestoneEntry["features"][number];
-
-function findMilestone(plan: MissionPlan, milestoneId: string): MilestoneEntry | null {
-	return plan.milestones.find((m) => m.id === milestoneId) ?? null;
-}
-
-function findFeatureInPlan(
-	plan: MissionPlan,
-	featureId: string,
-): { milestone: MilestoneEntry; feature: FeatureEntry } | null {
-	for (const milestone of plan.milestones) {
-		const feature = milestone.features.find((f) => f.id === featureId);
-		if (feature) return { milestone, feature };
-	}
-	return null;
-}
-
 function skipFeature(
 	plan: MissionPlan,
 	state: MissionState,
 	featureId: string,
 	reason: string | undefined,
 ): string | { plan: MissionPlan; state: MissionState } {
-	const found = findFeatureInPlan(plan, featureId);
+	const found = findFeatureWithMilestone(plan, featureId);
 	if (!found) return `Feature '${featureId}' not found in plan.`;
 	if (found.feature.status === "done") {
 		return `Cannot skip feature '${featureId}': feature is already completed.`;
@@ -79,7 +62,7 @@ function completeFeature(
 	featureId: string,
 	reason: string | undefined,
 ): string | { plan: MissionPlan; state: MissionState } {
-	const found = findFeatureInPlan(plan, featureId);
+	const found = findFeatureWithMilestone(plan, featureId);
 	if (!found) return `Feature '${featureId}' not found in plan.`;
 	if (found.feature.status === "done") {
 		return `Cannot complete feature '${featureId}': feature is already completed.`;
@@ -117,7 +100,7 @@ function blockFeature(
 	featureId: string,
 	reason: string | undefined,
 ): string | { plan: MissionPlan; state: MissionState } {
-	const found = findFeatureInPlan(plan, featureId);
+	const found = findFeatureWithMilestone(plan, featureId);
 	if (!found) return `Feature '${featureId}' not found in plan.`;
 
 	const now = nowISO();
@@ -149,7 +132,7 @@ function addFeature(
 	milestoneId: string,
 	params: { name: string; description: string; acceptanceCriteria: string[]; relevantFiles: string[] },
 ): string | { plan: MissionPlan; feature: Feature } {
-	const milestone = findMilestone(plan, milestoneId);
+	const milestone = plan.milestones.find((m) => m.id === milestoneId);
 	if (!milestone) return `Milestone '${milestoneId}' not found in plan.`;
 	if (milestone.status === "done" || milestone.status === "failed") {
 		return `Cannot add feature to milestone '${milestoneId}': milestone is already ${milestone.status}.`;
@@ -190,7 +173,7 @@ function addFeature(
 }
 
 function removeFeature(basePath: string, plan: MissionPlan, featureId: string): string | { plan: MissionPlan } {
-	const found = findFeatureInPlan(plan, featureId);
+	const found = findFeatureWithMilestone(plan, featureId);
 	if (!found) return `Feature '${featureId}' not found in plan.`;
 	if (found.feature.status === "done") {
 		return `Cannot remove feature '${featureId}': feature is already completed.`;

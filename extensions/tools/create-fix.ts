@@ -1,11 +1,10 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { findFeature } from "../plan-helpers.js";
 import { loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
 import { appendMutation } from "../state/plan-history.js";
 import type { Feature, MissionPlan, MissionState } from "../types.js";
 import { generateId, nowISO } from "../utils.js";
-
-const VALID_SOURCE_KINDS = new Set(["worker-failure", "validation-failure"]);
 
 export interface AddFixFeatureParams {
 	milestoneId: string;
@@ -96,14 +95,6 @@ interface Deps {
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
 }
 
-function findMilestoneIndex(plan: MissionPlan, milestoneId: string): number {
-	return plan.milestones.findIndex((m) => m.id === milestoneId);
-}
-
-function findFeatureInPlan(plan: MissionPlan, featureId: string): boolean {
-	return plan.milestones.some((m) => m.features.some((f) => f.id === featureId));
-}
-
 export function registerCreateFixTool(pi: ExtensionAPI, deps: Deps): void {
 	pi.registerTool({
 		name: "create_fix_feature",
@@ -136,18 +127,6 @@ export function registerCreateFixTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			if (!VALID_SOURCE_KINDS.has(params.sourceKind)) {
-				return {
-					content: [
-						{
-							type: "text",
-							text: `Error: invalid sourceKind '${params.sourceKind}'. Must be 'worker-failure' or 'validation-failure'.`,
-						},
-					],
-					details: {},
-				};
-			}
-
 			if (!params.acceptanceCriteria || params.acceptanceCriteria.length === 0) {
 				return {
 					content: [{ type: "text", text: "Error: fix feature must have at least one acceptance criterion." }],
@@ -163,7 +142,7 @@ export function registerCreateFixTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			const milestoneIndex = findMilestoneIndex(plan, params.milestoneId);
+			const milestoneIndex = plan.milestones.findIndex((m) => m.id === params.milestoneId);
 			if (milestoneIndex === -1) {
 				return {
 					content: [
@@ -176,7 +155,7 @@ export function registerCreateFixTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			if (params.sourceFeatureId !== undefined && !findFeatureInPlan(plan, params.sourceFeatureId)) {
+			if (params.sourceFeatureId !== undefined && !findFeature(plan, params.sourceFeatureId)) {
 				return {
 					content: [
 						{

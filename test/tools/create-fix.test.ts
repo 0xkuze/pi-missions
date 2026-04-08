@@ -368,22 +368,6 @@ describe("registerCreateFixTool", () => {
 			expect(result.content[0]!.text.toLowerCase()).toContain("acceptance");
 		});
 
-		it("returns error for invalid sourceKind", async () => {
-			const result = await callTool(tmpDir, {
-				milestoneId: "milestone-1",
-				name: "fix",
-				description: "Fix",
-				acceptanceCriteria: ["Works"],
-				relevantFiles: [],
-				sourceKind: "invalid-kind",
-			});
-
-			expect(result.content[0]!.text).toContain("Error");
-			expect(result.content[0]!.text).toContain("sourceKind");
-			expect(result.content[0]!.text).toContain("worker-failure");
-			expect(result.content[0]!.text).toContain("validation-failure");
-		});
-
 		it("returns error when sourceFeatureId references nonexistent feature", async () => {
 			const result = await callTool(tmpDir, {
 				milestoneId: "milestone-1",

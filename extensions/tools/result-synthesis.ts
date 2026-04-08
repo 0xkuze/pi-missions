@@ -1,14 +1,14 @@
 import type { WorkerHandoff, WorkerResult } from "../types.js";
 
-export type TestsStatus = "passed" | "failed" | "not_run" | "unknown";
-export type LintStatus = "clean" | "issues" | "not_run" | "unknown";
+type TestsStatus = "passed" | "failed" | "not_run" | "unknown";
+type LintStatus = "clean" | "issues" | "not_run" | "unknown";
 
-export interface StructuredSummary {
+interface StructuredSummary {
 	testsStatus: TestsStatus;
 	lintStatus: LintStatus;
 }
 
-export interface SynthesisOptions {
+interface SynthesisOptions {
 	legacyMode?: boolean;
 	projectDir?: string;
 }

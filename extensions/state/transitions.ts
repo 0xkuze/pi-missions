@@ -1,7 +1,6 @@
 import type { MissionState, MissionStatus, ProgressEventType, ResumeTargetState } from "../types.js";
+import { TERMINAL_STATUSES } from "../types.js";
 import { nowISO } from "../utils.js";
-
-const TERMINAL_STATUSES: ReadonlySet<MissionStatus> = new Set(["completed", "failed", "aborted"]);
 
 const PAUSABLE_STATUSES: ReadonlySet<MissionStatus> = new Set(["planning", "draft_review", "executing", "validating"]);
 
