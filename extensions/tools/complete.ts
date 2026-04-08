@@ -118,11 +118,14 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 			if (contract) {
 				const failedAssertions = contract.assertions.filter((a) => a.status === "fail" || a.status === "error");
 				if (failedAssertions.length > 0 && !params.force) {
+					const ids = failedAssertions.map((a) => a.id);
+					const shown =
+						ids.length > 5 ? `${ids.slice(0, 5).join(", ")} and ${ids.length - 5} more` : ids.join(", ");
 					return {
 						content: [
 							{
 								type: "text",
-								text: `Error: ${failedAssertions.length} assertion(s) still failing: ${failedAssertions.map((a) => a.id).join(", ")}. Fix and re-validate first, or pass force=true to override.`,
+								text: `Error: ${failedAssertions.length} assertion(s) still failing: ${shown}. Fix and re-validate first, or pass force=true to override.`,
 							},
 						],
 						details: {},

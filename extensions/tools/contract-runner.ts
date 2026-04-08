@@ -36,15 +36,18 @@ function checkAssertion(
 ): "pass" | "fail" | "error" {
 	if (result.timedOut) return "error";
 	if (assertion.expect.exitCode !== undefined && result.exitCode !== assertion.expect.exitCode) return "fail";
-	const combined = result.stdout + result.stderr;
-	if (assertion.expect.stdoutContains !== undefined && !combined.includes(assertion.expect.stdoutContains))
-		return "fail";
-	if (
-		assertion.expect.stdoutNotContains !== undefined &&
-		(result.stdout.includes(assertion.expect.stdoutNotContains) ||
-			result.stderr.includes(assertion.expect.stdoutNotContains))
-	)
-		return "fail";
+	if (assertion.expect.stdoutContains !== undefined) {
+		const found =
+			result.stdout.includes(assertion.expect.stdoutContains) ||
+			result.stderr.includes(assertion.expect.stdoutContains);
+		if (!found) return "fail";
+	}
+	if (assertion.expect.stdoutNotContains !== undefined) {
+		const found =
+			result.stdout.includes(assertion.expect.stdoutNotContains) ||
+			result.stderr.includes(assertion.expect.stdoutNotContains);
+		if (found) return "fail";
+	}
 	if (assertion.expect.stderrContains !== undefined && !result.stderr.includes(assertion.expect.stderrContains))
 		return "fail";
 	return "pass";

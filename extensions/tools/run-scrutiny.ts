@@ -124,7 +124,7 @@ function loadWorkerResults(milestone: Milestone): string[] {
 				lines.push(`Files changed: ${result.filesChanged.join(", ")}`);
 			}
 			if (result.handoff) {
-				if (result.handoff.discoveredIssues && result.handoff.discoveredIssues.length > 0) {
+				if (result.handoff.discoveredIssues.length > 0) {
 					lines.push("Discovered issues:");
 					for (const issue of result.handoff.discoveredIssues) {
 						lines.push(`  - [${issue.severity}] ${issue.description}`);

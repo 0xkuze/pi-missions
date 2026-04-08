@@ -16,6 +16,7 @@ import {
 	writeWorkerFiles,
 } from "../orchestrator/worker-prompt.js";
 import { loadConfig, loadEnvironment, loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
+import { autoCompleteMilestone, autoStartMilestone, findMilestoneForFeature } from "../state/milestone-lifecycle.js";
 import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionPlan, MissionState, WorkerAttempt, WorkerResult } from "../types.js";
 import { getPiInvocation, nowISO } from "../utils.js";
@@ -118,68 +119,6 @@ function collectCompletedFeatures(plan: MissionPlan, excludeFeatureId: string): 
 		}
 	}
 	return completed;
-}
-
-function findMilestoneForFeature(plan: MissionPlan, featureId: string): MissionPlan["milestones"][number] | null {
-	for (const milestone of plan.milestones) {
-		if (milestone.features.some((f) => f.id === featureId)) return milestone;
-	}
-	return null;
-}
-
-const RESOLVED_FEATURE_STATUSES = new Set(["done", "skipped", "failed", "blocked"]);
-
-function autoStartMilestone(
-	plan: MissionPlan,
-	state: MissionState,
-	featureId: string,
-): { plan: MissionPlan; state: MissionState } {
-	const milestone = findMilestoneForFeature(plan, featureId);
-	if (!milestone || milestone.status !== "pending") return { plan, state };
-	const now = nowISO();
-	return {
-		plan: {
-			...plan,
-			milestones: plan.milestones.map((m) =>
-				m.id === milestone.id ? { ...m, status: "active" as const, startedAt: now } : m,
-			),
-		},
-		state: {
-			...state,
-			currentMilestoneId: milestone.id,
-			progressLog: [
-				...state.progressLog,
-				{ timestamp: now, type: "milestone_start" as const, detail: `Milestone '${milestone.name}' started` },
-			],
-		},
-	};
-}
-
-function autoCompleteMilestone(
-	plan: MissionPlan,
-	state: MissionState,
-	featureId: string,
-): { plan: MissionPlan; state: MissionState } {
-	const milestone = findMilestoneForFeature(plan, featureId);
-	if (!milestone || milestone.status !== "active") return { plan, state };
-	const allResolved = milestone.features.every((f) => RESOLVED_FEATURE_STATUSES.has(f.status));
-	if (!allResolved) return { plan, state };
-	const now = nowISO();
-	return {
-		plan: {
-			...plan,
-			milestones: plan.milestones.map((m) =>
-				m.id === milestone.id ? { ...m, status: "done" as const, completedAt: now } : m,
-			),
-		},
-		state: {
-			...state,
-			progressLog: [
-				...state.progressLog,
-				{ timestamp: now, type: "milestone_complete" as const, detail: `Milestone '${milestone.name}' completed` },
-			],
-		},
-	};
 }
 
 const RESOLVED_DEP_STATUSES = new Set(["done", "skipped", "failed"]);
@@ -450,7 +389,7 @@ function performSelfCorrection(
 	}
 
 	const hasUndone = handoff.whatWasLeftUndone.trim().length > 0;
-	const highSeverityIssues = (handoff.discoveredIssues ?? []).filter((i) => i.severity === "high");
+	const highSeverityIssues = handoff.discoveredIssues.filter((i) => i.severity === "high");
 
 	if (!hasUndone && highSeverityIssues.length === 0) {
 		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
