@@ -40,3 +40,14 @@ export function countPendingFeatures(plan: MissionPlan): number {
 	}
 	return count;
 }
+
+export function hasSuccessfulFixFeature(plan: MissionPlan, featureId: string): boolean {
+	for (const milestone of plan.milestones) {
+		for (const feature of milestone.features) {
+			if (feature.fixOrigin?.sourceFeatureId === featureId && feature.status === "done") {
+				return true;
+			}
+		}
+	}
+	return false;
+}

@@ -10,7 +10,8 @@ export interface ProtocolOptions {
 	contextUsagePercent?: number;
 }
 
-let protocolCache: { key: string; value: string | null } | null = null;
+const PROTOCOL_CACHE_MAX = 4;
+const protocolCache: Array<{ key: string; value: string | null }> = [];
 
 function protocolCacheKey(
 	state: MissionState,
@@ -29,7 +30,7 @@ function protocolCacheKey(
 }
 
 export function clearProtocolCache(): void {
-	protocolCache = null;
+	protocolCache.length = 0;
 }
 
 function autonomyInstructions(autonomy: MissionConfig["autonomy"]): string {
@@ -91,6 +92,7 @@ Each feature should be small enough for one worker to complete in under 30 minut
 
 Only call \`submit_plan\` when you are confident every feature has clear, testable acceptance criteria.
 The plan is the most important part of the mission. A bad plan produces bad results. Spend time getting it right.
+If submit_plan fails validation, read the error message carefully, fix the missing or invalid fields, and resubmit. Do not omit required fields like validationCommands.
 
 ${autonomyInstructions(autonomy)}`;
 }
@@ -216,7 +218,8 @@ You are a project manager, not an implementer. Never read implementation files, 
 During EXECUTION: do NOT use \`edit\` or \`write\`. All code changes MUST go through workers via \`spawn_worker\`.
 NEVER read files under \`.pi/missions/\`. Your mission tools provide all state awareness you need.
 On failure: call create_fix_feature, then spawn_worker for the fix. Do not debug yourself.
-NEVER use bash + complete_feature to force-complete a failed worker. complete_feature WILL REJECT if the last worker attempt failed. The ONLY correct response to spawn_worker failure is create_fix_feature.
+IMPORTANT: If the spawn_worker result says "Self-correction already created fix feature", do NOT call create_fix_feature again. Spawn the fix feature directly.
+NEVER use bash + complete_feature to force-complete a failed worker. complete_feature WILL REJECT if the last worker attempt failed unless a fix feature already resolved the issue.
 Git commits happen automatically after successful workers.
 Workers are SEQUENTIAL. Call spawn_worker for ONE feature, wait for the result, then call spawn_worker for the next. Never call spawn_worker more than once per turn.
 Milestones auto-complete when all features finish. After a milestone auto-completes, call run_validation for that milestone.
@@ -285,7 +288,7 @@ function cavemanExecuting(state: MissionState, plan: MissionPlan | undefined): s
 ${progress}${warnings}
 
 You boss. No touch code. spawn_worker do work. ONE worker at a time. Wait result before next spawn.
-Worker fail? create_fix_feature then spawn_worker again. NEVER use bash + complete_feature to force-complete. complete_feature REJECTS if last worker failed.
+Worker fail? create_fix_feature then spawn_worker again. NEVER use bash + complete_feature to force-complete. complete_feature REJECTS if last worker failed unless a fix feature resolved it. Using force=true without a fix feature is a protocol violation.
 Big feature done? create_fix_feature for code review — worker reads changed files, checks quality, simplicity, no comments, error handling, AGENTS.md rules. Skip review for trivial features.
 All features done? run_validation. Validation fail? create_fix_feature, spawn_worker, run_validation again. NEVER complete_mission with failing checks.
 Validation pass? run_scrutiny. Scrutiny find error issues? create_fix_feature, fix, re-validate. Warning/info? note, move on.
@@ -330,8 +333,9 @@ export function buildOrchestratorProtocol(
 	if (TERMINAL_STATUSES.has(state.status)) return null;
 
 	const key = protocolCacheKey(state, plan, config, compact, options);
-	if (protocolCache && protocolCache.key === key) {
-		return protocolCache.value;
+	const cached = protocolCache.find((e) => e.key === key);
+	if (cached) {
+		return cached.value;
 	}
 
 	const autonomy = config?.autonomy ?? "medium";
@@ -405,6 +409,9 @@ export function buildOrchestratorProtocol(
 		}
 	}
 
-	protocolCache = { key, value: result };
+	if (protocolCache.length >= PROTOCOL_CACHE_MAX) {
+		protocolCache.shift();
+	}
+	protocolCache.push({ key, value: result });
 	return result;
 }

@@ -93,14 +93,25 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 			}
 
 			if (state.totalFeaturesFailed > 0 && !params.force) {
-				const contract = loadContract(deps.basePath);
-				const hasPassedValidation = contract?.assertions.some((a) => a.status === "pass");
-				if (!hasPassedValidation) {
+				const milestoneIds = plan ? plan.milestones.map((m) => m.id) : [];
+				const milestonesWithPassingValidation = new Set(
+					state.progressLog
+						.filter((e) => e.type === "validation_pass" && e.metadata?.milestoneId)
+						.map((e) => e.metadata!.milestoneId as string),
+				);
+				const milestonesWithFeatures = milestoneIds.filter(
+					(id) => plan!.milestones.find((m) => m.id === id)!.features.length > 0,
+				);
+				const allMilestonesValidated = milestonesWithFeatures.every((id) =>
+					milestonesWithPassingValidation.has(id),
+				);
+				if (!allMilestonesValidated) {
+					const unvalidated = milestonesWithFeatures.filter((id) => !milestonesWithPassingValidation.has(id));
 					return {
 						content: [
 							{
 								type: "text",
-								text: `Error: ${state.totalFeaturesFailed} feature(s) failed and no validation has been run. Run run_validation first, or pass force=true to override.`,
+								text: `Error: ${state.totalFeaturesFailed} feature(s) failed and milestone(s) ${unvalidated.join(", ")} have not passed validation. Run run_validation first, or pass force=true to override.`,
 							},
 						],
 						details: {},
@@ -135,7 +146,21 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 				);
 			}
 
-			const completedState = transitionState(state, "completed");
+			let completedState = transitionState(state, "completed");
+			if (params.force) {
+				completedState = {
+					...completedState,
+					progressLog: [
+						...completedState.progressLog,
+						{
+							timestamp: new Date().toISOString(),
+							type: "plan_mutated" as const,
+							detail: "Force override: complete_mission",
+							metadata: { action: "complete_mission", force: true },
+						},
+					],
+				};
+			}
 			saveState(deps.basePath, completedState);
 
 			if (plan) {

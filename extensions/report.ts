@@ -139,6 +139,20 @@ function renderFixFeaturesSection(plan: MissionPlan): string[] {
 	return lines;
 }
 
+function renderForceOverridesSection(state: MissionState): string[] {
+	const overrides = state.progressLog.filter((e) => e.type === "plan_mutated" && e.metadata?.force === true);
+	if (overrides.length === 0) return [];
+
+	const lines: string[] = [];
+	lines.push("## Force Overrides");
+	lines.push("");
+	for (const o of overrides) {
+		lines.push(`- **${o.timestamp}**: ${o.detail}`);
+	}
+	lines.push("");
+	return lines;
+}
+
 function renderWarningsSection(state: MissionState, gitInfo?: GitInfo): string[] {
 	const warnings: string[] = [];
 
@@ -270,6 +284,7 @@ export function generateReport(
 		lines.push(...renderCommitsSection(gitInfo.commits));
 	}
 
+	lines.push(...renderForceOverridesSection(state));
 	lines.push(...renderWarningsSection(state, gitInfo));
 
 	const notes = gitInfo?.remainingNotes ?? [];

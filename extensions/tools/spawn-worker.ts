@@ -99,7 +99,7 @@ function collectCompletedFeatures(plan: MissionPlan, excludeFeatureId: string): 
 	return completed;
 }
 
-const RESOLVED_DEP_STATUSES = new Set(["done", "skipped", "failed"]);
+const RESOLVED_DEP_STATUSES = new Set(["done", "skipped"]);
 
 function checkDependencies(feature: Feature, allFeatures: Map<string, Feature>): string | null {
 	for (const depId of feature.dependencies) {
@@ -935,9 +935,13 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			const progressDone = activeState.totalFeaturesCompleted + activeState.totalFeaturesSkipped;
 			let completionHint: string;
 			if (result.status !== "success") {
-				completionHint = nextPending
-					? `Next: ${nextPending.name}. Action: call create_fix_feature for this failure, then spawn_worker.`
-					: "No pending features remain. Call create_fix_feature to address this failure.";
+				if (correction.fixFeatureId) {
+					completionHint = `Self-correction already created fix feature '${correction.fixFeatureName}' (${correction.fixFeatureId}). Call spawn_worker for it. Do NOT call create_fix_feature again for this same failure.`;
+				} else {
+					completionHint = nextPending
+						? `Next: ${nextPending.name}. Action: call create_fix_feature for this failure, then spawn_worker.`
+						: "No pending features remain. Call create_fix_feature to address this failure.";
+				}
 			} else {
 				completionHint = nextPending
 					? `Next: ${nextPending.name}.`

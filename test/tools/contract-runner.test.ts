@@ -207,7 +207,7 @@ describe("runContractAssertions", () => {
 			expect(results[0].status).toBe("fail");
 		});
 
-		it("fails when excluded substring is only in stderr", async () => {
+		it("passes when excluded substring is only in stderr (stdoutNotContains checks stdout only)", async () => {
 			const { exec } = makeMockExec([
 				{ exitCode: 0, stdout: "clean output", stderr: "found error in stderr", timedOut: false },
 			]);
@@ -219,7 +219,7 @@ describe("runContractAssertions", () => {
 				projectDir: tmpDir,
 			});
 
-			expect(results[0].status).toBe("fail");
+			expect(results[0].status).toBe("pass");
 		});
 	});
 

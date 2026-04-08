@@ -50,10 +50,20 @@ function configPath(basePath: string): string {
 	return join(basePath, "config.json");
 }
 
+const MAX_PROGRESS_LOG_ENTRIES = 500;
+const PROGRESS_LOG_TRIM_TO = 400;
+
+function trimProgressLog(state: MissionState): MissionState {
+	if (state.progressLog.length <= MAX_PROGRESS_LOG_ENTRIES) return state;
+	const trimmed = state.progressLog.slice(state.progressLog.length - PROGRESS_LOG_TRIM_TO);
+	return { ...state, progressLog: trimmed };
+}
+
 export function saveState(basePath: string, state: MissionState, cacheCallback?: (data: MissionState) => void): void {
-	atomicWrite(statePath(basePath), JSON.stringify(state, null, 2));
-	stateCache = { basePath, state };
-	cacheCallback?.(state);
+	const trimmedState = trimProgressLog(state);
+	atomicWrite(statePath(basePath), JSON.stringify(trimmedState, null, 2));
+	stateCache = { basePath, state: trimmedState };
+	cacheCallback?.(trimmedState);
 }
 
 export function loadState(basePath: string): MissionState | null {

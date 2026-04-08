@@ -18,7 +18,7 @@ interface ValidatorResult {
 	raw: string;
 }
 
-const DEFAULT_VALIDATOR_TIMEOUT_MS = 300_000;
+const DEFAULT_VALIDATOR_TIMEOUT_MS = 120_000;
 
 export function parseValidatorVerdict(stdout: string, strictness?: "strict" | "lenient"): ValidatorResult {
 	const events: Array<Record<string, unknown>> = [];

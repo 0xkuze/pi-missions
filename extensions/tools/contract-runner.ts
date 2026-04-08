@@ -43,10 +43,7 @@ function checkAssertion(
 		if (!found) return "fail";
 	}
 	if (assertion.expect.stdoutNotContains !== undefined) {
-		const found =
-			result.stdout.includes(assertion.expect.stdoutNotContains) ||
-			result.stderr.includes(assertion.expect.stdoutNotContains);
-		if (found) return "fail";
+		if (result.stdout.includes(assertion.expect.stdoutNotContains)) return "fail";
 	}
 	if (assertion.expect.stderrContains !== undefined && !result.stderr.includes(assertion.expect.stderrContains))
 		return "fail";

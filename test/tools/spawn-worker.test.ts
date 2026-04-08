@@ -409,7 +409,7 @@ describe("registerSpawnWorkerTool", () => {
 			expect(result.content[0].text).not.toContain("Error");
 		});
 
-		it("treats failed dependency as resolved", async () => {
+		it("blocks on failed dependency", async () => {
 			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
 			const dep = localMakeFeature({ id: "dep-1", status: "failed" });
@@ -418,7 +418,7 @@ describe("registerSpawnWorkerTool", () => {
 			savePlan(testDir, plan);
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
-			expect(result.content[0].text).not.toContain("Error");
+			expect(result.content[0].text).toContain("Error");
 		});
 
 		it("still blocks on pending dependency", async () => {

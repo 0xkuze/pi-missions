@@ -47,19 +47,25 @@ export function autoCompleteMilestone(
 	const milestone = findMilestoneForFeature(plan, featureId);
 	if (!milestone || milestone.status !== "active") return { plan, state };
 	if (!milestone.features.every((f) => RESOLVED_FEATURE_STATUSES.has(f.status))) return { plan, state };
+
+	const hasFailedFeatures = milestone.features.some((f) => f.status === "failed");
+	const milestoneStatus = hasFailedFeatures ? ("failed" as const) : ("done" as const);
+	const eventType = hasFailedFeatures ? ("milestone_complete" as const) : ("milestone_complete" as const);
+	const suffix = hasFailedFeatures ? " (with failed features)" : "";
+
 	const now = nowISO();
 	return {
 		plan: {
 			...plan,
 			milestones: plan.milestones.map((m) =>
-				m.id === milestone.id ? { ...m, status: "done" as const, completedAt: now } : m,
+				m.id === milestone.id ? { ...m, status: milestoneStatus, completedAt: now } : m,
 			),
 		},
 		state: {
 			...state,
 			progressLog: [
 				...state.progressLog,
-				{ timestamp: now, type: "milestone_complete" as const, detail: `Milestone '${milestone.name}' completed` },
+				{ timestamp: now, type: eventType, detail: `Milestone '${milestone.name}' completed${suffix}` },
 			],
 		},
 	};

@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
-import { findFeatureWithMilestone } from "../plan-helpers.js";
+import { findFeatureWithMilestone, hasSuccessfulFixFeature } from "../plan-helpers.js";
 import { loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
 import { autoCompleteMilestone } from "../state/milestone-lifecycle.js";
 import { appendMutation } from "../state/plan-history.js";
@@ -69,9 +69,11 @@ function completeFeature(
 		return `Cannot complete feature '${featureId}': feature is already completed.`;
 	}
 	const lastAttempt = found.feature.attempts[found.feature.attempts.length - 1];
-	if (lastAttempt && lastAttempt.status === "failure" && !force) {
+	if (lastAttempt && lastAttempt.status === "failure" && !force && !hasSuccessfulFixFeature(plan, featureId)) {
 		return `Cannot complete feature '${featureId}': last worker attempt failed. Use create_fix_feature to fix the failure, or pass force=true to override.`;
 	}
+
+	const wasFailedFeature = found.feature.status === "failed" || (lastAttempt && lastAttempt.status === "failure");
 
 	const now = nowISO();
 	const updatedPlan: MissionPlan = {
@@ -86,13 +88,18 @@ function completeFeature(
 	const updatedState: MissionState = {
 		...state,
 		totalFeaturesCompleted: state.totalFeaturesCompleted + 1,
+		totalFeaturesFailed: wasFailedFeature ? Math.max(0, state.totalFeaturesFailed - 1) : state.totalFeaturesFailed,
 		progressLog: [
 			...state.progressLog,
 			{
 				timestamp: now,
 				type: "feature_complete" as const,
 				detail: `Feature '${found.feature.name}' manually completed`,
-				metadata: reason ? { reason } : undefined,
+				metadata: reason
+					? { reason, recovered: wasFailedFeature }
+					: wasFailedFeature
+						? { recovered: true }
+						: undefined,
 			},
 		],
 	};
@@ -305,6 +312,20 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 					: completeFeature(plan, state, targetId, reason, force);
 				if (typeof result === "string") {
 					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
+				}
+				if (force && action === "complete_feature") {
+					result.state = {
+						...result.state,
+						progressLog: [
+							...result.state.progressLog,
+							{
+								timestamp: nowISO(),
+								type: "plan_mutated" as const,
+								detail: `Force override: complete_feature on '${targetId}'`,
+								metadata: { action: "complete_feature", featureId: targetId, force: true },
+							},
+						],
+					};
 				}
 				const { plan: finalPlan, state: finalState } = autoCompleteMilestone(result.plan, result.state, targetId);
 				savePlan(deps.basePath, finalPlan);

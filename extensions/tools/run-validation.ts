@@ -198,6 +198,19 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 				};
 			}
 
+			const completedCount = milestone.features.filter((f) => f.status === "done" || f.status === "skipped").length;
+			if (completedCount === 0) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Warning: milestone '${params.milestoneId}' has no completed features. Validation results may be meaningless. Complete features first.`,
+						},
+					],
+					details: {},
+				};
+			}
+
 			const config = loadMissionConfig(deps.basePath);
 			const timeoutMs = config.validation?.timeoutMs ?? 120000;
 			const commands = resolveValidationCommands(config, plan, milestone, deps.projectDir);
