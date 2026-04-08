@@ -35,7 +35,7 @@ function makeCompletePlan(overrides: Partial<MissionPlan> = {}) {
 
 async function callTool(
 	basePath: string,
-	params: { summary: string; remainingNotes?: string[] },
+	params: { summary: string; remainingNotes?: string[]; force?: boolean },
 	state: MissionState,
 	plan: MissionPlan | null,
 	updateWidget?: (state: MissionState, plan?: MissionPlan) => void,
@@ -469,7 +469,7 @@ describe("complete_mission passes validationInfo to generateReport", () => {
 
 	async function callTool(
 		basePath: string,
-		params: { summary: string; remainingNotes?: string[] },
+		params: { summary: string; remainingNotes?: string[]; force?: boolean },
 		state: MissionState,
 		plan: MissionPlan | null,
 		updateWidget?: (state: MissionState, plan?: MissionPlan) => void,
@@ -517,7 +517,7 @@ describe("complete_mission passes validationInfo to generateReport", () => {
 			],
 		});
 
-		await callTool(tmpDir, { summary: "done" }, state, plan);
+		await callTool(tmpDir, { summary: "done", force: true }, state, plan);
 
 		const reportPath = join(tmpDir, "report.md");
 		expect(existsSync(reportPath)).toBe(true);

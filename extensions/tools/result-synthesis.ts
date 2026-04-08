@@ -10,6 +10,7 @@ export interface StructuredSummary {
 
 export interface SynthesisOptions {
 	legacyMode?: boolean;
+	projectDir?: string;
 }
 
 type ParsedEvent = Record<string, unknown>;
@@ -42,6 +43,12 @@ function extractPathFromResult(event: ParsedEvent): string | null {
 		if (match?.[1]) return match[1];
 	}
 	return null;
+}
+
+function normalizeFilePaths(files: string[], projectDir?: string): string[] {
+	if (!projectDir) return files;
+	const prefix = projectDir.endsWith("/") ? projectDir : `${projectDir}/`;
+	return files.map((f) => (f.startsWith(prefix) ? f.slice(prefix.length) : f));
 }
 
 function extractFilesChanged(events: ParsedEvent[]): string[] {
@@ -340,7 +347,7 @@ export function synthesizeWorkerResult(
 	}
 
 	const events = parseEvents(stdout);
-	const filesChanged = extractFilesChanged(events);
+	const filesChanged = normalizeFilePaths(extractFilesChanged(events), options?.projectDir);
 	const commandsRun = extractCommandsRun(events);
 	const summary = extractSummary(events) || "Worker completed without producing a summary";
 	const fatalToolError = hasFatalToolError(events);

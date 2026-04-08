@@ -5,6 +5,34 @@ import { appendMutation } from "../state/plan-history.js";
 import type { Feature, MissionPlan, MissionState, MissionStatus } from "../types.js";
 import { nowISO } from "../utils.js";
 
+const RESOLVED_STATUSES = new Set(["done", "skipped", "failed", "blocked"]);
+
+function tryAutoCompleteMilestone(
+	plan: MissionPlan,
+	state: MissionState,
+	featureId: string,
+): { plan: MissionPlan; state: MissionState } {
+	const milestone = plan.milestones.find((m) => m.features.some((f) => f.id === featureId));
+	if (!milestone || milestone.status !== "active") return { plan, state };
+	if (!milestone.features.every((f) => RESOLVED_STATUSES.has(f.status))) return { plan, state };
+	const now = nowISO();
+	return {
+		plan: {
+			...plan,
+			milestones: plan.milestones.map((m) =>
+				m.id === milestone.id ? { ...m, status: "done" as const, completedAt: now } : m,
+			),
+		},
+		state: {
+			...state,
+			progressLog: [
+				...state.progressLog,
+				{ timestamp: now, type: "milestone_complete" as const, detail: `Milestone '${milestone.name}' completed` },
+			],
+		},
+	};
+}
+
 const VALID_STATES_FOR_ACTION: Record<string, ReadonlySet<MissionStatus>> = {
 	skip_feature: new Set(["executing"]),
 	block_feature: new Set(["executing"]),
@@ -248,8 +276,6 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 					Type.Literal("note"),
 					Type.Literal("add_feature"),
 					Type.Literal("remove_feature"),
-					Type.Literal("start_milestone"),
-					Type.Literal("complete_milestone"),
 				],
 				{ description: "Action to perform" },
 			),
@@ -304,21 +330,19 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			if (action === "start_milestone" || action === "complete_milestone") {
-				return {
-					content: [{ type: "text", text: "Milestones are auto-managed. No action needed." }],
-					details: {},
-				};
-			}
-
 			if (action === "skip_feature") {
 				const result = skipFeature(plan, state, targetId, reason);
 				if (typeof result === "string") {
 					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
 				}
-				savePlan(deps.basePath, result.plan);
-				saveState(deps.basePath, result.state);
-				deps.updateWidget(result.state, result.plan);
+				const { plan: finalPlan, state: finalState } = tryAutoCompleteMilestone(
+					result.plan,
+					result.state,
+					targetId,
+				);
+				savePlan(deps.basePath, finalPlan);
+				saveState(deps.basePath, finalState);
+				deps.updateWidget(finalState, finalPlan);
 				return { content: [{ type: "text", text: `Feature '${targetId}' skipped.` }], details: {} };
 			}
 
@@ -327,9 +351,14 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				if (typeof result === "string") {
 					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
 				}
-				savePlan(deps.basePath, result.plan);
-				saveState(deps.basePath, result.state);
-				deps.updateWidget(result.state, result.plan);
+				const { plan: finalPlan, state: finalState } = tryAutoCompleteMilestone(
+					result.plan,
+					result.state,
+					targetId,
+				);
+				savePlan(deps.basePath, finalPlan);
+				saveState(deps.basePath, finalState);
+				deps.updateWidget(finalState, finalPlan);
 				return { content: [{ type: "text", text: `Feature '${targetId}' manually completed.` }], details: {} };
 			}
 
@@ -338,9 +367,14 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				if (typeof result === "string") {
 					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
 				}
-				savePlan(deps.basePath, result.plan);
-				saveState(deps.basePath, result.state);
-				deps.updateWidget(result.state, result.plan);
+				const { plan: finalPlan, state: finalState } = tryAutoCompleteMilestone(
+					result.plan,
+					result.state,
+					targetId,
+				);
+				savePlan(deps.basePath, finalPlan);
+				saveState(deps.basePath, finalState);
+				deps.updateWidget(finalState, finalPlan);
 				return { content: [{ type: "text", text: `Feature '${targetId}' blocked.` }], details: {} };
 			}
 

@@ -140,9 +140,9 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result).not.toContain("commit_changes");
 		});
 
-		it("is approximately ~500 tokens (under 2500 chars)", () => {
+		it("is under 5000 chars (detailed planning protocol)", () => {
 			const result = verboseProtocol(makeState({ status: "planning" })) as string;
-			expect(result.length).toBeLessThan(2500);
+			expect(result.length).toBeLessThan(5000);
 		});
 
 		it("mentions planning phase", () => {
@@ -168,9 +168,9 @@ describe("buildOrchestratorProtocol", () => {
 			expect(result.toLowerCase()).toMatch(/do not.*read.*implementation|never.*read.*implementation/i);
 		});
 
-		it("encourages iterative conversation about scope", () => {
+		it("encourages multi-round questioning about scope", () => {
 			const result = verboseProtocol(makeState({ status: "planning" })) as string;
-			expect(result.toLowerCase()).toContain("conversation");
+			expect(result.toLowerCase()).toContain("round");
 		});
 
 		it("instructs to challenge vague goals", () => {

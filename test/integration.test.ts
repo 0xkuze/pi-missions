@@ -369,21 +369,21 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 		}
 	});
 
-	it("update_mission_state returns auto-managed for milestone actions", async () => {
+	it("update_mission_state skip_feature resolves correctly", async () => {
 		const { tools } = registerExtension(tmpDir);
 
 		const executingState = makeState("executing");
 		saveState(basePath, executingState);
 		const plan = makePlan({
-			milestones: [makeMilestone("m1", [makeFeature("f1")], "pending")],
+			milestones: [makeMilestone("m1", [makeFeature("f1")], "active")],
 		});
 		savePlan(basePath, plan);
 
-		const startResult = await invokeTool(tools, "update_mission_state", {
-			action: "start_milestone",
-			targetId: "m1",
+		const skipResult = await invokeTool(tools, "update_mission_state", {
+			action: "skip_feature",
+			targetId: "f1",
 		});
-		expect(startResult.content[0].text).toContain("auto-managed");
+		expect(skipResult.content[0].text).toContain("skipped");
 	});
 
 	it("complete_mission generates report and transitions to completed", async () => {

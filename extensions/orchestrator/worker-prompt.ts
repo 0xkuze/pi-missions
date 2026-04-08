@@ -20,6 +20,7 @@ ${filesList}
 ## report_result TOOL CALL
 You MUST call the report_result tool (not output text) before finishing.
 Parameters: whatWasImplemented (string), whatWasLeftUndone (string), commandsRun ([{command, exitCode, observation}]), testsAdded ([{file, cases: [string]}]), discoveredIssues ([{severity, description, suggestedFix?}])
+For commandsRun: report the ACTUAL exit code from each command you ran (0 for success, non-zero for failure). Do NOT leave exitCode as null.
 ## Verification
 Run tests. Run lint. Fix if broken.${conventionsSection}`;
 }
@@ -33,6 +34,7 @@ ${feature.description}
 Do: ${criteria}
 Files: ${files}
 report_result TOOL: whatWasImplemented, whatWasLeftUndone, commandsRun, testsAdded, discoveredIssues
+commandsRun: report ACTUAL exit codes (0=success, non-zero=fail). No null.
 Run tests. Fix if broken.${conventions}`;
 }
 

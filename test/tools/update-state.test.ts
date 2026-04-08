@@ -122,20 +122,6 @@ describe("registerUpdateStateTool", () => {
 			}
 		}
 
-		it("start_milestone returns auto-managed from any state", async () => {
-			const state = makeState({ status: "executing" });
-			const plan = localMakePlan();
-			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
-			expect(result.content[0].text).toContain("auto-managed");
-		});
-
-		it("complete_milestone returns auto-managed from any state", async () => {
-			const state = makeState({ status: "executing" });
-			const plan = localMakePlan();
-			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
-			expect(result.content[0].text).toContain("auto-managed");
-		});
-
 		it("allows add_feature from 'planning' state", async () => {
 			const state = makeState({ status: "planning" });
 			const plan = localMakePlan();
@@ -357,22 +343,6 @@ describe("registerUpdateStateTool", () => {
 	});
 
 	describe("VAL-TOOL-016: invalid state preconditions", () => {
-		it("rejects start_milestone as auto-managed", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan({ milestones: [makeMilestone({ status: "pending" })] });
-			const result = await callTool(tmpDir, { action: "start_milestone", targetId: "milestone-1" }, state, plan);
-
-			expect(result.content[0].text).toContain("auto-managed");
-		});
-
-		it("rejects complete_milestone as auto-managed", async () => {
-			const state = makeExecutingState();
-			const plan = localMakePlan({ milestones: [makeMilestone({ status: "active" })] });
-			const result = await callTool(tmpDir, { action: "complete_milestone", targetId: "milestone-1" }, state, plan);
-
-			expect(result.content[0].text).toContain("auto-managed");
-		});
-
 		it("rejects skipping a completed (done) feature", async () => {
 			const state = makeExecutingState();
 			const plan = localMakePlan({

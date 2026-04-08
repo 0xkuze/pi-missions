@@ -870,6 +870,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				procResult.exitCode,
 				procResult.signal,
 				startTime,
+				{ projectDir: deps.projectDir },
 			);
 
 			const completedAt = nowISO();
@@ -1017,7 +1018,9 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			const progressDone = activeState.totalFeaturesCompleted + activeState.totalFeaturesSkipped;
 			let completionHint: string;
 			if (result.status !== "success") {
-				completionHint = nextPending ? `Next: ${nextPending.name}.` : "No pending features remain.";
+				completionHint = nextPending
+					? `Next: ${nextPending.name}. Action: call create_fix_feature for this failure, then spawn_worker.`
+					: "No pending features remain. Call create_fix_feature to address this failure.";
 			} else {
 				completionHint = nextPending
 					? `Next: ${nextPending.name}.`
