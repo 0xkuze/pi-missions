@@ -4,38 +4,82 @@ import { readLibraryTopic } from "../state/library.js";
 import { loadEnvironment } from "../state/manager.js";
 import type { Feature, PromptingMode } from "../types.js";
 
-export function generateWorkerSkill(feature: Feature, agentsMdContent?: string, promptingMode?: PromptingMode): string {
-	if (promptingMode === "caveman" || promptingMode === "caveman-full")
-		return generateCavemanWorkerSkill(feature, agentsMdContent);
+export interface WorkerSkillOptions {
+	agentsMdContent?: string;
+	promptingMode?: PromptingMode;
+	validationCommands?: string[];
+}
+
+export function generateWorkerSkill(feature: Feature, opts?: WorkerSkillOptions): string;
+export function generateWorkerSkill(feature: Feature, agentsMdContent?: string, promptingMode?: PromptingMode): string;
+export function generateWorkerSkill(
+	feature: Feature,
+	optsOrAgents?: WorkerSkillOptions | string,
+	promptingMode?: PromptingMode,
+): string {
+	let agentsMd: string | undefined;
+	let mode: PromptingMode | undefined;
+	let validationCmds: string[] | undefined;
+	if (typeof optsOrAgents === "object" && optsOrAgents !== null && !Array.isArray(optsOrAgents)) {
+		agentsMd = (optsOrAgents as WorkerSkillOptions).agentsMdContent;
+		mode = (optsOrAgents as WorkerSkillOptions).promptingMode;
+		validationCmds = (optsOrAgents as WorkerSkillOptions).validationCommands;
+	} else {
+		agentsMd = optsOrAgents as string | undefined;
+		mode = promptingMode;
+	}
+	if (mode === "caveman" || mode === "caveman-full")
+		return generateCavemanWorkerSkill(feature, agentsMd, validationCmds);
 	const criteriaList = feature.acceptanceCriteria.map((c) => `- ${c}`).join("\n");
 	const filesList =
 		feature.relevantFiles.length > 0 ? feature.relevantFiles.map((f) => `- ${f}`).join("\n") : "(none specified)";
-	const conventionsSection = agentsMdContent ? `\n${agentsMdContent}` : "";
+	const conventionsSection = agentsMd ? `\n${agentsMd}` : "";
+	const validationSection = buildValidationProcedure(validationCmds);
 	return `# ${feature.name}
 ${feature.description}
 ## Criteria
 ${criteriaList}
 ## Files
 ${filesList}
-## report_result TOOL CALL
-You MUST call the report_result tool (not output text) before finishing.
+## Work Procedure
+1. Write tests FIRST (TDD): create test file(s) before implementation. Run tests to confirm they fail.
+2. Implement the feature to make tests pass.
+3. Run validation commands below. Fix any failures before proceeding.
+4. Call report_result with your results.
+${validationSection}
+## report_result TOOL CALL (MANDATORY)
+Your LAST action MUST be calling the report_result tool. Do NOT finish by writing a text summary — you MUST call the tool.
 Parameters: whatWasImplemented (string), whatWasLeftUndone (string), commandsRun ([{command, exitCode, observation}]), testsAdded ([{file, cases: [string]}]), discoveredIssues ([{severity, description, suggestedFix?}])
-For commandsRun: report the ACTUAL exit code from each command you ran (0 for success, non-zero for failure). Do NOT leave exitCode as null.
-## Verification
-Run tests. Run lint. Fix if broken.${conventionsSection}`;
+For commandsRun: report the ACTUAL integer exit code from each command you ran (0 for success, non-zero for failure). Do NOT leave exitCode as null.
+Include every validation command you ran and its exit code.${conventionsSection}`;
 }
 
-function generateCavemanWorkerSkill(feature: Feature, agentsMdContent?: string): string {
+function buildValidationProcedure(validationCmds?: string[]): string {
+	if (!validationCmds || validationCmds.length === 0) {
+		return "## Validation\nRun tests. Run typecheck. Run lint. Fix if broken.";
+	}
+	const numbered = validationCmds.map((cmd, i) => `${i + 1}. \`${cmd}\``).join("\n");
+	return `## Validation Commands (MUST RUN ALL before report_result)\n${numbered}\nAll commands must exit 0. Fix failures before reporting.`;
+}
+
+function generateCavemanWorkerSkill(feature: Feature, agentsMdContent?: string, validationCmds?: string[]): string {
 	const criteria = feature.acceptanceCriteria.map((c) => `- ${c}`).join("\n");
 	const files = feature.relevantFiles.length > 0 ? feature.relevantFiles.join(", ") : "(none)";
 	const conventions = agentsMdContent ? `\n${agentsMdContent}` : "";
+	const valCmds =
+		validationCmds && validationCmds.length > 0
+			? `Validation: run ${validationCmds.map((c) => `\`${c}\``).join(", ")} BEFORE calling report_result. All must exit 0.`
+			: "Validation: run tests and fix if broken BEFORE calling report_result.";
 	return `# ${feature.name}
 ${feature.description}
 Do: ${criteria}
 Files: ${files}
-report_result TOOL: whatWasImplemented, whatWasLeftUndone, commandsRun, testsAdded, discoveredIssues
-commandsRun: report ACTUAL exit codes (0=success, non-zero=fail). No null.
-Run tests. Fix if broken.${conventions}`;
+Procedure: tests FIRST (TDD), then implement, then validate, then call report_result.
+${valCmds}
+
+CRITICAL: Your LAST action MUST be calling the report_result tool. Do NOT finish by writing a text message. You MUST call report_result.
+report_result parameters: whatWasImplemented (string), whatWasLeftUndone (string), commandsRun (array of {command, exitCode, observation}), testsAdded (array of {file, cases}), discoveredIssues (array of {severity, description, suggestedFix?})
+For commandsRun: use the ACTUAL integer exit code (0 for success, non-zero for failure). Never use null.${conventions}`;
 }
 
 export function generateWorkerPrompt(feature: Feature, additionalContext?: string): string {

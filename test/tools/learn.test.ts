@@ -94,6 +94,33 @@ describe("learnFromResult", () => {
 			expect(learned.topic).toBe("conventions");
 			expect(learned.entry).toContain("dep@2.1.0");
 		});
+
+		it("learns from failed commands in successful worker handoff", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			const result = makeSuccessResult({
+				commandsRun: [
+					{ command: "npm test", exitCode: 1, observation: "vitest requires --pool=forks" },
+					{ command: "npm test --pool=forks", exitCode: 0, observation: "all tests pass" },
+				],
+			});
+			const learned = learnFromResult(basePath, result, true);
+			expect(learned.learned).toBe(true);
+			expect(learned.topic).toBe("conventions");
+			expect(learned.entry).toContain("npm test");
+			expect(learned.entry).toContain("exit 1");
+			expect(learned.entry).toContain("vitest requires --pool=forks");
+		});
+
+		it("does not learn when success has no issues, notes, or failed commands", () => {
+			const basePath = makeBasePath();
+			initLibrary(basePath);
+			const result = makeSuccessResult({
+				commandsRun: [{ command: "npm test", exitCode: 0, observation: "all pass" }],
+			});
+			const learned = learnFromResult(basePath, result, true);
+			expect(learned.learned).toBe(false);
+		});
 	});
 
 	describe("VAL-LEARN-001: spawnAndLearn config option enables/disables learning", () => {

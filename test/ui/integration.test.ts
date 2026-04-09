@@ -627,9 +627,9 @@ describe("integration: model switching view", () => {
 			const viewState: ModelViewState = { selectedRoleIndex: null, searchQuery: "", highlightedIndex: 0 };
 			const lines = renderModelView(config, plan, viewState, 80, undefined, [], 40);
 			const text = lines.join("\n");
-			expect(text).toContain("opus-4.6");
+			expect(text).toContain("anthropic/claude-opus-4-6");
 			expect(text).toContain("opencode-go/glm-5");
-			expect(text).toContain("openaicodex/gpt-5.4");
+			expect(text).toContain("anthropic/claude-opus-4-6");
 		});
 	});
 

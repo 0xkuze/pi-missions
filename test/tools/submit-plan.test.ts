@@ -49,7 +49,7 @@ function makeMinimalPlanParams(): PlanParams {
 					{
 						id: "feature-1",
 						name: "User model",
-						description: "Create user entity",
+						description: "Create user entity with email, password hash, and timestamps in src/models/user.ts",
 						acceptanceCriteria: ["User entity created", "Migration written"],
 						relevantFiles: ["src/models/user.ts"],
 						dependencies: [],
@@ -188,6 +188,34 @@ describe("registerSubmitPlanTool", () => {
 			expect(loadPlan(tmpDir)).toBeNull();
 		});
 
+		it("rejects feature with short description (< 20 chars)", async () => {
+			const state = makePlanningState();
+			const params = {
+				...makeMinimalPlanParams(),
+				milestones: [
+					{
+						id: "m1",
+						name: "M1",
+						description: "d",
+						features: [
+							{
+								id: "f1",
+								name: "F1",
+								description: "too short",
+								acceptanceCriteria: ["crit"],
+								relevantFiles: [],
+								dependencies: [],
+								estimatedComplexity: "low" as const,
+							},
+						],
+					},
+				],
+			};
+			const result = await callTool(tmpDir, params, state);
+			expect(result.content[0].text).toContain("Error");
+			expect(result.content[0].text).toContain("too short");
+		});
+
 		it("rejects empty milestones array", async () => {
 			const state = makePlanningState();
 			const params = { ...makeMinimalPlanParams(), milestones: [] };
@@ -290,7 +318,8 @@ describe("registerSubmitPlanTool", () => {
 							{
 								id: "feature-1",
 								name: "User model",
-								description: "Create user entity",
+								description:
+									"Create user entity with email, password hash, and timestamps in src/models/user.ts",
 								acceptanceCriteria: ["User entity created"],
 								relevantFiles: [],
 								dependencies: [],
@@ -470,7 +499,7 @@ describe("registerSubmitPlanTool", () => {
 							{
 								id: "f1",
 								name: "Feature 1",
-								description: "desc",
+								description: "Create the base data model with schema validation and persistence layer",
 								acceptanceCriteria: ["crit"],
 								relevantFiles: [],
 								dependencies: [],
@@ -486,7 +515,7 @@ describe("registerSubmitPlanTool", () => {
 							{
 								id: "f2",
 								name: "Feature 2",
-								description: "desc",
+								description: "Implement cross-milestone dependency resolution and integration tests",
 								acceptanceCriteria: ["crit"],
 								relevantFiles: [],
 								dependencies: ["f1"],

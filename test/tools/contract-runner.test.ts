@@ -149,7 +149,7 @@ describe("runContractAssertions", () => {
 			expect(results[0].status).toBe("fail");
 		});
 
-		it("passes when expected substring is only in stderr (npm/npx output)", async () => {
+		it("fails when expected substring is only in stderr (stdoutContains checks stdout only)", async () => {
 			const { exec } = makeMockExec([
 				{ exitCode: 0, stdout: "", stderr: "Tests: 5 passed, 5 total", timedOut: false },
 			]);
@@ -161,10 +161,10 @@ describe("runContractAssertions", () => {
 				projectDir: tmpDir,
 			});
 
-			expect(results[0].status).toBe("pass");
+			expect(results[0].status).toBe("fail");
 		});
 
-		it("passes when expected substring spans both stdout and stderr", async () => {
+		it("fails when stdoutContains match is only in stderr", async () => {
 			const { exec } = makeMockExec([
 				{ exitCode: 0, stdout: "building...", stderr: "FizzBuzz output here", timedOut: false },
 			]);
@@ -176,7 +176,7 @@ describe("runContractAssertions", () => {
 				projectDir: tmpDir,
 			});
 
-			expect(results[0].status).toBe("pass");
+			expect(results[0].status).toBe("fail");
 		});
 	});
 

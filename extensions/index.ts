@@ -1,4 +1,4 @@
-import { exec, spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -48,7 +48,7 @@ import { generateId, nowISO } from "./utils.js";
 import { checkOrphanedWorker, killOrphanedWorker } from "./worker-pid.js";
 
 const SESSION_CACHE_KEY = "mission-state-cache";
-const PAUSABLE_STATUSES = new Set(["planning", "draft_review", "approved", "validating"]);
+const PAUSABLE_STATUSES = new Set(["planning", "draft_review", "validating"]);
 
 function cachePayload(state: MissionState): MissionState {
 	return { ...state, progressLog: [] };
@@ -727,6 +727,10 @@ export default function (pi: ExtensionAPI): void {
 		projectDir,
 		updateWidget,
 		spawnFn: spawn as never,
+		availableModels: () => {
+			if (!latestCtx) return [];
+			return latestCtx.modelRegistry.getAll().map((m) => m.id);
+		},
 	});
 	registerCommitChangesTool(pi, { basePath, projectDir, updateWidget });
 	registerCreateFixTool(pi, { basePath, updateWidget });
@@ -978,7 +982,7 @@ export default function (pi: ExtensionAPI): void {
 				updateWidget,
 				availableModels: ctx.modelRegistry.getAll().map((m) => m.id),
 				openFile: (filePath: string) => {
-					exec(`open "${filePath}"`);
+					execFile("open", [filePath]);
 				},
 				setModel: async (modelId: string) => {
 					const model = ctx.modelRegistry.getAll().find((m) => m.id === modelId);

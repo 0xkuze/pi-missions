@@ -81,7 +81,7 @@ function isDuplicateEntry(existingContent: string, entry: string): boolean {
 	const blocks = existingContent.split(/\n\n+/).filter((b) => b.trim().length > 0);
 	const recent = blocks.slice(-DEDUP_ENTRY_COUNT);
 	const entryTrimmed = entry.trim();
-	return recent.some((block) => block.includes(entryTrimmed) || entryTrimmed.includes(block.trim()));
+	return recent.some((block) => block.trim() === entryTrimmed);
 }
 
 function appendLibraryTopic(basePath: string, topic: string, entry: string): void {

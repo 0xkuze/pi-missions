@@ -13,9 +13,9 @@ export function isGitAvailable(cwd: string): boolean {
 export function ensureGitRepo(cwd: string): boolean {
 	if (isGitAvailable(cwd)) return true;
 	try {
-		execSync("git init", { cwd, stdio: "ignore" });
-		execSync("git add -A", { cwd, stdio: "ignore" });
-		execSync('git commit -m "initial commit (pre-mission)" --allow-empty', { cwd, stdio: "ignore" });
+		execFileSync("git", ["init"], { cwd, stdio: "ignore" });
+		execFileSync("git", ["add", "-A"], { cwd, stdio: "ignore" });
+		execFileSync("git", ["commit", "-m", "initial commit (pre-mission)", "--allow-empty"], { cwd, stdio: "ignore" });
 		return true;
 	} catch {
 		return false;

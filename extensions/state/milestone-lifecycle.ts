@@ -50,7 +50,6 @@ export function autoCompleteMilestone(
 
 	const hasFailedFeatures = milestone.features.some((f) => f.status === "failed");
 	const milestoneStatus = hasFailedFeatures ? ("failed" as const) : ("done" as const);
-	const eventType = hasFailedFeatures ? ("milestone_complete" as const) : ("milestone_complete" as const);
 	const suffix = hasFailedFeatures ? " (with failed features)" : "";
 
 	const now = nowISO();
@@ -65,7 +64,11 @@ export function autoCompleteMilestone(
 			...state,
 			progressLog: [
 				...state.progressLog,
-				{ timestamp: now, type: eventType, detail: `Milestone '${milestone.name}' completed${suffix}` },
+				{
+					timestamp: now,
+					type: "milestone_complete" as const,
+					detail: `Milestone '${milestone.name}' completed${suffix}`,
+				},
 			],
 		},
 	};

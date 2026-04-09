@@ -230,7 +230,7 @@ export type OverlayAction =
 	| { kind: "warn"; message: string }
 	| { kind: "noop" };
 
-const PAUSABLE_STATUSES = new Set(["planning", "draft_review", "approved", "executing", "validating"]);
+const PAUSABLE_STATUSES = new Set(["planning", "draft_review", "executing", "validating"]);
 const ACTIVE_STATUSES = new Set(["planning", "draft_review", "approved", "executing", "validating", "paused"]);
 
 export function handleKeyboardAction(key: string, state: MissionState | null): OverlayAction {

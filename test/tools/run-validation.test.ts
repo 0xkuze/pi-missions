@@ -23,6 +23,12 @@ import {
 
 const DONE_FEATURE = makeFeature({ status: "done" });
 
+function parseValidationResult(text: string): ValidationResult {
+	const jsonEnd = text.indexOf("\n\n");
+	const jsonStr = jsonEnd === -1 ? text : text.slice(0, jsonEnd);
+	return JSON.parse(jsonStr) as ValidationResult;
+}
+
 function localMakeMilestone(overrides: Partial<ReturnType<typeof makeMilestone>> = {}) {
 	return makeMilestone({
 		features: [DONE_FEATURE],
@@ -245,7 +251,7 @@ describe("registerRunValidationTool", () => {
 				},
 			);
 			const text = result.content[0].text;
-			const parsed = JSON.parse(text) as ValidationResult;
+			const parsed = parseValidationResult(text);
 			expect(parsed.status).toBe("pass");
 			expect(parsed.failingChecks).toHaveLength(0);
 		});
@@ -266,7 +272,7 @@ describe("registerRunValidationTool", () => {
 			});
 
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.status).toBe("fail");
 			expect(parsed.failingChecks.length).toBeGreaterThan(0);
 		});
@@ -287,7 +293,7 @@ describe("registerRunValidationTool", () => {
 			});
 
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.status).toBe("fail");
 			expect(parsed.commands[0]!.timedOut).toBe(true);
 		});
@@ -299,7 +305,7 @@ describe("registerRunValidationTool", () => {
 			});
 			// No package.json in tmpDir, so auto-detect returns empty
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.status).toBe("pass");
 			expect(parsed.commands).toHaveLength(0);
 			expect(parsed.summary.length).toBeGreaterThan(0);
@@ -307,7 +313,7 @@ describe("registerRunValidationTool", () => {
 
 		it("includes milestoneId in result", async () => {
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.milestoneId).toBe("milestone-1");
 		});
 
@@ -316,7 +322,7 @@ describe("registerRunValidationTool", () => {
 				milestones: [localMakeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			const cmd = parsed.commands[0]!;
 			expect(cmd.command).toBe("echo test");
 			expect(typeof cmd.exitCode).toBe("number");
@@ -343,7 +349,7 @@ describe("registerRunValidationTool", () => {
 				timedOut: false,
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.failingChecks).toHaveLength(1);
 			expect(parsed.failingChecks[0]).toContain("test");
 		});
@@ -397,7 +403,7 @@ describe("registerRunValidationTool", () => {
 			});
 
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.commands[0]!.timedOut).toBe(true);
 			expect(parsed.commands[0]!.exitCode).toBeNull();
 		});
@@ -488,7 +494,7 @@ describe("registerRunValidationTool", () => {
 				milestones: [localMakeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.summary.length).toBeGreaterThan(0);
 			expect(parsed.summary.toLowerCase()).toContain("pass");
 		});
@@ -508,14 +514,14 @@ describe("registerRunValidationTool", () => {
 				timedOut: false,
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.summary.toLowerCase()).toContain("fail");
 			expect(parsed.summary).toContain("test");
 		});
 
 		it("summary is never empty", async () => {
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.summary.trim().length).toBeGreaterThan(0);
 		});
 
@@ -527,7 +533,7 @@ describe("registerRunValidationTool", () => {
 				timedOut: false,
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.summary).toContain("cannot find module");
 		});
 
@@ -539,7 +545,7 @@ describe("registerRunValidationTool", () => {
 				timedOut: false,
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.summary).toContain("Expected 1 to be 2");
 		});
 
@@ -551,7 +557,7 @@ describe("registerRunValidationTool", () => {
 				timedOut: false,
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.summary).not.toContain("All tests passed");
 		});
 
@@ -564,7 +570,7 @@ describe("registerRunValidationTool", () => {
 				timedOut: false,
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.summary).toContain("truncated");
 			expect(parsed.summary).toContain("line 0");
 			expect(parsed.summary).not.toContain("line 199");
@@ -635,7 +641,7 @@ describe("registerRunValidationTool", () => {
 				timedOut: false,
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.status).toBe("fail");
 		});
 	});
@@ -775,7 +781,7 @@ describe("registerRunValidationTool", () => {
 			});
 
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.status).toBe("pass");
 			expect(parsed.assertions).toBeDefined();
 			expect(parsed.assertions!.length).toBe(1);
@@ -817,7 +823,7 @@ describe("registerRunValidationTool", () => {
 			});
 
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.status).toBe("fail");
 			expect(parsed.summary.toLowerCase()).toContain("assertion");
 		});
@@ -857,7 +863,7 @@ describe("registerRunValidationTool", () => {
 			});
 
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.status).toBe("fail");
 		});
 
@@ -887,7 +893,7 @@ describe("registerRunValidationTool", () => {
 			});
 
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.status).toBe("fail");
 			expect(parsed.summary.toLowerCase()).toContain("fail");
 		});
@@ -927,7 +933,7 @@ describe("registerRunValidationTool", () => {
 			});
 
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 			expect(parsed.summary.toLowerCase()).toContain("assertion");
 		});
 	});
@@ -944,7 +950,7 @@ describe("registerRunValidationTool", () => {
 			};
 
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
-			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			const parsed = parseValidationResult(result.content[0].text);
 
 			expect(execCalls).toHaveLength(1);
 			expect(parsed.assertions).toBeUndefined();
