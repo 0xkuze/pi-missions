@@ -1,4 +1,4 @@
-import type { Feature, MissionPlan, MissionState } from "./types.js";
+import type { AssertionResultData, Feature, MissionPlan, MissionState } from "./types.js";
 import { formatDuration } from "./utils.js";
 
 export interface GitInfo {
@@ -8,6 +8,11 @@ export interface GitInfo {
 	warnings?: string[];
 	remainingNotes?: string[];
 	featureMetrics?: Map<string, { tokensUsed?: number; estimatedCost?: number }>;
+}
+
+export interface ReportValidationInfo {
+	assertions: AssertionResultData[];
+	evidenceDir?: string;
 }
 
 function totalFeatureDurationMs(feature: Feature): number | undefined {
@@ -134,6 +139,20 @@ function renderFixFeaturesSection(plan: MissionPlan): string[] {
 	return lines;
 }
 
+function renderForceOverridesSection(state: MissionState): string[] {
+	const overrides = state.progressLog.filter((e) => e.type === "plan_mutated" && e.metadata?.force === true);
+	if (overrides.length === 0) return [];
+
+	const lines: string[] = [];
+	lines.push("## Force Overrides");
+	lines.push("");
+	for (const o of overrides) {
+		lines.push(`- **${o.timestamp}**: ${o.detail}`);
+	}
+	lines.push("");
+	return lines;
+}
+
 function renderWarningsSection(state: MissionState, gitInfo?: GitInfo): string[] {
 	const warnings: string[] = [];
 
@@ -172,7 +191,56 @@ function renderNotesSection(notes: string[]): string[] {
 	return lines;
 }
 
-export function generateReport(state: MissionState, plan: MissionPlan, gitInfo?: GitInfo): string {
+function renderAssertionsSection(validationInfo: ReportValidationInfo): string[] {
+	if (validationInfo.assertions.length === 0) return [];
+
+	const lines: string[] = [];
+	lines.push("## Validation Assertions");
+	lines.push("");
+
+	for (const assertion of validationInfo.assertions) {
+		const statusLabel = assertion.status.toUpperCase();
+		const duration = ` (${formatDuration(assertion.durationMs)})`;
+		lines.push(`- **${assertion.assertionId}**: ${statusLabel}${duration} — \`${assertion.command}\``);
+		if (assertion.status === "fail") {
+			const output = assertion.stdout.length > 0 ? assertion.stdout : assertion.stderr;
+			if (output.length > 0) {
+				const summary = output.length > 200 ? `${output.slice(0, 197)}...` : output;
+				lines.push(`  - Output: ${summary}`);
+			}
+		}
+	}
+
+	lines.push("");
+	return lines;
+}
+
+function renderEvidenceSummarySection(validationInfo: ReportValidationInfo): string[] {
+	if (validationInfo.assertions.length === 0) return [];
+
+	const lines: string[] = [];
+	const passed = validationInfo.assertions.filter((a) => a.status === "pass").length;
+	const total = validationInfo.assertions.length;
+	const passRate = total > 0 ? Math.round((passed / total) * 100) : 0;
+
+	lines.push("## Evidence");
+	lines.push("");
+	lines.push(`- **Assertions:** ${passed}/${total} passed (${passRate}% pass rate)`);
+
+	if (validationInfo.evidenceDir) {
+		lines.push(`- **Evidence directory:** \`${validationInfo.evidenceDir}\``);
+	}
+
+	lines.push("");
+	return lines;
+}
+
+export function generateReport(
+	state: MissionState,
+	plan: MissionPlan,
+	gitInfo?: GitInfo,
+	validationInfo?: ReportValidationInfo,
+): string {
 	const startedAt = new Date(state.startedAt);
 	const completedAt = state.completedAt ? new Date(state.completedAt) : new Date();
 	const durationMs = completedAt.getTime() - startedAt.getTime();
@@ -206,11 +274,17 @@ export function generateReport(state: MissionState, plan: MissionPlan, gitInfo?:
 	lines.push(...renderMilestoneSection(plan, gitInfo));
 	lines.push(...renderFixFeaturesSection(plan));
 
+	if (validationInfo && validationInfo.assertions.length > 0) {
+		lines.push(...renderAssertionsSection(validationInfo));
+		lines.push(...renderEvidenceSummarySection(validationInfo));
+	}
+
 	if (gitInfo) {
 		lines.push(...renderFilesSection(gitInfo));
 		lines.push(...renderCommitsSection(gitInfo.commits));
 	}
 
+	lines.push(...renderForceOverridesSection(state));
 	lines.push(...renderWarningsSection(state, gitInfo));
 
 	const notes = gitInfo?.remainingNotes ?? [];

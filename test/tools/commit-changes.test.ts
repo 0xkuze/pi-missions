@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { saveState } from "../../extensions/state/manager.js";
@@ -313,6 +313,29 @@ describe("registerCommitChangesTool", () => {
 			await callTool(tmpDir, { featureId: "feature-1" }, { state, getChangedFiles });
 			const [, baseCommit] = getChangedFiles.mock.calls[0] as unknown as [string, string | undefined];
 			expect(baseCommit).toBeUndefined();
+		});
+	});
+
+	describe("updates gitSnapshot.headCommit after successful commit", () => {
+		it("persists the new SHA in state.gitSnapshot.headCommit", async () => {
+			const newSha = "newcommitsha567890";
+			await callTool(tmpDir, { featureId: "feature-1" }, { stageAndCommit: () => newSha });
+			const persisted = JSON.parse(readFileSync(join(tmpDir, "state.json"), "utf8"));
+			expect(persisted.gitSnapshot.headCommit).toBe(newSha);
+		});
+
+		it("subsequent commit_changes uses the updated headCommit as base", async () => {
+			const firstSha = "first111";
+			const secondSha = "second222";
+			let commitCount = 0;
+			const stageAndCommit = () => {
+				commitCount++;
+				return commitCount === 1 ? firstSha : secondSha;
+			};
+			const getChangedFiles = mock(() => ["src/file.ts"]);
+			await callTool(tmpDir, { featureId: "feature-1" }, { stageAndCommit, getChangedFiles });
+			const persisted = JSON.parse(readFileSync(join(tmpDir, "state.json"), "utf8"));
+			expect(persisted.gitSnapshot.headCommit).toBe(firstSha);
 		});
 	});
 });

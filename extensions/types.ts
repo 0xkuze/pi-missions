@@ -13,6 +13,8 @@ export type MissionStatus =
 	| "failed"
 	| "aborted";
 
+export const TERMINAL_STATUSES: ReadonlySet<MissionStatus> = new Set(["completed", "failed", "aborted"]);
+
 export type ResumeTargetState = "planning" | "draft_review" | "executing" | "validating";
 
 export type ProgressEventType =
@@ -133,6 +135,9 @@ export interface MissionState {
 	totalFixFeaturesCreated: number;
 	gitSnapshot?: GitSnapshot;
 	missionStartedAtMs?: number;
+	protocolVersion?: number;
+	turnCount?: number;
+	environmentSetupComplete?: boolean;
 }
 
 export type PromptingMode = "default" | "caveman" | "caveman-full";
@@ -163,6 +168,7 @@ export interface MissionConfig {
 	};
 	maxRetries?: number;
 	workerTimeoutMs?: number;
+	validatorStrictness?: "strict" | "lenient";
 }
 
 export interface ActiveSession {
@@ -197,6 +203,14 @@ export interface PlanMutation {
 	payload: Record<string, unknown>;
 }
 
+export interface WorkerHandoff {
+	whatWasImplemented: string;
+	whatWasLeftUndone: string;
+	commandsRun: Array<{ command: string; exitCode: number; observation: string }>;
+	testsAdded: Array<{ file: string; cases: string[] }>;
+	discoveredIssues: Array<{ severity: "low" | "medium" | "high"; description: string; suggestedFix?: string }>;
+}
+
 export interface WorkerResult {
 	status: "success" | "failure" | "blocked";
 	summary: string;
@@ -206,6 +220,7 @@ export interface WorkerResult {
 		exitCode: number | null;
 	}>;
 	notes?: string[];
+	handoff?: WorkerHandoff;
 	error?: {
 		kind: "tool" | "validation" | "environment" | "unknown";
 		message: string;
@@ -216,6 +231,18 @@ export interface WorkerResult {
 		tokensUsed?: number;
 		estimatedCost?: number;
 	};
+}
+
+export interface AssertionResultData {
+	assertionId: string;
+	status: "pass" | "fail" | "error";
+	exitCode: number | null;
+	stdout: string;
+	stderr: string;
+	timedOut: boolean;
+	durationMs: number;
+	timestamp: string;
+	command: string;
 }
 
 export interface ValidationResult {
@@ -232,6 +259,7 @@ export interface ValidationResult {
 	}>;
 	summary: string;
 	failingChecks: string[];
+	assertions?: AssertionResultData[];
 }
 
 export interface SubmitPlanParams {
@@ -280,7 +308,7 @@ export interface CreateFixFeatureParams {
 }
 
 export interface UpdateMissionStateParams {
-	action: "start_milestone" | "complete_milestone" | "skip_feature" | "block_feature" | "note";
+	action: "skip_feature" | "block_feature" | "complete_feature" | "note";
 	targetId: string;
 	reason?: string;
 }
@@ -436,6 +464,9 @@ export const MissionStateSchema = Type.Object({
 	totalFixFeaturesCreated: Type.Number(),
 	gitSnapshot: Type.Optional(GitSnapshotSchema),
 	missionStartedAtMs: Type.Optional(Type.Number()),
+	protocolVersion: Type.Optional(Type.Number()),
+	turnCount: Type.Optional(Type.Number()),
+	environmentSetupComplete: Type.Optional(Type.Boolean()),
 });
 
 const PromptingModeSchema = Type.Optional(
@@ -474,6 +505,100 @@ export const MissionConfigSchema = Type.Object({
 	),
 	maxRetries: Type.Optional(Type.Number()),
 	workerTimeoutMs: Type.Optional(Type.Number()),
+	validatorStrictness: Type.Optional(Type.Union([Type.Literal("strict"), Type.Literal("lenient")])),
+});
+
+export const EnvironmentDescriptorSchema = Type.Object({
+	services: Type.Optional(
+		Type.Array(
+			Type.Object({
+				name: Type.String(),
+				type: Type.String(),
+				config: Type.Optional(Type.Record(Type.String(), Type.Unknown())),
+			}),
+		),
+	),
+	envVars: Type.Optional(
+		Type.Array(
+			Type.Object({
+				key: Type.String(),
+				value: Type.String(),
+				secret: Type.Optional(Type.Boolean()),
+			}),
+		),
+	),
+	setupCommands: Type.Optional(Type.Array(Type.String())),
+});
+
+export type EnvironmentDescriptor = Static<typeof EnvironmentDescriptorSchema>;
+
+export interface ValidationAssertion {
+	id: string;
+	featureId: string;
+	type: "command" | "script";
+	command: string;
+	expect: {
+		exitCode?: number;
+		stdoutContains?: string;
+		stdoutNotContains?: string;
+		stderrContains?: string;
+	};
+	description: string;
+	status: "pending" | "pass" | "fail" | "error";
+}
+
+export interface ValidationContract {
+	assertions: ValidationAssertion[];
+}
+
+const ValidationAssertionSchema = Type.Object({
+	id: Type.String(),
+	featureId: Type.String(),
+	type: Type.Union([Type.Literal("command"), Type.Literal("script")]),
+	command: Type.String(),
+	expect: Type.Object({
+		exitCode: Type.Optional(Type.Number()),
+		stdoutContains: Type.Optional(Type.String()),
+		stdoutNotContains: Type.Optional(Type.String()),
+		stderrContains: Type.Optional(Type.String()),
+	}),
+	description: Type.String(),
+	status: Type.Union([Type.Literal("pending"), Type.Literal("pass"), Type.Literal("fail"), Type.Literal("error")]),
+});
+
+export const ValidationContractSchema = Type.Object({
+	assertions: Type.Array(ValidationAssertionSchema),
+});
+
+export const ReportResultSchema = Type.Object({
+	whatWasImplemented: Type.String(),
+	whatWasLeftUndone: Type.String(),
+	commandsRun: Type.Optional(
+		Type.Array(
+			Type.Object({
+				command: Type.String(),
+				exitCode: Type.Number(),
+				observation: Type.String(),
+			}),
+		),
+	),
+	testsAdded: Type.Optional(
+		Type.Array(
+			Type.Object({
+				file: Type.String(),
+				cases: Type.Array(Type.String()),
+			}),
+		),
+	),
+	discoveredIssues: Type.Optional(
+		Type.Array(
+			Type.Object({
+				severity: Type.Union([Type.Literal("low"), Type.Literal("medium"), Type.Literal("high")]),
+				description: Type.String(),
+				suggestedFix: Type.Optional(Type.String()),
+			}),
+		),
+	),
 });
 
 export const WorkerResultSchema = Type.Object({
@@ -487,6 +612,7 @@ export const WorkerResultSchema = Type.Object({
 		}),
 	),
 	notes: Type.Optional(Type.Array(Type.String())),
+	handoff: Type.Optional(ReportResultSchema),
 	error: Type.Optional(
 		Type.Object({
 			kind: Type.Union([
@@ -506,6 +632,18 @@ export const WorkerResultSchema = Type.Object({
 	}),
 });
 
+const AssertionResultDataSchema = Type.Object({
+	assertionId: Type.String(),
+	status: Type.Union([Type.Literal("pass"), Type.Literal("fail"), Type.Literal("error")]),
+	exitCode: Type.Union([Type.Number(), Type.Null()]),
+	stdout: Type.String(),
+	stderr: Type.String(),
+	timedOut: Type.Boolean(),
+	durationMs: Type.Number(),
+	timestamp: Type.String(),
+	command: Type.String(),
+});
+
 export const ValidationResultSchema = Type.Object({
 	status: Type.Union([Type.Literal("pass"), Type.Literal("fail")]),
 	milestoneId: Type.String(),
@@ -522,4 +660,5 @@ export const ValidationResultSchema = Type.Object({
 	),
 	summary: Type.String(),
 	failingChecks: Type.Array(Type.String()),
+	assertions: Type.Optional(Type.Array(AssertionResultDataSchema)),
 });

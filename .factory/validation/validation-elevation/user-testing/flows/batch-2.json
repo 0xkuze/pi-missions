@@ -1,0 +1,249 @@
+{
+  "groupId": "batch-2",
+  "testedAt": "2026-04-07T00:00:00.000Z",
+  "isolation": {
+    "workingDirectory": "/Users/cristian/tmp/pi-missions",
+    "sharedState": "none — all tests use isolated temp dirs",
+    "testRunner": "bun test with specific test files"
+  },
+  "toolsUsed": ["bun test"],
+  "assertions": [
+    {
+      "id": "VAL-RUNNER-001",
+      "title": "Runner executes command-type assertions via exec",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Test tagged VAL-RUNNER-001 passes", "observed": "Test 'executes command-type assertion and captures stdout/stderr/exitCode' passed (1.12ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-002",
+      "title": "Runner executes script-type assertions",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Test tagged VAL-RUNNER-002 passes", "observed": "Test 'executes script-type assertion via exec with same interface' passed (0.80ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-003",
+      "title": "Exit code checked against expect.exitCode",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "All 3 tests tagged VAL-RUNNER-003 pass", "observed": "3 tests passed: 'passes when exit code matches' (0.63ms), 'fails when exit code does not match' (0.69ms), 'passes when expecting non-zero exit code' (0.58ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-004",
+      "title": "stdout checked against expect.stdoutContains (substring match)",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Both tests tagged VAL-RUNNER-004 pass", "observed": "2 tests passed: 'passes when stdout contains expected substring' (0.74ms), 'fails when stdout does not contain expected substring' (0.56ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-005",
+      "title": "stdout checked against expect.stdoutNotContains (negative match)",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Both tests tagged VAL-RUNNER-005 pass", "observed": "2 tests passed: 'passes when stdout does not contain the excluded substring' (0.63ms), 'fails when stdout contains the excluded substring' (0.64ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-006",
+      "title": "stderr checked against expect.stderrContains",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Both tests tagged VAL-RUNNER-006 pass", "observed": "2 tests passed: 'passes when stderr contains expected substring' (0.55ms), 'fails when stderr does not contain expected substring' (0.69ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-007",
+      "title": "Individual assertion pass/fail tracked",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Test tagged VAL-RUNNER-007 passes", "observed": "Test 'runs all assertions even when one fails' passed (1.09ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-008",
+      "title": "Timeout handling per assertion",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Test tagged VAL-RUNNER-008 passes", "observed": "Test 'returns error status with timedOut=true on timeout' passed (0.79ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-009",
+      "title": "run_validation runs contract assertions AFTER command validation",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-validation.test.ts", "expected": "Tests tagged VAL-RUNNER-009 pass", "observed": "2 tests passed: 'runs commands first, then contract assertions' (2.68ms), 'only runs assertions for features in the current milestone' (1.99ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/run-validation-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-010",
+      "title": "Combined results returned (commands + assertions)",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-validation.test.ts", "expected": "All 5 tests tagged VAL-RUNNER-010 pass", "observed": "5 tests passed: 'status pass when both commands and assertions pass' (1.89ms), 'status fail when commands pass but assertions fail' (2.28ms), 'status fail when commands fail and assertions pass' (1.73ms), 'status fail when both commands and assertions fail' (1.96ms), 'summary mentions assertion failures when assertions fail' (1.95ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/run-validation-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-011",
+      "title": "Contract assertions filtered by milestone features",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Test tagged VAL-RUNNER-011 passes", "observed": "Test 'only runs assertions whose featureIds are in the provided milestoneFeatures list' passed (0.67ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-012",
+      "title": "Contract updates assertion status after run",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Test tagged VAL-RUNNER-012 passes", "observed": "Test 'updates contract file on disk with pass/fail statuses' passed (1.60ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-013",
+      "title": "Assertions for skipped/blocked features not executed",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Both tests tagged VAL-RUNNER-013 pass", "observed": "2 tests passed: 'skips assertions for features in the skippedFeatures set' (0.78ms), 'skips assertions for features in the blockedFeatures set' (0.60ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-RUNNER-014",
+      "title": "Scrutiny reviewer handles malformed output",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "Tests tagged VAL-RUNNER-014 pass", "observed": "2 tests passed: 'returns graceful error with empty issues for unparseable output' (1.04ms), 'handles binary/truncated data' (1.13ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/run-scrutiny-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-EVIDENCE-001",
+      "title": "Assertion runner captures command output as evidence",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Test tagged VAL-EVIDENCE-001 passes", "observed": "Test 'writes stdout.log, stderr.log per assertion' passed (1.03ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-EVIDENCE-002",
+      "title": "Evidence stored in runtime/validation/ directory",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-validation.test.ts", "expected": "Tests tagged VAL-EVIDENCE-002 pass", "observed": "2 tests passed: 'creates assertions directory alongside command timestamp directory' (1.75ms), 'no assertions directory when no contract exists' (1.27ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/run-validation-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-EVIDENCE-003",
+      "title": "Evidence includes assertion id, command output, timestamp, pass/fail",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/contract-runner.test.ts", "expected": "Test tagged VAL-EVIDENCE-003 passes", "observed": "Test 'writes result.json with assertionId, command, exitCode, timestamp, status, durationMs' passed (0.74ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/contract-runner-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-EVIDENCE-006",
+      "title": "Evidence files cleaned up on mission abort",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/evidence-preservation.test.ts", "expected": "Test tagged VAL-EVIDENCE-006 passes", "observed": "Test 'evidence files survive mission abort' passed (0.80ms)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-2/evidence-preservation-output.log",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 18 assertions: 18 passed, 0 failed, 0 blocked. All 98 tests across 4 test files passed (24 in contract-runner, 47 in run-validation, 26 in run-scrutiny, 1 in evidence-preservation)."
+}

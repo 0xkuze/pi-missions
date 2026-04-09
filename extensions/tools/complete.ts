@@ -3,37 +3,15 @@ import { dirname, join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { generateReport } from "../report.js";
-import { loadPlan, loadState, saveState } from "../state/manager.js";
+import { countPendingFeatures, hasPendingFeatures } from "../plan-helpers.js";
+import { generateReport, type ReportValidationInfo } from "../report.js";
+import { loadContract, loadPlan, loadState, saveState } from "../state/manager.js";
 import { transitionState } from "../state/transitions.js";
 import type { MissionPlan, MissionState } from "../types.js";
 
 interface Deps {
 	basePath: string;
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
-}
-
-function hasPendingWork(plan: MissionPlan): boolean {
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.status === "pending" || feature.status === "active") {
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
-function countPendingFeatures(plan: MissionPlan): number {
-	let count = 0;
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.status === "pending" || feature.status === "active") {
-				count++;
-			}
-		}
-	}
-	return count;
 }
 
 export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void {
@@ -47,6 +25,7 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 			remainingNotes: Type.Optional(
 				Type.Array(Type.String(), { description: "Any remaining notes or observations" }),
 			),
+			force: Type.Optional(Type.Boolean({ description: "Force completion even with failing assertions" })),
 		}),
 		// why: pi Theme uses branded ThemeColor types; we accept `any` at this API boundary
 		renderCall(_args: any, theme: any) {
@@ -100,7 +79,7 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 
 			const hasAnyFeatures = plan ? plan.milestones.some((m) => m.features.length > 0) : false;
 			const allSkipped =
-				state.totalFeaturesCompleted === 0 && state.totalFeaturesSkipped > 0 && !hasPendingWork(plan!);
+				state.totalFeaturesCompleted === 0 && state.totalFeaturesSkipped > 0 && !hasPendingFeatures(plan!);
 			if (hasAnyFeatures && state.totalFeaturesCompleted === 0 && !allSkipped) {
 				return {
 					content: [
@@ -113,27 +92,93 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 				};
 			}
 
+			if (state.totalFeaturesFailed > 0 && !params.force) {
+				const milestoneIds = plan ? plan.milestones.map((m) => m.id) : [];
+				const milestonesWithPassingValidation = new Set(
+					state.progressLog
+						.filter((e) => e.type === "validation_pass" && e.metadata?.milestoneId)
+						.map((e) => e.metadata!.milestoneId as string),
+				);
+				const milestonesWithFeatures = milestoneIds.filter(
+					(id) => plan!.milestones.find((m) => m.id === id)!.features.length > 0,
+				);
+				const allMilestonesValidated = milestonesWithFeatures.every((id) =>
+					milestonesWithPassingValidation.has(id),
+				);
+				if (!allMilestonesValidated) {
+					const unvalidated = milestonesWithFeatures.filter((id) => !milestonesWithPassingValidation.has(id));
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error: ${state.totalFeaturesFailed} feature(s) failed and milestone(s) ${unvalidated.join(", ")} have not passed validation. Run run_validation first, or pass force=true to override.`,
+							},
+						],
+						details: {},
+					};
+				}
+			}
+
+			const contract = loadContract(deps.basePath);
+			if (contract) {
+				const failedAssertions = contract.assertions.filter((a) => a.status === "fail" || a.status === "error");
+				if (failedAssertions.length > 0 && !params.force) {
+					const ids = failedAssertions.map((a) => a.id);
+					const shown =
+						ids.length > 5 ? `${ids.slice(0, 5).join(", ")} and ${ids.length - 5} more` : ids.join(", ");
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error: ${failedAssertions.length} assertion(s) still failing: ${shown}. Fix and re-validate first, or pass force=true to override.`,
+							},
+						],
+						details: {},
+					};
+				}
+			}
+
 			const warnings: string[] = [];
-			if (plan && hasPendingWork(plan)) {
+			if (plan && hasPendingFeatures(plan)) {
 				const pendingCount = countPendingFeatures(plan);
 				warnings.push(
 					`Warning: ${pendingCount} feature(s) are still pending or active and have not been completed.`,
 				);
 			}
 
-			const completedState = transitionState(state, "completed");
+			let completedState = transitionState(state, "completed");
+			if (params.force) {
+				completedState = {
+					...completedState,
+					progressLog: [
+						...completedState.progressLog,
+						{
+							timestamp: new Date().toISOString(),
+							type: "plan_mutated" as const,
+							detail: "Force override: complete_mission",
+							metadata: { action: "complete_mission", force: true },
+						},
+					],
+				};
+			}
 			saveState(deps.basePath, completedState);
 
 			if (plan) {
 				const reportPath = join(deps.basePath, "report.md");
 				const reportDir = dirname(reportPath);
 				mkdirSync(reportDir, { recursive: true });
-				const reportContent = generateReport(completedState, plan, {
-					filesChanged: [],
-					commits: [],
-					summary,
-					remainingNotes: remainingNotes ?? [],
-				});
+				const validationInfo = buildValidationInfo(deps.basePath, plan);
+				const reportContent = generateReport(
+					completedState,
+					plan,
+					{
+						filesChanged: [],
+						commits: [],
+						summary,
+						remainingNotes: remainingNotes ?? [],
+					},
+					validationInfo,
+				);
 				writeFileSync(reportPath, reportContent, "utf8");
 			}
 
@@ -153,4 +198,29 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 			};
 		},
 	});
+}
+
+function buildValidationInfo(basePath: string, plan: MissionPlan): ReportValidationInfo | undefined {
+	const contract = loadContract(basePath);
+	if (!contract) return undefined;
+	const assertionResults = contract.assertions.filter(
+		(a) => a.status === "pass" || a.status === "fail" || a.status === "error",
+	);
+	if (assertionResults.length === 0) return undefined;
+	const assertions = assertionResults.map((a) => ({
+		assertionId: a.id,
+		status: a.status as "pass" | "fail" | "error",
+		exitCode: null as number | null,
+		stdout: "",
+		stderr: "",
+		timedOut: false,
+		durationMs: 0,
+		timestamp: "",
+		command: a.command,
+	}));
+	const milestoneIds = plan.milestones.map((m) => m.id);
+	return {
+		assertions,
+		evidenceDir: milestoneIds.length > 0 ? join(basePath, "runtime", "validation", milestoneIds[0]!) : undefined,
+	};
 }

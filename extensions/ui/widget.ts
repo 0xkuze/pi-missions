@@ -2,6 +2,11 @@ import type { ThemeColor } from "@mariozechner/pi-coding-agent";
 import type { MissionPlan, MissionState } from "../types.js";
 import { countProgress } from "./count-progress.js";
 
+export interface WidgetAssertionInfo {
+	assertionsPassed: number;
+	assertionsTotal: number;
+}
+
 const DEFAULT_BAR_WIDTH = 10;
 const MAX_LINE_WIDTH = 120;
 const DONE_CHAR = "\u2588";
@@ -156,6 +161,7 @@ export function buildWidgetLines(
 	plan?: MissionPlan,
 	barWidth = DEFAULT_BAR_WIDTH,
 	theme?: ThemeStyler,
+	assertionInfo?: WidgetAssertionInfo,
 ): string[] {
 	switch (state.status) {
 		case "aborted":
@@ -214,20 +220,31 @@ export function buildWidgetLines(
 			const elapsed = getElapsedStr(state);
 			if (!theme) {
 				const bar = buildProgressBar(done, total, hasActive, barWidth);
+				const assertionSuffix = assertionInfo
+					? `  \u00b7  ${assertionInfo.assertionsPassed}/${assertionInfo.assertionsTotal} assertions`
+					: "";
 				return [
-					formatProgressLine(
-						"\u25cf Running",
-						bar,
-						done,
-						total,
-						buildExecutingSuffix(milestoneName, featureName, undefined, elapsed),
+					truncate(
+						formatProgressLine(
+							"\u25cf Running",
+							bar,
+							done,
+							total,
+							`${buildExecutingSuffix(milestoneName, featureName, undefined, elapsed)}${assertionSuffix}`,
+						),
+						MAX_LINE_WIDTH,
 					),
 				];
 			}
 			const prefix = theme.bold(theme.fg("success", "\u25cf Running"));
 			const bar = buildStyledProgressBar(done, total, hasActive, barWidth, theme);
 			const suffix = buildExecutingSuffix(milestoneName, featureName, theme, elapsed);
-			return [buildStyledLine(prefix, bar, done, total, suffix, theme)];
+			const assertionPart = assertionInfo
+				? `${sep(theme)}${theme.fg("text", `${assertionInfo.assertionsPassed}/${assertionInfo.assertionsTotal} assertions`)}`
+				: "";
+			return [
+				`${buildStyledLine(prefix, bar, done, total, suffix, theme).replace(hint(theme), "")}${assertionPart}${hint(theme)}`,
+			];
 		}
 
 		case "paused": {
@@ -250,24 +267,43 @@ export function buildWidgetLines(
 
 		case "validating": {
 			if (!plan) {
-				if (!theme) return ["\u25cf Validating  \u00b7  validating milestone"];
+				if (!theme) {
+					const base = "\u25cf Validating  \u00b7  validating milestone";
+					const assertionSuffix = assertionInfo
+						? `  \u00b7  ${assertionInfo.assertionsPassed}/${assertionInfo.assertionsTotal} assertions`
+						: "";
+					return [truncate(`${base}${assertionSuffix}`, MAX_LINE_WIDTH)];
+				}
 				const icon = theme.bold(theme.fg("accent", "\u25cf Validating"));
 				const body = theme.fg("text", "validating milestone");
-				return [`${icon}${sep(theme)}${body}${hint(theme)}`];
+				const assertionPart = assertionInfo
+					? `${sep(theme)}${theme.fg("text", `${assertionInfo.assertionsPassed}/${assertionInfo.assertionsTotal} assertions`)}`
+					: "";
+				return [`${icon}${sep(theme)}${body}${assertionPart}${hint(theme)}`];
 			}
 			const { done, total } = countProgress(state, plan);
 			const milestoneName = findCurrentMilestoneName(state, plan);
+			const assertionSuffix = assertionInfo
+				? `  \u00b7  ${assertionInfo.assertionsPassed}/${assertionInfo.assertionsTotal} assertions`
+				: "";
 			if (!theme) {
 				const bar = buildProgressBar(done, total, false, barWidth);
-				const suffix = milestoneName ? `validating milestone: ${milestoneName}` : "validating milestone";
-				return [formatProgressLine("\u25cf Validating", bar, done, total, suffix)];
+				const suffix = milestoneName
+					? `validating milestone: ${milestoneName}${assertionSuffix}`
+					: `validating milestone${assertionSuffix}`;
+				return [truncate(formatProgressLine("\u25cf Validating", bar, done, total, suffix), MAX_LINE_WIDTH)];
 			}
 			const prefix = theme.bold(theme.fg("accent", "\u25cf Validating"));
 			const bar = buildStyledProgressBar(done, total, false, barWidth, theme);
-			const suffix = milestoneName
+			const baseSuffix = milestoneName
 				? `${theme.fg("text", `validating: ${milestoneName}`)}`
 				: theme.fg("text", "validating milestone");
-			return [buildStyledLine(prefix, bar, done, total, suffix, theme)];
+			const assertionPart = assertionInfo
+				? `${sep(theme)}${theme.fg("text", `${assertionInfo.assertionsPassed}/${assertionInfo.assertionsTotal} assertions`)}`
+				: "";
+			return [
+				`${prefix}  ${bar}  ${theme.fg("text", `${done}/${total} features`)}${sep(theme)}${baseSuffix}${assertionPart}${hint(theme)}`,
+			];
 		}
 
 		case "completed": {
@@ -306,7 +342,12 @@ export interface WidgetUI {
 	setWidget(name: string, lines: string[]): void;
 }
 
-export function updateWidget(ui: WidgetUI, state: MissionState, plan?: MissionPlan): void {
-	const lines = buildWidgetLines(state, plan);
+export function updateWidget(
+	ui: WidgetUI,
+	state: MissionState,
+	plan?: MissionPlan,
+	assertionInfo?: WidgetAssertionInfo,
+): void {
+	const lines = buildWidgetLines(state, plan, undefined, undefined, assertionInfo);
 	ui.setWidget("mission", lines);
 }

@@ -1,0 +1,51 @@
+{
+	"milestone": "post-session-fixes",
+	"round": 1,
+	"status": "pass",
+	"validatorsRun": {
+		"test": { "passed": true, "command": "bun test", "exitCode": 0 },
+		"typecheck": { "passed": true, "command": "npx tsc --noEmit", "exitCode": 0 },
+		"lint": { "passed": true, "command": "npx @biomejs/biome check extensions/", "exitCode": 0 }
+	},
+	"reviewsSummary": {
+		"total": 5,
+		"passed": 5,
+		"failed": 0,
+		"failedFeatures": []
+	},
+	"blockingIssues": [],
+	"appliedUpdates": [
+		{
+			"target": "library",
+			"description": "Updated architecture.md Validator Strictness section to reflect auto-legacy fallback behavior: synthesizeWorkerResult now auto-enables legacy mode when exitCode===0 and files were changed, not just when explicit legacyMode option is passed.",
+			"sourceFeature": "fix-report-result-as-real-tool"
+		}
+	],
+	"suggestedGuidanceUpdates": [
+		{
+			"target": "AGENTS.md",
+			"suggestion": "Add convention: all injected worker context sections (library topics, project info, directory listings, dependency lists) should have size caps to prevent context bloat in large projects. The library system enforces MAX_CONTENT_LENGTH=2000, but project-info auto-detection (tsconfig, package.json, directory listing) has no such limits.",
+			"evidence": "Feature fix-worker-context-project-info adds buildProjectStructureSection and buildPackageInfoSection without size caps, while extensions/state/library.ts enforces MAX_CONTENT_LENGTH=2000 with truncation.",
+			"isSystemic": false
+		}
+	],
+	"rejectedObservations": [
+		{
+			"observation": "AGENTS.md already documents the --extension convention for worker tools",
+			"reason": "already-documented"
+		},
+		{
+			"observation": "AGENTS.md already documents complete_feature convention for verified work",
+			"reason": "already-documented"
+		},
+		{
+			"observation": "AGENTS.md already documents success workarounds → conventions, failure patterns → pitfalls",
+			"reason": "already-documented"
+		},
+		{
+			"observation": "AGENTS.md already documents validation command resolution priority",
+			"reason": "already-documented"
+		}
+	],
+	"previousRound": null
+}

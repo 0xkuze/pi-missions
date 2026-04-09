@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import setup, { reconcileStateOnStart } from "../extensions/index.js";
-import { loadPlan, loadState, savePlan, saveState } from "../extensions/state/manager.js";
+import { loadPlan, loadState, saveConfig, savePlan, saveState } from "../extensions/state/manager.js";
 import type { Feature, Milestone, MissionPlan, MissionState } from "../extensions/types.js";
 import { nowISO } from "../extensions/utils.js";
 import { makeFeature as _sf, makeMilestone as _sm, makePlan as _sp, makeState as _ss } from "./helpers/index.js";
@@ -23,6 +23,22 @@ function makeFeature(id: string, status: Feature["status"] = "pending", override
 
 function makeMilestone(id: string, features: Feature[], status: Milestone["status"] = "pending"): Milestone {
 	return _sm({ id, name: `Milestone ${id}`, features, status });
+}
+
+function makeReportResultLine(): string {
+	return JSON.stringify({
+		type: "tool_execution_end",
+		toolName: "report_result",
+		args: {
+			whatWasImplemented: "Implemented feature",
+			whatWasLeftUndone: "",
+			commandsRun: [],
+			testsAdded: [],
+			discoveredIssues: [],
+		},
+		result: { content: [{ type: "text", text: "Report submitted." }] },
+		isError: false,
+	});
 }
 
 function makePlan(overrides: Partial<MissionPlan> = {}): MissionPlan {
@@ -269,10 +285,13 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 	});
 
 	it("spawn_worker transitions from approved to executing and updates counters on success", async () => {
-		const successOutput = JSON.stringify({
-			type: "message_end",
-			message: { role: "assistant", content: [{ type: "text", text: "Feature complete." }] },
-		});
+		const successOutput = [
+			makeReportResultLine(),
+			JSON.stringify({
+				type: "message_end",
+				message: { role: "assistant", content: [{ type: "text", text: "Feature complete." }] },
+			}),
+		].join("\n");
 
 		const mockSpawn = (_cmd: string, _args: string[], _opts: object) => {
 			const stdoutHandlers: Array<(data: Buffer) => void> = [];
@@ -323,7 +342,7 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 				clearWidget,
 				isMissionModeActive: () => true,
 				setMissionModeActive: () => {},
-				onActivate: () => {},
+				onActivate: async () => {},
 				onDeactivate: () => {},
 			});
 
@@ -333,6 +352,7 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 				milestones: [makeMilestone("m1", [makeFeature("f1")])],
 			});
 			savePlan(basePath, plan);
+			saveConfig(basePath, { validatorStrictness: "lenient" });
 
 			const result = await invokeTool(mockPi.tools, "spawn_worker", { featureId: "f1" });
 			expect(result.content[0].text).not.toContain("Error");
@@ -349,21 +369,21 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 		}
 	});
 
-	it("update_mission_state returns auto-managed for milestone actions", async () => {
+	it("update_mission_state skip_feature resolves correctly", async () => {
 		const { tools } = registerExtension(tmpDir);
 
 		const executingState = makeState("executing");
 		saveState(basePath, executingState);
 		const plan = makePlan({
-			milestones: [makeMilestone("m1", [makeFeature("f1")], "pending")],
+			milestones: [makeMilestone("m1", [makeFeature("f1")], "active")],
 		});
 		savePlan(basePath, plan);
 
-		const startResult = await invokeTool(tools, "update_mission_state", {
-			action: "start_milestone",
-			targetId: "m1",
+		const skipResult = await invokeTool(tools, "update_mission_state", {
+			action: "skip_feature",
+			targetId: "f1",
 		});
-		expect(startResult.content[0].text).toContain("auto-managed");
+		expect(skipResult.content[0].text).toContain("skipped");
 	});
 
 	it("complete_mission generates report and transitions to completed", async () => {
@@ -827,10 +847,13 @@ describe("VAL-CROSS-013 / VAL-CROSS-005: worker attempt status transitions", () 
 	}
 
 	it("successful attempt has status success, exit code 0, completedAt, durationMs > 0", async () => {
-		const output = JSON.stringify({
-			type: "message_end",
-			message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
-		});
+		const output = [
+			makeReportResultLine(),
+			JSON.stringify({
+				type: "message_end",
+				message: { role: "assistant", content: [{ type: "text", text: "Done." }] },
+			}),
+		].join("\n");
 		const { registerSpawnWorkerTool } = await import("../extensions/tools/spawn-worker.js");
 		const mockPi = buildMockPi();
 		registerSpawnWorkerTool(mockPi.pi, {

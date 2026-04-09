@@ -4,9 +4,10 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
 import { loadMissionConfig, resolveValidationCommands } from "../config.js";
-import { loadPlan, loadState, saveState } from "../state/manager.js";
-import type { MissionPlan, MissionState, ValidationResult } from "../types.js";
+import { loadContract, loadPlan, loadState, saveState } from "../state/manager.js";
+import type { AssertionResultData, MissionPlan, MissionState, ValidationResult } from "../types.js";
 import { nowISO } from "../utils.js";
+import { runContractAssertions } from "./contract-runner.js";
 
 type CommandResult = {
 	exitCode: number | null;
@@ -55,38 +56,68 @@ function truncateOutput(text: string): string {
 function buildSummary(
 	commands: ValidationResult["commands"],
 	outputs?: Map<string, { stdout: string; stderr: string }>,
+	assertionResults?: AssertionResultData[],
 ): string {
+	const parts: string[] = [];
+
 	if (commands.length === 0) {
-		return "No validation commands configured. Validation passed by default.";
-	}
-	const total = commands.length;
-	const passed = commands.filter((c) => c.exitCode === 0 && !c.timedOut).length;
-	const failed = total - passed;
-	if (failed === 0) {
-		return `All ${total} check${total === 1 ? "" : "s"} passed.`;
-	}
-	const failingLabels = commands
-		.filter((c) => c.exitCode !== 0 || c.timedOut)
-		.map((c) => c.label)
-		.join(", ");
-	const header = `${passed}/${total} checks passed, ${failed} failed: ${failingLabels}`;
+		parts.push("No validation commands configured. Validation passed by default.");
+	} else {
+		const total = commands.length;
+		const passed = commands.filter((c) => c.exitCode === 0 && !c.timedOut).length;
+		const failed = total - passed;
+		if (failed === 0) {
+			parts.push(`All ${total} check${total === 1 ? "" : "s"} passed.`);
+		} else {
+			const failingLabels = commands
+				.filter((c) => c.exitCode !== 0 || c.timedOut)
+				.map((c) => c.label)
+				.join(", ");
+			const header = `${passed}/${total} checks passed, ${failed} failed: ${failingLabels}`;
 
-	if (!outputs) return header;
+			if (!outputs) {
+				parts.push(header);
+			} else {
+				const failingOutputs: string[] = [];
+				for (const cmd of commands) {
+					if (cmd.exitCode === 0 && !cmd.timedOut) continue;
+					const out = outputs.get(cmd.command);
+					if (!out) continue;
+					const content = out.stderr.trim() ? out.stderr : out.stdout;
+					const truncated = truncateOutput(content);
+					if (truncated) {
+						failingOutputs.push(`--- ${cmd.label} ---\n${truncated}`);
+					}
+				}
 
-	const failingOutputs: string[] = [];
-	for (const cmd of commands) {
-		if (cmd.exitCode === 0 && !cmd.timedOut) continue;
-		const out = outputs.get(cmd.command);
-		if (!out) continue;
-		const content = out.stderr.trim() ? out.stderr : out.stdout;
-		const truncated = truncateOutput(content);
-		if (truncated) {
-			failingOutputs.push(`--- ${cmd.label} ---\n${truncated}`);
+				if (failingOutputs.length === 0) {
+					parts.push(header);
+				} else {
+					parts.push(`${header}\n\n${failingOutputs.join("\n\n")}`);
+				}
+			}
 		}
 	}
 
-	if (failingOutputs.length === 0) return header;
-	return `${header}\n\n${failingOutputs.join("\n\n")}`;
+	if (assertionResults && assertionResults.length > 0) {
+		const assertionPassed = assertionResults.filter((a) => a.status === "pass").length;
+		const assertionFailed = assertionResults.filter((a) => a.status === "fail").length;
+		const assertionErrors = assertionResults.filter((a) => a.status === "error").length;
+		const totalAssertions = assertionResults.length;
+		if (assertionFailed === 0 && assertionErrors === 0) {
+			parts.push(`All ${totalAssertions} assertion${totalAssertions === 1 ? "" : "s"} passed.`);
+		} else {
+			const failingIds = assertionResults
+				.filter((a) => a.status === "fail" || a.status === "error")
+				.map((a) => a.assertionId)
+				.join(", ");
+			parts.push(
+				`${assertionPassed}/${totalAssertions} assertions passed, ${assertionFailed + assertionErrors} failed: ${failingIds}`,
+			);
+		}
+	}
+
+	return parts.join("\n");
 }
 
 export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationDeps): void {
@@ -161,6 +192,19 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 						{
 							type: "text",
 							text: `Error: milestone '${params.milestoneId}' not found in plan.`,
+						},
+					],
+					details: {},
+				};
+			}
+
+			const completedCount = milestone.features.filter((f) => f.status === "done" || f.status === "skipped").length;
+			if (completedCount === 0) {
+				return {
+					content: [
+						{
+							type: "text",
+							text: `Warning: milestone '${params.milestoneId}' has no completed features. Validation results may be meaningless. Complete features first.`,
 						},
 					],
 					details: {},
@@ -253,8 +297,41 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 
 			const failingChecks = commandResults.filter((c) => c.exitCode !== 0 || c.timedOut).map((c) => c.label);
 
-			const overallStatus: "pass" | "fail" = failingChecks.length === 0 ? "pass" : "fail";
-			const summary = buildSummary(commandResults, commandOutputs);
+			const commandStatus: "pass" | "fail" = failingChecks.length === 0 ? "pass" : "fail";
+
+			const contract = loadContract(deps.basePath);
+			let assertionResults: AssertionResultData[] | undefined;
+			let assertionStatus: "pass" | "fail" = "pass";
+
+			if (contract) {
+				const milestoneFeatureIds = milestone.features.map((f) => f.id);
+				const skippedFeatureIds = new Set(
+					milestone.features.filter((f) => f.status === "skipped").map((f) => f.id),
+				);
+				const blockedFeatureIds = new Set(
+					milestone.features.filter((f) => f.status === "blocked").map((f) => f.id),
+				);
+
+				assertionResults = await runContractAssertions(contract.assertions, runCmd, {
+					basePath: deps.basePath,
+					milestoneId: params.milestoneId,
+					projectDir: deps.projectDir,
+					timeoutMs,
+					milestoneFeatureIds,
+					skippedFeatureIds,
+					blockedFeatureIds,
+					updateContract: true,
+				});
+
+				const assertionFailures = assertionResults.filter((a) => a.status === "fail" || a.status === "error");
+				if (assertionFailures.length > 0) {
+					assertionStatus = "fail";
+				}
+			}
+
+			const overallStatus: "pass" | "fail" =
+				commandStatus === "fail" || assertionStatus === "fail" ? "fail" : "pass";
+			const summary = buildSummary(commandResults, commandOutputs, assertionResults);
 
 			const validationResult: ValidationResult = {
 				status: overallStatus,
@@ -262,6 +339,7 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 				commands: commandResults,
 				summary,
 				failingChecks,
+				...(assertionResults ? { assertions: assertionResults } : {}),
 			};
 
 			writeFileSync(join(runDir, "result.json"), JSON.stringify(validationResult, null, 2), "utf8");

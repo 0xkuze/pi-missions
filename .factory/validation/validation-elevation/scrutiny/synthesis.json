@@ -1,0 +1,30 @@
+{
+	"milestone": "validation-elevation",
+	"round": 2,
+	"status": "pass",
+	"validatorsRun": {
+		"test": { "passed": true, "command": "bun test", "exitCode": 0 },
+		"typecheck": { "passed": true, "command": "npx tsc --noEmit", "exitCode": 0 },
+		"lint": { "passed": true, "command": "npx @biomejs/biome check extensions/", "exitCode": 0 }
+	},
+	"reviewsSummary": {
+		"total": 2,
+		"passed": 2,
+		"failed": 0,
+		"failedFeatures": []
+	},
+	"blockingIssues": [],
+	"appliedUpdates": [],
+	"suggestedGuidanceUpdates": [],
+	"rejectedObservations": [
+		{
+			"observation": "The pattern of mapping contract assertions to AssertionResultData with placeholder values is repeated in 3 places (mission-control.ts, complete.ts, test helpers). A shared helper could reduce duplication.",
+			"reason": "Non-blocking refactoring suggestion; code works correctly as-is and duplication is minor (3 places with identical simple mapping)"
+		},
+		{
+			"observation": "architecture.md tool count is stale (says 11, should be 12 including run_scrutiny)",
+			"reason": "duplicate — already rejected in round 1 as non-blocking advisory library staleness"
+		}
+	],
+	"previousRound": ".factory/validation/validation-elevation/scrutiny/synthesis-round1.json"
+}

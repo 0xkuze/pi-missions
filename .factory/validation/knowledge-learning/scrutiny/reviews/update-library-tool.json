@@ -1,0 +1,51 @@
+{
+  "featureId": "update-library-tool",
+  "reviewedAt": "2026-04-07T14:05:00.000Z",
+  "commitId": "4e83702",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The update_library tool is well-implemented with proper input validation, state gating, path traversal protection, and error handling. The tool correctly validates topic names using a regex that only allows alphanumeric characters and hyphens, rejecting path traversal and slashes. State gating rejects null state (no mission) and terminal statuses (completed, failed, aborted). The library.ts change to create .pi/missions/skills/ during initLibrary is clean, idempotent, and non-disruptive to existing behavior. The clearProtocolCache() call after appendLibraryTopic (added in a later commit 63a4499) correctly ensures protocol regeneration after library changes. The TOPIC_NAME_RE regex is duplicated between update-library.ts and library.ts but serves different purposes (tool-level validation vs library-level validation), so this is acceptable. Tests are thorough with 19 cases covering registration, schema validation, input validation, content appending, state gating, skills directory creation, and markdown storage.",
+    "issues": [
+      {
+        "file": "test/tools/update-library.test.ts",
+        "line": 2,
+        "severity": "non_blocking",
+        "description": "Unused import: rmSync is imported from node:fs but never used in the test file."
+      },
+      {
+        "file": "test/tools/update-library.test.ts",
+        "line": 245,
+        "severity": "non_blocking",
+        "description": "The 'skills stored as markdown' test group (2 tests) only verifies manual filesystem operations (writeFileSync + readFileSync on the skills directory). These tests don't exercise any feature code — they confirm that Node.js can write and read files. The feature claims VAL-SKILLS-005 coverage, but the tool itself writes to library/ not skills/. The skills directory is created by initLibrary, which is tested in the 'skills directory creation' group. The markdown storage tests add no meaningful coverage of the feature's code."
+      },
+      {
+        "file": "test/tools/update-library.test.ts",
+        "line": 80,
+        "severity": "non_blocking",
+        "description": "The 'is only available when mission is active (not idle)' test doesn't actually test the tool's state gating behavior. It creates an active state, loads it, and asserts it's not 'idle'. This is testing saveState/loadState, not the tool. The actual state gating is tested in the 'state gating' describe block, so this is redundant rather than wrong."
+      },
+      {
+        "file": "test/tools/update-library.test.ts",
+        "line": 218,
+        "severity": "non_blocking",
+        "description": "State gating tests only verify 'completed' as a terminal state but not 'failed' or 'aborted'. Since the implementation uses a Set containing all three, one case proves the mechanism works, but testing all three would be more thorough."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "TOPIC_NAME_RE regex (/^[a-zA-Z0-9-]+$/) is duplicated in both extensions/state/library.ts:4 and extensions/tools/update-library.ts:7. Both serve validation but the library module throws errors while the tool returns error results. This dual-validation pattern isn't documented — a future worker might only validate in one place.",
+      "evidence": "extensions/state/library.ts:4 and extensions/tools/update-library.ts:7 both define identical TOPIC_NAME_RE. The tool validates before calling appendLibraryTopic, which also validates via validateTopicName. The double validation means the catch block in the tool would never trigger for invalid topic names."
+    },
+    {
+      "area": "knowledge",
+      "observation": "The architecture.md in .factory/library lists 8 registered tools but doesn't include update_library. The tool count and list should be updated to reflect the new tool.",
+      "evidence": ".factory/library/architecture.md lists '## Tools (8 registered)' with 8 tools. After this feature, update_library is the 9th (plus configure_environment and web_search from other features make it more)."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "The update_library tool implementation passes review. The core functionality is correct: proper TypeBox schema, input validation rejecting empty/invalid topics and content, path traversal protection via regex, state gating for null and terminal states, content appending via appendLibraryTopic, and protocol cache invalidation. The skills directory creation in initLibrary is clean and idempotent. Non-blocking issues are limited to test quality: some tests don't exercise feature code (skills markdown tests), one test is redundant (active state check), unused rmSync import, and incomplete terminal state coverage. None of these affect correctness of the implementation itself."
+}

@@ -2,8 +2,14 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { Value } from "@sinclair/typebox/value";
 import { getDefaultConfig } from "../config.js";
-import type { MissionConfig, MissionPlan, MissionState } from "../types.js";
-import { MissionConfigSchema, MissionPlanSchema, MissionStateSchema } from "../types.js";
+import type { EnvironmentDescriptor, MissionConfig, MissionPlan, MissionState, ValidationContract } from "../types.js";
+import {
+	EnvironmentDescriptorSchema,
+	MissionConfigSchema,
+	MissionPlanSchema,
+	MissionStateSchema,
+	ValidationContractSchema,
+} from "../types.js";
 
 let stateCache: { basePath: string; state: MissionState } | null = null;
 let planCache: { basePath: string; plan: MissionPlan } | null = null;
@@ -44,10 +50,20 @@ function configPath(basePath: string): string {
 	return join(basePath, "config.json");
 }
 
+const MAX_PROGRESS_LOG_ENTRIES = 500;
+const PROGRESS_LOG_TRIM_TO = 400;
+
+function trimProgressLog(state: MissionState): MissionState {
+	if (state.progressLog.length <= MAX_PROGRESS_LOG_ENTRIES) return state;
+	const trimmed = state.progressLog.slice(state.progressLog.length - PROGRESS_LOG_TRIM_TO);
+	return { ...state, progressLog: trimmed };
+}
+
 export function saveState(basePath: string, state: MissionState, cacheCallback?: (data: MissionState) => void): void {
-	atomicWrite(statePath(basePath), JSON.stringify(state, null, 2));
-	stateCache = { basePath, state };
-	cacheCallback?.(state);
+	const trimmedState = trimProgressLog(state);
+	atomicWrite(statePath(basePath), JSON.stringify(trimmedState, null, 2));
+	stateCache = { basePath, state: trimmedState };
+	cacheCallback?.(trimmedState);
 }
 
 export function loadState(basePath: string): MissionState | null {
@@ -149,4 +165,68 @@ function mergeConfig(defaults: MissionConfig, overrides: MissionConfig): Mission
 		validation: overrides.validation ? { ...defaults.validation, ...overrides.validation } : defaults.validation,
 		git: overrides.git ? { ...defaults.git, ...overrides.git } : defaults.git,
 	};
+}
+
+function environmentPath(basePath: string): string {
+	return join(basePath, "environment.json");
+}
+
+export function saveEnvironment(basePath: string, descriptor: EnvironmentDescriptor): void {
+	atomicWrite(environmentPath(basePath), JSON.stringify(descriptor, null, 2));
+}
+
+export function loadEnvironment(basePath: string): EnvironmentDescriptor | null {
+	const file = environmentPath(basePath);
+	let raw: string;
+	try {
+		raw = readFileSync(file, "utf8");
+	} catch {
+		return null;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch (err) {
+		throw new Error(`environment.json contains invalid JSON: ${(err as Error).message}`);
+	}
+	if (!Value.Check(EnvironmentDescriptorSchema, parsed)) {
+		const errors = [...Value.Errors(EnvironmentDescriptorSchema, parsed)];
+		const first = errors[0];
+		throw new Error(
+			`environment.json failed schema validation: ${first ? `${first.path} ${first.message}` : "unknown error"}`,
+		);
+	}
+	return parsed;
+}
+
+function contractPath(basePath: string): string {
+	return join(basePath, "validation-contract.json");
+}
+
+export function saveContract(basePath: string, contract: ValidationContract): void {
+	atomicWrite(contractPath(basePath), JSON.stringify(contract, null, 2));
+}
+
+export function loadContract(basePath: string): ValidationContract | null {
+	const file = contractPath(basePath);
+	let raw: string;
+	try {
+		raw = readFileSync(file, "utf8");
+	} catch {
+		return null;
+	}
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch (err) {
+		throw new Error(`validation-contract.json contains invalid JSON: ${(err as Error).message}`);
+	}
+	if (!Value.Check(ValidationContractSchema, parsed)) {
+		const errors = [...Value.Errors(ValidationContractSchema, parsed)];
+		const first = errors[0];
+		throw new Error(
+			`validation-contract.json failed schema validation: ${first ? `${first.path} ${first.message}` : "unknown error"}`,
+		);
+	}
+	return parsed;
 }

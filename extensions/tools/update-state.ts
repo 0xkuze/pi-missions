@@ -1,6 +1,8 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { findFeatureWithMilestone, hasSuccessfulFixFeature } from "../plan-helpers.js";
 import { loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
+import { autoCompleteMilestone } from "../state/milestone-lifecycle.js";
 import { appendMutation } from "../state/plan-history.js";
 import type { Feature, MissionPlan, MissionState, MissionStatus } from "../types.js";
 import { nowISO } from "../utils.js";
@@ -8,6 +10,7 @@ import { nowISO } from "../utils.js";
 const VALID_STATES_FOR_ACTION: Record<string, ReadonlySet<MissionStatus>> = {
 	skip_feature: new Set(["executing"]),
 	block_feature: new Set(["executing"]),
+	complete_feature: new Set(["executing"]),
 	add_feature: new Set(["planning", "draft_review", "executing"]),
 	remove_feature: new Set(["planning", "draft_review", "executing"]),
 };
@@ -17,103 +20,13 @@ interface Deps {
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
 }
 
-type MilestoneEntry = MissionPlan["milestones"][number];
-type FeatureEntry = MilestoneEntry["features"][number];
-
-function findMilestone(plan: MissionPlan, milestoneId: string): MilestoneEntry | null {
-	return plan.milestones.find((m) => m.id === milestoneId) ?? null;
-}
-
-function findFeatureInPlan(
-	plan: MissionPlan,
-	featureId: string,
-): { milestone: MilestoneEntry; feature: FeatureEntry } | null {
-	for (const milestone of plan.milestones) {
-		const feature = milestone.features.find((f) => f.id === featureId);
-		if (feature) return { milestone, feature };
-	}
-	return null;
-}
-
-function startMilestone(
-	plan: MissionPlan,
-	state: MissionState,
-	milestoneId: string,
-	reason: string | undefined,
-): string | { plan: MissionPlan; state: MissionState } {
-	const milestone = findMilestone(plan, milestoneId);
-	if (!milestone) return `Milestone '${milestoneId}' not found in plan.`;
-	if (milestone.status === "active" || milestone.status === "done") {
-		return { plan, state, idempotent: `Milestone '${milestoneId}' already ${milestone.status}. No action needed.` };
-	}
-
-	const now = nowISO();
-	const updatedPlan: MissionPlan = {
-		...plan,
-		milestones: plan.milestones.map((m) =>
-			m.id === milestoneId ? { ...m, status: "active" as const, startedAt: now } : m,
-		),
-	};
-	const updatedState: MissionState = {
-		...state,
-		currentMilestoneId: milestoneId,
-		progressLog: [
-			...state.progressLog,
-			{
-				timestamp: now,
-				type: "milestone_start" as const,
-				detail: `Milestone '${milestone.name}' started`,
-				metadata: reason ? { reason } : undefined,
-			},
-		],
-	};
-	return { plan: updatedPlan, state: updatedState };
-}
-
-function completeMilestone(
-	plan: MissionPlan,
-	state: MissionState,
-	milestoneId: string,
-	reason: string | undefined,
-): string | { plan: MissionPlan; state: MissionState } {
-	const milestone = findMilestone(plan, milestoneId);
-	if (!milestone) return `Milestone '${milestoneId}' not found in plan.`;
-	if (milestone.status === "done") {
-		return { plan, state, idempotent: `Milestone '${milestoneId}' already done. No action needed.` };
-	}
-	if (milestone.status !== "active") {
-		return `Cannot complete milestone '${milestoneId}': milestone is not active (current status: '${milestone.status}').`;
-	}
-
-	const now = nowISO();
-	const updatedPlan: MissionPlan = {
-		...plan,
-		milestones: plan.milestones.map((m) =>
-			m.id === milestoneId ? { ...m, status: "done" as const, completedAt: now } : m,
-		),
-	};
-	const updatedState: MissionState = {
-		...state,
-		progressLog: [
-			...state.progressLog,
-			{
-				timestamp: now,
-				type: "milestone_complete" as const,
-				detail: `Milestone '${milestone.name}' completed`,
-				metadata: reason ? { reason } : undefined,
-			},
-		],
-	};
-	return { plan: updatedPlan, state: updatedState };
-}
-
 function skipFeature(
 	plan: MissionPlan,
 	state: MissionState,
 	featureId: string,
 	reason: string | undefined,
 ): string | { plan: MissionPlan; state: MissionState } {
-	const found = findFeatureInPlan(plan, featureId);
+	const found = findFeatureWithMilestone(plan, featureId);
 	if (!found) return `Feature '${featureId}' not found in plan.`;
 	if (found.feature.status === "done") {
 		return `Cannot skip feature '${featureId}': feature is already completed.`;
@@ -143,13 +56,63 @@ function skipFeature(
 	return { plan: updatedPlan, state: updatedState };
 }
 
+function completeFeature(
+	plan: MissionPlan,
+	state: MissionState,
+	featureId: string,
+	reason: string | undefined,
+	force?: boolean,
+): string | { plan: MissionPlan; state: MissionState } {
+	const found = findFeatureWithMilestone(plan, featureId);
+	if (!found) return `Feature '${featureId}' not found in plan.`;
+	if (found.feature.status === "done") {
+		return `Cannot complete feature '${featureId}': feature is already completed.`;
+	}
+	const lastAttempt = found.feature.attempts[found.feature.attempts.length - 1];
+	if (lastAttempt && lastAttempt.status === "failure" && !force && !hasSuccessfulFixFeature(plan, featureId)) {
+		return `Cannot complete feature '${featureId}': last worker attempt failed. Use create_fix_feature to fix the failure, or pass force=true to override.`;
+	}
+
+	const wasFailedFeature = found.feature.status === "failed" || (lastAttempt && lastAttempt.status === "failure");
+
+	const now = nowISO();
+	const updatedPlan: MissionPlan = {
+		...plan,
+		milestones: plan.milestones.map((m) => ({
+			...m,
+			features: m.features.map((f) =>
+				f.id === featureId ? { ...f, status: "done" as const, completedAt: now } : f,
+			),
+		})),
+	};
+	const updatedState: MissionState = {
+		...state,
+		totalFeaturesCompleted: state.totalFeaturesCompleted + 1,
+		totalFeaturesFailed: wasFailedFeature ? Math.max(0, state.totalFeaturesFailed - 1) : state.totalFeaturesFailed,
+		progressLog: [
+			...state.progressLog,
+			{
+				timestamp: now,
+				type: "feature_complete" as const,
+				detail: `Feature '${found.feature.name}' manually completed`,
+				metadata: reason
+					? { reason, recovered: wasFailedFeature }
+					: wasFailedFeature
+						? { recovered: true }
+						: undefined,
+			},
+		],
+	};
+	return { plan: updatedPlan, state: updatedState };
+}
+
 function blockFeature(
 	plan: MissionPlan,
 	state: MissionState,
 	featureId: string,
 	reason: string | undefined,
 ): string | { plan: MissionPlan; state: MissionState } {
-	const found = findFeatureInPlan(plan, featureId);
+	const found = findFeatureWithMilestone(plan, featureId);
 	if (!found) return `Feature '${featureId}' not found in plan.`;
 
 	const now = nowISO();
@@ -181,7 +144,7 @@ function addFeature(
 	milestoneId: string,
 	params: { name: string; description: string; acceptanceCriteria: string[]; relevantFiles: string[] },
 ): string | { plan: MissionPlan; feature: Feature } {
-	const milestone = findMilestone(plan, milestoneId);
+	const milestone = plan.milestones.find((m) => m.id === milestoneId);
 	if (!milestone) return `Milestone '${milestoneId}' not found in plan.`;
 	if (milestone.status === "done" || milestone.status === "failed") {
 		return `Cannot add feature to milestone '${milestoneId}': milestone is already ${milestone.status}.`;
@@ -222,7 +185,7 @@ function addFeature(
 }
 
 function removeFeature(basePath: string, plan: MissionPlan, featureId: string): string | { plan: MissionPlan } {
-	const found = findFeatureInPlan(plan, featureId);
+	const found = findFeatureWithMilestone(plan, featureId);
 	if (!found) return `Feature '${featureId}' not found in plan.`;
 	if (found.feature.status === "done") {
 		return `Cannot remove feature '${featureId}': feature is already completed.`;
@@ -270,13 +233,14 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 		name: "update_mission_state",
 		label: "Update Mission State",
 		description:
-			"Update feature status or manage plan. Actions: skip_feature, block_feature, note, add_feature, remove_feature. Milestones are auto-managed.",
-		promptSnippet: "Update mission state: skip/block features, add/remove features, notes.",
+			"Update feature status or manage plan. Actions: skip_feature, block_feature, complete_feature, note, add_feature, remove_feature. Milestones are auto-managed.",
+		promptSnippet: "Update mission state: skip/block/complete features, add/remove features, notes.",
 		parameters: Type.Object({
 			action: Type.Union(
 				[
 					Type.Literal("skip_feature"),
 					Type.Literal("block_feature"),
+					Type.Literal("complete_feature"),
 					Type.Literal("note"),
 					Type.Literal("add_feature"),
 					Type.Literal("remove_feature"),
@@ -294,6 +258,7 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				Type.Array(Type.String(), { description: "Acceptance criteria (required for add_feature)" }),
 			),
 			relevantFiles: Type.Optional(Type.Array(Type.String(), { description: "Relevant files (for add_feature)" })),
+			force: Type.Optional(Type.Boolean({ description: "Force action even when safeguards would block it" })),
 		}),
 		async execute(_toolCallId, params) {
 			const state = loadState(deps.basePath);
@@ -304,7 +269,7 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			const { action, targetId, reason } = params;
+			const { action, targetId, reason, force } = params;
 
 			const validStates = VALID_STATES_FOR_ACTION[action];
 			if (validStates && !validStates.has(state.status)) {
@@ -334,33 +299,42 @@ export function registerUpdateStateTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			}
 
-			if (action === "start_milestone" || action === "complete_milestone") {
+			const simpleFeatureActions: Record<string, { apply: typeof skipFeature; verb: string }> = {
+				skip_feature: { apply: skipFeature, verb: "skipped" },
+				block_feature: { apply: blockFeature, verb: "blocked" },
+			};
+
+			const simpleAction = simpleFeatureActions[action];
+			if (simpleAction || action === "complete_feature") {
+				const verb = simpleAction ? simpleAction.verb : "manually completed";
+				const result = simpleAction
+					? simpleAction.apply(plan, state, targetId, reason)
+					: completeFeature(plan, state, targetId, reason, force);
+				if (typeof result === "string") {
+					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
+				}
+				if (force && action === "complete_feature") {
+					result.state = {
+						...result.state,
+						progressLog: [
+							...result.state.progressLog,
+							{
+								timestamp: nowISO(),
+								type: "plan_mutated" as const,
+								detail: `Force override: complete_feature on '${targetId}'`,
+								metadata: { action: "complete_feature", featureId: targetId, force: true },
+							},
+						],
+					};
+				}
+				const { plan: finalPlan, state: finalState } = autoCompleteMilestone(result.plan, result.state, targetId);
+				savePlan(deps.basePath, finalPlan);
+				saveState(deps.basePath, finalState);
+				deps.updateWidget(finalState, finalPlan);
 				return {
-					content: [{ type: "text", text: "Milestones are auto-managed. No action needed." }],
+					content: [{ type: "text", text: `Feature '${targetId}' ${verb}.` }],
 					details: {},
 				};
-			}
-
-			if (action === "skip_feature") {
-				const result = skipFeature(plan, state, targetId, reason);
-				if (typeof result === "string") {
-					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
-				}
-				savePlan(deps.basePath, result.plan);
-				saveState(deps.basePath, result.state);
-				deps.updateWidget(result.state, result.plan);
-				return { content: [{ type: "text", text: `Feature '${targetId}' skipped.` }], details: {} };
-			}
-
-			if (action === "block_feature") {
-				const result = blockFeature(plan, state, targetId, reason);
-				if (typeof result === "string") {
-					return { content: [{ type: "text", text: `Error: ${result}` }], details: {} };
-				}
-				savePlan(deps.basePath, result.plan);
-				saveState(deps.basePath, result.state);
-				deps.updateWidget(result.state, result.plan);
-				return { content: [{ type: "text", text: `Feature '${targetId}' blocked.` }], details: {} };
 			}
 
 			if (action === "add_feature") {

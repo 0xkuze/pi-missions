@@ -10,6 +10,7 @@ export const DEFAULT_VALIDATOR_MODEL = "openaicodex/gpt-5.4";
 
 const DEFAULT_CONFIG: Required<MissionConfig> = {
 	models: {},
+	modelByComplexity: {},
 	promptingMode: "caveman",
 	spawnAndLearn: true,
 	validation: {
@@ -22,6 +23,7 @@ const DEFAULT_CONFIG: Required<MissionConfig> = {
 	},
 	maxRetries: 3,
 	workerTimeoutMs: 600_000,
+	validatorStrictness: "lenient",
 };
 
 export function getDefaultConfig(): MissionConfig {
@@ -89,10 +91,10 @@ export function resolveValidationCommands(
 	}
 
 	let result: string[];
-	if (config.validation?.commands && config.validation.commands.length > 0) {
-		result = sortCommandsByCanonicalOrder(config.validation.commands);
-	} else if (milestone?.validationCommands && milestone.validationCommands.length > 0) {
+	if (milestone?.validationCommands && milestone.validationCommands.length > 0) {
 		result = sortCommandsByCanonicalOrder(milestone.validationCommands);
+	} else if (config.validation?.commands && config.validation.commands.length > 0) {
+		result = sortCommandsByCanonicalOrder(config.validation.commands);
 	} else if (plan?.validationCommands && plan.validationCommands.length > 0) {
 		result = sortCommandsByCanonicalOrder(plan.validationCommands);
 	} else {

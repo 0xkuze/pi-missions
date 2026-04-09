@@ -5,6 +5,7 @@ import {
 	generateValidatorSkill,
 	writeValidatorFiles,
 } from "../orchestrator/validator-prompt.js";
+import type { ProcLike, SpawnFn } from "../process-types.js";
 import { loadConfig } from "../state/manager.js";
 import type { Feature, MissionConfig, MissionPlan, WorkerResult } from "../types.js";
 import { getPiInvocation } from "../utils.js";
@@ -17,24 +18,9 @@ interface ValidatorResult {
 	raw: string;
 }
 
-type SpawnFn = (command: string, args: string[], options: Record<string, unknown>) => ProcLike;
+const DEFAULT_VALIDATOR_TIMEOUT_MS = 120_000;
 
-interface StreamLike {
-	on(event: string, handler: (data: Buffer) => void): unknown;
-}
-
-interface ProcLike {
-	stdout: StreamLike | null;
-	stderr: StreamLike | null;
-	kill?: (signal: string) => void;
-	killed?: boolean;
-	pid?: number;
-	on(event: string, handler: (...args: unknown[]) => void): unknown;
-}
-
-const DEFAULT_VALIDATOR_TIMEOUT_MS = 300_000;
-
-export function parseValidatorVerdict(stdout: string): ValidatorResult {
+export function parseValidatorVerdict(stdout: string, strictness?: "strict" | "lenient"): ValidatorResult {
 	const events: Array<Record<string, unknown>> = [];
 	for (const line of stdout.split("\n")) {
 		const trimmed = line.trim();
@@ -64,14 +50,22 @@ export function parseValidatorVerdict(stdout: string): ValidatorResult {
 		}
 	}
 
-	return parseVerdictFromText(lastAssistantText);
+	return parseVerdictFromText(lastAssistantText, strictness);
 }
 
-export function parseVerdictFromText(text: string): ValidatorResult {
+export function parseVerdictFromText(text: string, strictness?: "strict" | "lenient"): ValidatorResult {
+	const effectiveStrictness = strictness ?? "lenient";
 	const verdictMatch = /VERDICT:\s*(PASS|FIX|REJECT)/i.exec(text);
 	const feedbackMatch = /FEEDBACK:\s*(.+)/is.exec(text);
 
 	if (!verdictMatch) {
+		if (effectiveStrictness === "strict") {
+			return {
+				verdict: "reject",
+				feedback: "Validator did not produce a structured verdict — no VERDICT line found.",
+				raw: text,
+			};
+		}
 		return {
 			verdict: "pass",
 			feedback: "Validator did not produce a structured verdict — assuming pass.",
@@ -126,11 +120,20 @@ export async function runValidator(
 		timeoutMs,
 	});
 
+	const strictness = config.validatorStrictness ?? "lenient";
+
 	if (procResult.timedOut || procResult.aborted) {
+		if (strictness === "strict") {
+			return {
+				verdict: "reject",
+				feedback: `Validator ${procResult.timedOut ? "timed out" : "was aborted"} — no verdict produced.`,
+				raw: "",
+			};
+		}
 		return { verdict: "pass", feedback: "Validator timed out or was aborted — assuming pass.", raw: "" };
 	}
 
-	return parseValidatorVerdict(procResult.stdout);
+	return parseValidatorVerdict(procResult.stdout, strictness);
 }
 
 function spawnValidatorProcess(

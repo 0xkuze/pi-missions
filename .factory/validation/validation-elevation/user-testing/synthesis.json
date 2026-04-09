@@ -1,0 +1,34 @@
+{
+  "milestone": "validation-elevation",
+  "round": 1,
+  "status": "pass",
+  "assertionsSummary": {
+    "total": 55,
+    "passed": 55,
+    "failed": 0,
+    "blocked": 0
+  },
+  "passedAssertions": [
+    "VAL-CONTRACT-001", "VAL-CONTRACT-002", "VAL-CONTRACT-003", "VAL-CONTRACT-004",
+    "VAL-CONTRACT-005", "VAL-CONTRACT-006", "VAL-CONTRACT-007", "VAL-CONTRACT-008",
+    "VAL-CROSS-006", "VAL-CROSS-009", "VAL-CROSS-012", "VAL-CROSS-013", "VAL-CROSS-014",
+    "VAL-EVIDENCE-001", "VAL-EVIDENCE-002", "VAL-EVIDENCE-003", "VAL-EVIDENCE-004",
+    "VAL-EVIDENCE-005", "VAL-EVIDENCE-006",
+    "VAL-MIGRATION-002", "VAL-MIGRATION-003",
+    "VAL-RUNNER-001", "VAL-RUNNER-002", "VAL-RUNNER-003", "VAL-RUNNER-004",
+    "VAL-RUNNER-005", "VAL-RUNNER-006", "VAL-RUNNER-007", "VAL-RUNNER-008",
+    "VAL-RUNNER-009", "VAL-RUNNER-010", "VAL-RUNNER-011", "VAL-RUNNER-012",
+    "VAL-RUNNER-013", "VAL-RUNNER-014",
+    "VAL-SAFETY-002",
+    "VAL-SCRUTINY-001", "VAL-SCRUTINY-002", "VAL-SCRUTINY-003", "VAL-SCRUTINY-004",
+    "VAL-SCRUTINY-005", "VAL-SCRUTINY-006", "VAL-SCRUTINY-007", "VAL-SCRUTINY-008",
+    "VAL-SCRUTINY-009", "VAL-SCRUTINY-010",
+    "VAL-TOOLREG-003", "VAL-TOOLREG-004",
+    "VAL-VALUI-001", "VAL-VALUI-002", "VAL-VALUI-003", "VAL-VALUI-004",
+    "VAL-VALUI-005", "VAL-VALUI-006", "VAL-VALUI-007"
+  ],
+  "failedAssertions": [],
+  "blockedAssertions": [],
+  "appliedUpdates": [],
+  "previousRound": null
+}

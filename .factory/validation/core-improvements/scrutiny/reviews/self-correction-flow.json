@@ -1,0 +1,34 @@
+{
+  "featureId": "self-correction-flow",
+  "reviewedAt": "2026-04-07T10:35:00.000Z",
+  "commitId": "0be3884",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "The self-correction flow is well-implemented as a pure function `performSelfCorrection()` in spawn-worker.ts. It correctly handles all three autonomy levels (low/medium/high), filters discoveredIssues by severity='high', checks non-empty whatWasLeftUndone, respects maxRetries, creates fix features with correct fixOrigin fields, appends plan mutations, increments totalFixFeaturesCreated, and includes correction summary in the spawn_worker return text. The inline fix feature creation mirrors the logic in create-fix.ts rather than calling the tool, which is a reasonable design choice since calling a registered tool from within another tool's execute function would be awkward with the pi API. 13 comprehensive tests cover all validation criteria. Code follows project conventions: no comments, early returns, const usage, proper imports.",
+    "issues": [
+      {
+        "file": "extensions/tools/spawn-worker.ts",
+        "line": 923,
+        "severity": "non_blocking",
+        "description": "autoCompleteMilestone runs BEFORE performSelfCorrection. If the completed feature is the last in a milestone, the milestone gets marked 'done', then self-correction adds a new 'pending' fix feature to that done milestone without reopening it. This creates a state inconsistency: a 'done' milestone containing a 'pending' feature. findNextPending still finds the fix feature (it ignores milestone status), but downstream code checking milestone.status may misbehave. Consider either (a) running self-correction before autoCompleteMilestone, or (b) reopening the milestone to 'active' when a fix feature is added."
+      },
+      {
+        "file": "extensions/tools/spawn-worker.ts",
+        "line": 438,
+        "severity": "non_blocking",
+        "description": "The failureCount calculation uses the stale `feature` object (from the original plan load at line 596) rather than the updated feature in updatedPlan. The +1 adjustment for result.status==='failure' compensates correctly, but this is fragile — if the code is refactored to use the updated feature, the +1 would cause a double-count. A comment or using the updated plan's feature would make this less error-prone, though per project conventions comments are discouraged."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The feature spec says 'auto-create fix feature via create_fix_feature' but the implementation creates fix features inline in performSelfCorrection() rather than invoking the registered create_fix_feature tool. This is a pragmatic design choice (calling a tool from within a tool is not straightforward), but the inline logic duplicates create-fix.ts. If the create_fix_feature tool's logic changes, the self-correction path won't automatically pick up those changes. AGENTS.md doesn't document this duplication pattern.",
+      "evidence": "extensions/tools/spawn-worker.ts lines 400-530 duplicate the core logic from extensions/tools/create-fix.ts lines 107-165 (Feature construction, plan mutation, state update, appendMutation)."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Self-correction flow implementation passes review. The performSelfCorrection() function correctly handles all specified behaviors: auto-creating fix features at medium/high autonomy for non-empty whatWasLeftUndone or high-severity discoveredIssues, pausing at low autonomy with details in return text, setting correct fixOrigin fields, respecting maxRetries, and including correction decisions in spawn_worker output. Two non-blocking issues noted: (1) milestone can be marked 'done' before a fix feature is added to it, creating a state inconsistency, and (2) failureCount uses a stale feature reference with a compensating +1 that is correct but fragile. 13 tests comprehensively cover VAL-SELFCORR-001 through VAL-SELFCORR-004."
+}

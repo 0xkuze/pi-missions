@@ -638,9 +638,8 @@ describe("VAL-CROSS-010: dirty repo handling through full lifecycle", () => {
 
 		await invokeTool(tools, "commit_changes", { featureId: "f1" });
 
-		// The git snapshot should be preserved in state after the commit
 		const finalState = loadState(basePath);
-		expect(finalState?.gitSnapshot?.headCommit).toBe("original-head");
+		expect(finalState?.gitSnapshot?.headCommit).toBe("new-sha");
 		expect(finalState?.gitSnapshot?.autoCommitEnabled).toBe(true);
 	});
 });

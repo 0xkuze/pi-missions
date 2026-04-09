@@ -1,0 +1,34 @@
+{
+  "featureId": "fix-worker-context-project-info",
+  "reviewedAt": "2026-04-07T20:30:00.000Z",
+  "commitId": "e542ae6",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid implementation. Three new helper functions (buildTsConfigSection, buildPackageInfoSection, buildProjectStructureSection) are added to worker-prompt.ts, each following existing patterns: guard against missing files, parse safely, return empty string on any error. The generateWorkerContext signature gains an optional projectDir parameter preserving backward compatibility. Call site in spawn-worker.ts correctly passes deps.projectDir. 15 new tests cover happy paths, missing files, malformed JSON, backward compat, and integration with existing library/AGENTS.md content. All validators (bun test, tsc, biome) pass.",
+    "issues": [
+      {
+        "file": "extensions/orchestrator/worker-prompt.ts",
+        "line": 156,
+        "severity": "non_blocking",
+        "description": "buildProjectStructureSection uses readdirSync without a limit on the number of entries. In large monorepos, src/ could contain hundreds of files, bloating the worker context. Consider capping output (e.g., first 30 entries with a '...and N more' suffix), similar to how the library system truncates content at MAX_CONTENT_LENGTH."
+      },
+      {
+        "file": "extensions/orchestrator/worker-prompt.ts",
+        "line": 143,
+        "severity": "non_blocking",
+        "description": "buildPackageInfoSection concatenates all dependency names into a single '- deps: ...' line with no cap. Projects with 100+ dependencies would produce an extremely long line. Consider limiting to the first ~20 deps with a truncation indicator."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The new project-info auto-detection logic has no size/length caps on generated sections, unlike the library system which enforces MAX_CONTENT_LENGTH=2000. If this becomes a convention (all injected context should be bounded), it should be documented in AGENTS.md or the architecture library.",
+      "evidence": "extensions/state/library.ts:5 has MAX_CONTENT_LENGTH = 2000 and truncation. extensions/orchestrator/worker-prompt.ts buildProjectStructureSection and buildPackageInfoSection have no such limits."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The implementation correctly addresses the feature requirements: workers now receive TypeScript configuration, package info, and project structure in their context when AGENTS.md is absent. Code is clean, follows existing patterns, handles all error cases gracefully, and is fully backward compatible. Two non-blocking issues noted around unbounded output size for large projects, but these are edge cases that don't affect correctness."
+}

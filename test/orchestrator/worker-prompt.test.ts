@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
 	generateWorkerContext,
@@ -7,6 +7,7 @@ import {
 	generateWorkerSkill,
 	writeWorkerFiles,
 } from "../../extensions/orchestrator/worker-prompt.js";
+import { initLibrary, readLibraryTopic, writeLibraryTopic } from "../../extensions/state/library.js";
 import type { Feature } from "../../extensions/types.js";
 import { createTempDir, makeFeature } from "../helpers/index.js";
 
@@ -49,11 +50,6 @@ describe("generateWorkerSkill", () => {
 		expect(skill).toContain("src/middleware/verify.ts");
 	});
 
-	it("includes focus instructions", () => {
-		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("Implement only what is described");
-	});
-
 	it("includes AGENTS.md conventions when provided (VAL-WORKER-001)", () => {
 		const agentsMd = "## Conventions\n\nUse TypeScript strict mode.";
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), agentsMd);
@@ -73,29 +69,77 @@ describe("generateWorkerSkill", () => {
 		expect(skill).toContain("(none specified)");
 	});
 
-	it("contains Procedure section", () => {
+	it("does NOT contain verbose Procedure section", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("## Procedure");
+		expect(skill).not.toContain("## Procedure");
 	});
 
-	it("contains Verification section", () => {
+	it("does NOT contain verbose Completion section", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).not.toContain("## Completion");
+	});
+
+	it("does NOT contain verbose focus instructions", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).not.toContain("Implement only what is described");
+	});
+
+	it("contains report_result tool instructions", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("report_result");
+	});
+
+	it("report_result section states it is a TOOL CALL", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("TOOL CALL");
+	});
+
+	it("report_result section says You MUST call the report_result tool", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toMatch(/MUST call.*report_result.*tool/i);
+	});
+
+	it("report_result instructions include whatWasImplemented field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("whatWasImplemented");
+	});
+
+	it("report_result instructions include whatWasLeftUndone field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("whatWasLeftUndone");
+	});
+
+	it("report_result instructions include commandsRun field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("commandsRun");
+	});
+
+	it("report_result instructions include testsAdded field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("testsAdded");
+	});
+
+	it("report_result instructions include discoveredIssues field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+		expect(skill).toContain("discoveredIssues");
+	});
+
+	it("contains verification commands section", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
 		expect(skill).toContain("## Verification");
 	});
 
-	it("contains Completion section", () => {
+	it("default mode skill is at most 40 non-empty lines", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("## Completion");
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(40);
 	});
 
-	it("contains instruction to run project test command", () => {
-		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("Run the project's test command");
-	});
-
-	it("contains instruction to run project lint command", () => {
-		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("Run the project's lint command");
+	it("default mode skill with conventions is at most 40 non-empty lines", () => {
+		const agentsMd = "## Conventions\n\nUse TypeScript strict mode.\nNo enums.";
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), agentsMd);
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(40);
 	});
 
 	describe("mission terminology exclusion (VAL-WORKER-002)", () => {
@@ -120,6 +164,96 @@ describe("generateWorkerSkill", () => {
 				expect(skill.toLowerCase()).not.toContain(term.toLowerCase());
 			}
 		});
+	});
+});
+
+describe("generateWorkerSkill (caveman mode)", () => {
+	it("includes feature name", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("Add JWT authentication");
+	});
+
+	it("includes feature description", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("Implement JWT-based authentication with refresh tokens.");
+	});
+
+	it("includes acceptance criteria", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("JWT signing with RS256 algorithm");
+	});
+
+	it("includes relevant files", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("src/auth.ts");
+	});
+
+	it("contains report_result tool instructions", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("report_result");
+	});
+
+	it("report_result section states it is a TOOL", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("TOOL");
+	});
+
+	it("report_result includes whatWasImplemented field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("whatWasImplemented");
+	});
+
+	it("report_result includes whatWasLeftUndone field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("whatWasLeftUndone");
+	});
+
+	it("report_result includes commandsRun field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("commandsRun");
+	});
+
+	it("report_result includes testsAdded field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("testsAdded");
+	});
+
+	it("report_result includes discoveredIssues field", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		expect(skill).toContain("discoveredIssues");
+	});
+
+	it("caveman mode skill is at most 20 non-empty lines", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(20);
+	});
+
+	it("caveman mode skill with conventions is at most 20 non-empty lines", () => {
+		const agentsMd = "## Conventions\n\nUse strict mode.";
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), agentsMd, "caveman");
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(20);
+	});
+
+	it("caveman-full mode produces caveman output", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman-full");
+		expect(skill).toContain("report_result");
+		const nonEmptyLines = skill.split("\n").filter((l) => l.trim().length > 0);
+		expect(nonEmptyLines.length).toBeLessThanOrEqual(20);
+	});
+
+	it("handles empty relevant files gracefully", () => {
+		const feature = makeFeature({ ...JWT_OVERRIDES, relevantFiles: [] });
+		const skill = generateWorkerSkill(feature, undefined, "caveman");
+		expect(skill).not.toContain("undefined");
+	});
+
+	it("excludes forbidden terms", () => {
+		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
+		for (const term of FORBIDDEN_TERMS) {
+			expect(skill.toLowerCase()).not.toContain(term.toLowerCase());
+		}
 	});
 });
 
@@ -162,6 +296,190 @@ describe("generateWorkerContext", () => {
 	it("returns empty string when AGENTS.md is undefined", () => {
 		const ctx = generateWorkerContext(undefined);
 		expect(ctx).toBe("");
+	});
+});
+
+describe("generateWorkerContext with project info", () => {
+	let tmp: ReturnType<typeof createTempDir>;
+
+	beforeEach(() => {
+		tmp = createTempDir("worker-context-project-");
+	});
+
+	afterEach(() => {
+		tmp.cleanup();
+	});
+
+	it("includes TypeScript config section when tsconfig.json exists", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: {
+					strict: true,
+					module: "ESNext",
+					target: "ES2022",
+					moduleResolution: "bundler",
+					verbatimModuleSyntax: true,
+					isolatedModules: true,
+				},
+			}),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("TypeScript Configuration");
+		expect(ctx).toContain("strict: true");
+		expect(ctx).toContain("module: ESNext");
+	});
+
+	it("includes only present tsconfig settings", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "tsconfig.json"),
+			JSON.stringify({
+				compilerOptions: { strict: true, target: "ES2020" },
+			}),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("TypeScript Configuration");
+		expect(ctx).toContain("strict: true");
+		expect(ctx).toContain("target: ES2020");
+		expect(ctx).not.toContain("module:");
+	});
+
+	it("includes Project Info section when package.json exists", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({
+				name: "my-app",
+				type: "module",
+				scripts: { build: "tsc", test: "bun test" },
+				dependencies: { lodash: "^4.0.0" },
+			}),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Info");
+		expect(ctx).toContain("type: module");
+		expect(ctx).toContain("build");
+		expect(ctx).toContain("test");
+		expect(ctx).toContain("lodash");
+	});
+
+	it("includes Project Info with commonjs type", () => {
+		const projectDir = tmp.path;
+		writeFileSync(join(projectDir, "package.json"), JSON.stringify({ name: "cjs-app", type: "commonjs" }));
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("type: commonjs");
+	});
+
+	it("includes Project Structure section when src/ directory exists", () => {
+		const projectDir = tmp.path;
+		mkdirSync(join(projectDir, "src"));
+		writeFileSync(join(projectDir, "src", "index.ts"), "");
+		writeFileSync(join(projectDir, "src", "utils.ts"), "");
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Structure");
+		expect(ctx).toContain("index.ts");
+		expect(ctx).toContain("utils.ts");
+	});
+
+	it("includes Project Structure for extensions/ directory when src/ does not exist", () => {
+		const projectDir = tmp.path;
+		mkdirSync(join(projectDir, "extensions"));
+		writeFileSync(join(projectDir, "extensions", "index.ts"), "");
+		writeFileSync(join(projectDir, "extensions", "types.ts"), "");
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Structure");
+		expect(ctx).toContain("index.ts");
+		expect(ctx).toContain("types.ts");
+	});
+
+	it("omits TypeScript config when no tsconfig.json", () => {
+		const projectDir = tmp.path;
+		writeFileSync(join(projectDir, "package.json"), JSON.stringify({ name: "no-ts" }));
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("TypeScript Configuration");
+	});
+
+	it("omits Project Info when no package.json", () => {
+		const projectDir = tmp.path;
+		writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true } }));
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("Project Info");
+	});
+
+	it("omits Project Structure when no src/ or extensions/ directories", () => {
+		const projectDir = tmp.path;
+		writeFileSync(join(projectDir, "package.json"), JSON.stringify({ name: "minimal" }));
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("Project Structure");
+	});
+
+	it("combines all sections with AGENTS.md and library content", () => {
+		const projectDir = tmp.path;
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\nAvoid global state");
+		writeFileSync(join(projectDir, "tsconfig.json"), JSON.stringify({ compilerOptions: { strict: true } }));
+		writeFileSync(join(projectDir, "package.json"), JSON.stringify({ name: "combo", type: "module" }));
+		mkdirSync(join(projectDir, "src"));
+		writeFileSync(join(projectDir, "src", "main.ts"), "");
+		const agentsMd = "## Conventions\n\nUse strict mode.";
+		const ctx = generateWorkerContext(agentsMd, [], basePath, projectDir);
+		expect(ctx).toContain("Use strict mode.");
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("TypeScript Configuration");
+		expect(ctx).toContain("Project Info");
+		expect(ctx).toContain("Project Structure");
+	});
+
+	it("handles malformed tsconfig.json gracefully", () => {
+		const projectDir = tmp.path;
+		writeFileSync(join(projectDir, "tsconfig.json"), "not json {{{");
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("TypeScript Configuration");
+	});
+
+	it("handles malformed package.json gracefully", () => {
+		const projectDir = tmp.path;
+		writeFileSync(join(projectDir, "package.json"), "not json {{{");
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).not.toContain("Project Info");
+	});
+
+	it("works without projectDir — backward compat", () => {
+		const ctx = generateWorkerContext(undefined, []);
+		expect(ctx).toBe("");
+		expect(ctx).not.toContain("TypeScript Configuration");
+		expect(ctx).not.toContain("Project Info");
+		expect(ctx).not.toContain("Project Structure");
+	});
+
+	it("devDependencies included in Project Info", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({
+				name: "with-dev",
+				devDependencies: { typescript: "^5.0.0", vitest: "^1.0.0" },
+			}),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Info");
+		expect(ctx).toContain("typescript");
+		expect(ctx).toContain("vitest");
+	});
+
+	it("omits scripts section when no scripts in package.json", () => {
+		const projectDir = tmp.path;
+		writeFileSync(
+			join(projectDir, "package.json"),
+			JSON.stringify({ name: "no-scripts", dependencies: { lodash: "^4.0.0" } }),
+		);
+		const ctx = generateWorkerContext(undefined, [], undefined, projectDir);
+		expect(ctx).toContain("Project Info");
+		expect(ctx).toContain("lodash");
+		expect(ctx).not.toContain("Scripts:");
 	});
 });
 
@@ -245,6 +563,130 @@ describe("writeWorkerFiles", () => {
 
 		const skillContent = readFileSync(join(fakeBase, "runtime", "feat-123", "2", "worker-skill.md"), "utf8");
 		expect(skillContent).toBe("skill text");
+	});
+});
+
+describe("generateWorkerContext with library injection", () => {
+	let tmp: ReturnType<typeof createTempDir>;
+
+	beforeEach(() => {
+		tmp = createTempDir("worker-context-lib-");
+	});
+
+	afterEach(() => {
+		tmp.cleanup();
+	});
+
+	it("includes pitfalls content under Known Pitfalls heading (VAL-CROSS-003)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\nAlways run migrations before seeding");
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("Always run migrations before seeding");
+	});
+
+	it("includes conventions content under Project Conventions heading (VAL-CROSS-004)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "conventions", "# Conventions\n\nUse camelCase for variables");
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Project Conventions");
+		expect(ctx).toContain("Use camelCase for variables");
+	});
+
+	it("empty header-only pitfalls file produces no injection (VAL-LIBRARY-006)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).not.toContain("Known Pitfalls");
+	});
+
+	it("empty header-only conventions file produces no injection (VAL-LIBRARY-006)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).not.toContain("Project Conventions");
+	});
+
+	it("conventions supplement AGENTS.md, not replace it (VAL-CROSS-004)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "conventions", "# Conventions\n\nUse strict null checks");
+		const agentsMd = "## Project Conventions\n\nAlways use TypeScript strict mode.";
+		const ctx = generateWorkerContext(agentsMd, [], basePath);
+		expect(ctx).toContain("Always use TypeScript strict mode.");
+		expect(ctx).toContain("Use strict null checks");
+		expect(ctx).toContain("Project Conventions");
+	});
+
+	it("includes both pitfalls and conventions when both have content (VAL-LIBRARY-006)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\nAvoid global state");
+		writeLibraryTopic(basePath, "conventions", "# Conventions\n\nUse named exports");
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("Avoid global state");
+		expect(ctx).toContain("Project Conventions");
+		expect(ctx).toContain("Use named exports");
+	});
+
+	it("works without basePath — no library injection (backward compat)", () => {
+		const ctx = generateWorkerContext(undefined, []);
+		expect(ctx).toBe("");
+		expect(ctx).not.toContain("Known Pitfalls");
+		expect(ctx).not.toContain("Project Conventions");
+	});
+
+	it("works without basePath but with agentsMd — no library injection", () => {
+		const agentsMd = "## Conventions\n\nUse strict mode.";
+		const ctx = generateWorkerContext(agentsMd, []);
+		expect(ctx).toContain("Use strict mode.");
+		expect(ctx).not.toContain("Known Pitfalls");
+		expect(ctx).not.toContain("Project Conventions");
+	});
+
+	it("missing library directory produces no injection and no error", () => {
+		const basePath = tmp.path;
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).not.toContain("Known Pitfalls");
+		expect(ctx).not.toContain("Project Conventions");
+	});
+
+	it("truncated library content included in context (VAL-SCALE-001)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		const longPitfall = "# Pitfalls\n\n" + "x".repeat(2500);
+		writeFileSync(join(basePath, "library", "pitfalls.md"), longPitfall);
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("...truncated");
+		expect(ctx.length).toBeLessThan(longPitfall.length + 100);
+	});
+
+	it("accumulated pitfalls from multiple workers appear in context (VAL-SKILLS-004)", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(
+			basePath,
+			"pitfalls",
+			"# Pitfalls\n\n- Pin dep@2.1.0 due to breaking change\n- Always run migrations first",
+		);
+		const ctx = generateWorkerContext(undefined, [], basePath);
+		expect(ctx).toContain("Pin dep@2.1.0");
+		expect(ctx).toContain("Always run migrations first");
+	});
+
+	it("completed features still included alongside library content", () => {
+		const basePath = tmp.path;
+		initLibrary(basePath);
+		writeLibraryTopic(basePath, "pitfalls", "# Pitfalls\n\nAvoid global state");
+		const completedFeatures = [{ name: "Auth", description: "Auth module", relevantFiles: ["auth.ts"] }];
+		const ctx = generateWorkerContext(undefined, completedFeatures, basePath);
+		expect(ctx).toContain("Known Pitfalls");
+		expect(ctx).toContain("Avoid global state");
+		expect(ctx).toContain("Auth");
 	});
 });
 

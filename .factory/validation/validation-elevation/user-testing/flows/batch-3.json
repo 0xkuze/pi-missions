@@ -1,0 +1,170 @@
+{
+  "groupId": "batch-3",
+  "testedAt": "2026-04-07T00:00:00.000Z",
+  "isolation": {
+    "workingDirectory": "/Users/cristian/tmp/pi-missions",
+    "sharedState": "none — all tests use isolated temp dirs"
+  },
+  "toolsUsed": ["bun test", "npx tsc --noEmit", "npx @biomejs/biome check"],
+  "assertions": [
+    {
+      "id": "VAL-VALUI-001",
+      "title": "Validation view shows per-assertion pass/fail",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/ui/validation-assertions.test.ts", "expected": "Tests tagged VAL-VALUI-001 pass", "observed": "3 tests tagged VAL-VALUI-001 pass: shows ✓ for passed, ✗ for failed, assertion IDs rendered" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/validation-assertions-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VALUI-002",
+      "title": "Widget includes assertion counts (passed/total)",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/ui/widget-assertions.test.ts", "expected": "Tests tagged VAL-VALUI-002 pass", "observed": "3 tests pass: assertion counts in validating state, executing state, and absent when not provided" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/widget-assertions-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VALUI-003",
+      "title": "Report includes assertion outcomes section",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/ui/report-assertions.test.ts", "expected": "Tests tagged VAL-VALUI-003 pass", "observed": "4 tests pass: section present, per-assertion listing, failed output details, omitted when no assertions" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/report-assertions-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VALUI-004",
+      "title": "Report includes evidence summary",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/ui/report-assertions.test.ts", "expected": "Tests tagged VAL-VALUI-004 pass", "observed": "3 tests pass: pass rate included, evidence directory referenced, evidence section header present" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/report-assertions-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VALUI-005",
+      "title": "Assertion status visible in Mission Control",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/ui/validation-assertions.test.ts", "expected": "Tests tagged VAL-VALUI-005 pass", "observed": "1 test passes: renders all assertions in the view with correct count" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/validation-assertions-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VALUI-006",
+      "title": "Validation view handles empty contract gracefully",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/ui/validation-assertions.test.ts", "expected": "Tests tagged VAL-VALUI-006 pass", "observed": "3 tests pass: undefined assertions, empty array, no section header" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/validation-assertions-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-VALUI-007",
+      "title": "Scrutiny findings shown in Mission Control",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/ui/validation-assertions.test.ts", "expected": "Tests tagged VAL-VALUI-007 pass", "observed": "3 tests pass: scrutiny issues shown, error severity distinct from warnings, clean report handled" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/validation-assertions-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-EVIDENCE-005",
+      "title": "Evidence referenced in mission report",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/ui/report-assertions.test.ts", "expected": "Tests covering VAL-EVIDENCE-005 pass (evidence section in report)", "observed": "Tests pass: evidence directory reference and evidence section header present in report output" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/report-assertions-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-012",
+      "title": "All existing tests pass after all changes (2296+ tests, 0 failures)",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test (full suite)", "expected": "2296+ tests pass with 0 failures (baseline was 1861)", "observed": "2296 pass, 0 fail, 4419 expect() calls across 67 files in 8.19s" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/full-suite-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-013",
+      "title": "Type checking passes with all new code",
+      "status": "pass",
+      "steps": [
+        { "action": "Run npx tsc --noEmit", "expected": "Exit code 0 with no errors", "observed": "Exit code 0, no output (clean pass)" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/tsc-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-014",
+      "title": "Linting passes with all new code",
+      "status": "pass",
+      "steps": [
+        { "action": "Run npx @biomejs/biome check extensions/", "expected": "Exit code 0, no diagnostics", "observed": "Checked 52 files in 55ms. No fixes applied. Exit code 0." }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/biome-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-MIGRATION-003",
+      "title": "run_validation with no contract file runs commands only",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-validation.test.ts", "expected": "Tests tagged VAL-MIGRATION-003 pass", "observed": "2 tests pass: 'runs only commands when no contract file exists' and 'no assertion errors when contract file missing'" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-3/run-validation-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 12 assertions: 12 passed, 0 failed, 0 blocked. All UI validation (VAL-VALUI-001 through 007), evidence reporting (VAL-EVIDENCE-005), cross-area checks (VAL-CROSS-012/013/014), and migration backward compatibility (VAL-MIGRATION-003) confirmed working. Full suite: 2296 tests pass with 0 failures. TypeScript and Biome checks are clean."
+}

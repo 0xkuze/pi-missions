@@ -1,0 +1,125 @@
+{
+  "groupId": "learn-env",
+  "testedAt": "2026-04-07T12:00:00.000Z",
+  "isolation": {
+    "workingDirectory": "/Users/cristian/tmp/pi-missions",
+    "testFiles": [
+      "test/tools/learn.test.ts",
+      "test/tools/environment.test.ts",
+      "test/tools/spawn-worker.test.ts",
+      "test/advanced-integration.test.ts",
+      "test/index.test.ts"
+    ]
+  },
+  "toolsUsed": ["bun test"],
+  "assertions": [
+    {
+      "id": "VAL-LEARN-001",
+      "title": "spawnAndLearn config enables/disables learning",
+      "status": "pass",
+      "testFile": "test/tools/learn.test.ts",
+      "evidence": "2 tests in 'VAL-LEARN-001: spawnAndLearn config option enables/disables learning' describe block: 'does not write to pitfalls when spawnAndLearn is false' and 'writes to pitfalls when spawnAndLearn is true' — both pass."
+    },
+    {
+      "id": "VAL-LEARN-002",
+      "title": "Failure pattern extracted after worker failure",
+      "status": "pass",
+      "testFile": "test/tools/learn.test.ts",
+      "evidence": "2 tests in 'VAL-LEARN-002: Failure pattern extracted after worker failure' describe block: 'extracts error kind, message, and details to pitfalls.md' and 'extracts error kind and message when no details' — both pass. Tests verify pitfalls.md contains error kind, message, and details."
+    },
+    {
+      "id": "VAL-LEARN-003",
+      "title": "Success workarounds appended to pitfalls",
+      "status": "pass",
+      "testFile": "test/tools/learn.test.ts",
+      "evidence": "3 tests in 'VAL-LEARN-003: Success workarounds appended to pitfalls' describe block: 'appends discoveredIssues with workarounds', 'appends multiple discoveredIssues', and 'appends workaround from notes when no handoff' — all pass."
+    },
+    {
+      "id": "VAL-LEARN-004",
+      "title": "Future workers receive pitfalls in context",
+      "status": "pass",
+      "testFile": "test/tools/learn.test.ts",
+      "evidence": "1 test in 'VAL-LEARN-004: Future workers receive pitfalls in context' describe block: 'learned pitfalls are readable via readLibraryTopic' — passes. Verifies that after learnFromResult writes a pitfall, readLibraryTopic returns it."
+    },
+    {
+      "id": "VAL-LEARN-005",
+      "title": "learnFromResult returns correct output",
+      "status": "pass",
+      "testFile": "test/tools/learn.test.ts",
+      "evidence": "3 tests in 'VAL-LEARN-005: learnFromResult produces correct output' describe block: returns {learned:true, topic:'pitfalls', entry} for failure, {learned:false} for success with no issues, and {learned:true} for success with discoveredIssues — all pass."
+    },
+    {
+      "id": "VAL-ENV-001",
+      "title": "environment.json schema validates (TypeBox)",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "10 tests in 'EnvironmentDescriptorSchema (VAL-ENV-001)' describe block: validates full descriptor, empty object, partial with services/envVars/setupCommands, rejects invalid services/envVars/setupCommands, accepts without optional fields — all pass."
+    },
+    {
+      "id": "VAL-ENV-002",
+      "title": "configure_environment tool creates environment.json",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "1 test 'creates environment.json with valid descriptor (VAL-ENV-002)' — passes. Verifies file exists and loaded content matches input descriptor."
+    },
+    {
+      "id": "VAL-ENV-003",
+      "title": "configure_environment tool updates existing",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "1 test 'updates existing environment.json (VAL-ENV-003)' — passes. Verifies old services are replaced by new services after second call."
+    },
+    {
+      "id": "VAL-ENV-004",
+      "title": "Services, envVars, setupCommands fields supported",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "1 test 'handles all three field types (VAL-ENV-004)' — passes. Creates environment with all three fields (services, envVars, setupCommands) and verifies round-trip."
+    },
+    {
+      "id": "VAL-ENV-005",
+      "title": "Setup commands run before first worker spawn",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "4 tests in 'Setup commands run before first worker spawn (VAL-ENV-005)': 'runs setup commands before first worker spawn', 'does not re-run on subsequent spawns', 'returns error when setup fails', 'skips setup when no environment.json' — all pass."
+    },
+    {
+      "id": "VAL-ENV-006",
+      "title": "Workers receive environment info in context (secret masking)",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "4 tests in 'generateWorkerContext with environment info (VAL-ENV-006)': 'includes services and non-secret env vars', 'masks secret env var values' (verifies <secret> masking and absence of actual secret), 'omits environment section when no env.json', 'omits when empty' — all pass."
+    },
+    {
+      "id": "VAL-ENV-007",
+      "title": "Environment persists across sessions",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "1 test 'environment written in one session loads in another' — passes. Saves descriptor, invalidates caches, loads again and verifies equality. Also covered by state manager test 'persists across cache invalidation'."
+    },
+    {
+      "id": "VAL-TOOLREG-002",
+      "title": "configure_environment tool registered via registerTool",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "The configure_environment tool tests use createMockPi() → registerConfigureEnvironmentTool(pi, {basePath}) → getRegisteredTool('configure_environment'). All 5 tests in the 'configure_environment tool' describe block successfully retrieve and invoke the tool via the mock pi.registerTool interface, confirming it's registered with correct schema. Additionally, extensions/index.ts line 715 calls registerConfigureEnvironmentTool(pi, {basePath})."
+    },
+    {
+      "id": "VAL-SAFETY-003",
+      "title": "Environment secret values not in runtime logs (masked)",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "Test 'masks secret env var values' in VAL-ENV-006 describe block verifies: context contains 'API_KEY' and '<secret>' but does NOT contain 'super-secret-key'. This confirms secret values are masked in worker context output."
+    },
+    {
+      "id": "VAL-CROSS-007",
+      "title": "Environment setup runs before workers, workers receive env context",
+      "status": "pass",
+      "testFile": "test/tools/environment.test.ts",
+      "evidence": "Covered by VAL-ENV-005 tests (setup commands run before first spawn, not re-run on subsequent spawns, error on setup failure) and VAL-ENV-006 tests (workers receive environment info with secret masking). The combined behavior confirms environment setup runs before workers and workers receive env context."
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 15 assertions: 15 passed, 0 failed, 0 blocked. All 242 tests across 5 test files passed with 0 failures. VAL-TOOLREG-002 is covered by environment.test.ts tool registration tests (not index.test.ts which only checks core 4 tools). VAL-CROSS-007 model switching tests in advanced-integration.test.ts also pass but the environment setup variant is covered by environment.test.ts."
+}

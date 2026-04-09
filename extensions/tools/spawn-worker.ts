@@ -4,8 +4,10 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { resolveModel } from "../config.js";
+import { resolveModel, resolveSpawnAndLearn } from "../config.js";
 import { getChangedFiles, isGitAvailable, stageAndCommit } from "../git.js";
+import { learnFromResult } from "../learn.js";
+import { clearProtocolCache } from "../orchestrator/protocol.js";
 import {
 	type CompletedFeatureSummary,
 	generateWorkerContext,
@@ -13,28 +15,27 @@ import {
 	generateWorkerSkill,
 	writeWorkerFiles,
 } from "../orchestrator/worker-prompt.js";
-import { loadConfig, loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
+import { findFeature } from "../plan-helpers.js";
+import type { ProcLike, SpawnFn } from "../process-types.js";
+import { loadConfig, loadEnvironment, loadPlan, loadState, savePlan, saveState } from "../state/manager.js";
+import { autoCompleteMilestone, autoStartMilestone, findMilestoneForFeature } from "../state/milestone-lifecycle.js";
 import { transitionState } from "../state/transitions.js";
 import type { Feature, MissionPlan, MissionState, WorkerAttempt, WorkerResult } from "../types.js";
 import { getPiInvocation, nowISO } from "../utils.js";
 import { removePidFile, writePidFile } from "../worker-pid.js";
+import { addFixFeatureToPlan } from "./create-fix.js";
 import { synthesizeWorkerResult } from "./result-synthesis.js";
 import { runValidator } from "./validate-worker.js";
 
-interface StreamLike {
-	on(event: string, handler: (data: Buffer) => void): unknown;
+interface SetupCommandResult {
+	success: boolean;
+	command: string;
+	exitCode: number | null;
+	stdout: string;
+	stderr: string;
 }
 
-interface ProcLike {
-	stdout: StreamLike | null;
-	stderr: StreamLike | null;
-	kill?: (signal: string) => void;
-	killed?: boolean;
-	pid?: number;
-	on(event: string, handler: (...args: unknown[]) => void): unknown;
-}
-
-type SpawnFn = (command: string, args: string[], options: Record<string, unknown>) => ProcLike;
+type RunSetupCommandFn = (command: string, cwd: string, timeoutMs: number) => Promise<SetupCommandResult>;
 type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
 interface Deps {
@@ -49,6 +50,7 @@ interface Deps {
 	_isGitAvailableOverride?: (cwd: string) => boolean;
 	_getChangedFilesOverride?: (cwd: string, baseCommit?: string) => string[];
 	_stageAndCommitOverride?: (cwd: string, files: string[], message: string) => string;
+	_runSetupCommandOverride?: RunSetupCommandFn;
 }
 
 const TERMINAL_FEATURE_STATUSES = new Set(["blocked", "skipped", "done"]);
@@ -62,15 +64,6 @@ export function killActiveWorker(): void {
 		activeWorkerProcess.kill();
 		activeWorkerProcess = null;
 	}
-}
-
-function findFeature(plan: MissionPlan, featureId: string): Feature | null {
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.id === featureId) return feature;
-		}
-	}
-	return null;
 }
 
 function findAllFeatures(plan: MissionPlan): Map<string, Feature> {
@@ -106,61 +99,7 @@ function collectCompletedFeatures(plan: MissionPlan, excludeFeatureId: string): 
 	return completed;
 }
 
-function findMilestoneForFeature(plan: MissionPlan, featureId: string): MissionPlan["milestones"][number] | null {
-	for (const milestone of plan.milestones) {
-		if (milestone.features.some((f) => f.id === featureId)) return milestone;
-	}
-	return null;
-}
-
-const RESOLVED_FEATURE_STATUSES = new Set(["done", "skipped", "failed", "blocked"]);
-
-function autoStartMilestone(plan: MissionPlan, state: MissionState, featureId: string): { plan: MissionPlan; state: MissionState } {
-	const milestone = findMilestoneForFeature(plan, featureId);
-	if (!milestone || milestone.status !== "pending") return { plan, state };
-	const now = nowISO();
-	return {
-		plan: {
-			...plan,
-			milestones: plan.milestones.map((m) =>
-				m.id === milestone.id ? { ...m, status: "active" as const, startedAt: now } : m,
-			),
-		},
-		state: {
-			...state,
-			currentMilestoneId: milestone.id,
-			progressLog: [
-				...state.progressLog,
-				{ timestamp: now, type: "milestone_start" as const, detail: `Milestone '${milestone.name}' started` },
-			],
-		},
-	};
-}
-
-function autoCompleteMilestone(plan: MissionPlan, state: MissionState, featureId: string): { plan: MissionPlan; state: MissionState } {
-	const milestone = findMilestoneForFeature(plan, featureId);
-	if (!milestone || milestone.status !== "active") return { plan, state };
-	const allResolved = milestone.features.every((f) => RESOLVED_FEATURE_STATUSES.has(f.status));
-	if (!allResolved) return { plan, state };
-	const now = nowISO();
-	return {
-		plan: {
-			...plan,
-			milestones: plan.milestones.map((m) =>
-				m.id === milestone.id ? { ...m, status: "done" as const, completedAt: now } : m,
-			),
-		},
-		state: {
-			...state,
-			progressLog: [
-				...state.progressLog,
-				{ timestamp: now, type: "milestone_complete" as const, detail: `Milestone '${milestone.name}' completed` },
-			],
-		},
-	};
-}
-
-const RESOLVED_DEP_STATUSES = new Set(["done", "skipped", "failed"]);
+const RESOLVED_DEP_STATUSES = new Set(["done", "skipped"]);
 
 function checkDependencies(feature: Feature, allFeatures: Map<string, Feature>): string | null {
 	for (const depId of feature.dependencies) {
@@ -172,13 +111,36 @@ function checkDependencies(feature: Feature, allFeatures: Map<string, Feature>):
 	return null;
 }
 
+export const REPORT_RESULT_EXTENSION_SOURCE = `import { Type } from "@sinclair/typebox";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+const S = Type.Object({
+  whatWasImplemented: Type.String(),
+  whatWasLeftUndone: Type.String(),
+  commandsRun: Type.Optional(Type.Array(Type.Object({ command: Type.String(), exitCode: Type.Number(), observation: Type.String() }))),
+  testsAdded: Type.Optional(Type.Array(Type.Object({ file: Type.String(), cases: Type.Array(Type.String()) }))),
+  discoveredIssues: Type.Optional(Type.Array(Type.Object({ severity: Type.Union([Type.Literal("low"),Type.Literal("medium"),Type.Literal("high")]), description: Type.String(), suggestedFix: Type.Optional(Type.String()) }))),
+});
+function coerceArrayField(v: unknown): unknown[] { if (Array.isArray(v)) return v; if (typeof v === "string") { try { const p = JSON.parse(v); return Array.isArray(p) ? p : []; } catch { return []; } } return []; }
+export default function register(pi: ExtensionAPI): void {
+  pi.registerTool({ name: "report_result", label: "Report Result", description: "Report your work results. You MUST call this tool when done.", parameters: S, prepareArguments(args: Record<string, unknown>) { return { ...args, commandsRun: coerceArrayField(args.commandsRun), testsAdded: coerceArrayField(args.testsAdded), discoveredIssues: coerceArrayField(args.discoveredIssues) }; }, async execute(_: string, p: typeof S._static) { return { content: [{ type: "text" as const, text: "Result reported successfully.\\nImplemented: " + p.whatWasImplemented }] }; } });
+}`;
+
+function writeReportResultExtension(runtimeDir: string): string {
+	mkdirSync(runtimeDir, { recursive: true });
+	const extensionPath = join(runtimeDir, "report-result-extension.ts");
+	writeFileSync(extensionPath, REPORT_RESULT_EXTENSION_SOURCE, "utf8");
+	return extensionPath;
+}
+
 function buildWorkerArgs(
 	skillPath: string,
 	contextPath: string,
 	promptText: string,
 	workerModel: string | undefined,
+	runtimeDir: string,
 ): string[] {
-	const args: string[] = ["--mode", "json", "-p", "--no-session"];
+	const extensionPath = writeReportResultExtension(runtimeDir);
+	const args: string[] = ["--mode", "json", "-p", "--no-session", "--extension", extensionPath];
 	if (workerModel) {
 		args.push("--model", workerModel);
 	}
@@ -384,6 +346,153 @@ function readAgentsMd(projectDir: string): string | undefined {
 	}
 }
 
+interface SelfCorrectionResult {
+	fixFeatureId?: string;
+	fixFeatureName?: string;
+	summary: string;
+}
+
+function performSelfCorrection(
+	basePath: string,
+	plan: MissionPlan,
+	state: MissionState,
+	feature: Feature,
+	result: WorkerResult,
+	autonomy: "low" | "medium" | "high",
+	maxRetries: number,
+): { updatedPlan: MissionPlan; updatedState: MissionState; correction: SelfCorrectionResult } {
+	const handoff = result.handoff;
+	if (!handoff) {
+		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
+	}
+
+	const hasUndone = handoff.whatWasLeftUndone.trim().length > 0;
+	const highSeverityIssues = handoff.discoveredIssues.filter((i) => i.severity === "high");
+
+	if (!hasUndone && highSeverityIssues.length === 0) {
+		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
+	}
+
+	const reasons: string[] = [];
+	if (hasUndone) reasons.push(`Undone: ${handoff.whatWasLeftUndone}`);
+	for (const issue of highSeverityIssues) reasons.push(`High-severity: ${issue.description}`);
+	const reasonText = reasons.join("; ");
+
+	if (autonomy === "low") {
+		return {
+			updatedPlan: plan,
+			updatedState: state,
+			correction: {
+				summary: `Self-correction: issues found but autonomy is low — please review. ${reasonText}`,
+			},
+		};
+	}
+
+	const failureCount =
+		feature.attempts.filter((a) => a.status === "failure").length + (result.status === "failure" ? 1 : 0);
+	if (failureCount >= maxRetries) {
+		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
+	}
+
+	const milestone = findMilestoneForFeature(plan, feature.id);
+	if (!milestone) {
+		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
+	}
+
+	const descriptionParts: string[] = [];
+	if (hasUndone) descriptionParts.push(handoff.whatWasLeftUndone);
+	for (const issue of highSeverityIssues) descriptionParts.push(issue.description);
+	const fixName = `fix-${feature.name}`;
+
+	const {
+		featureId: fixFeatureId,
+		updatedPlan,
+		updatedState,
+	} = addFixFeatureToPlan(basePath, plan, state, {
+		milestoneId: milestone.id,
+		name: fixName,
+		description: `Self-correction for '${feature.name}': ${descriptionParts.join(". ")}`,
+		acceptanceCriteria:
+			highSeverityIssues.length > 0
+				? highSeverityIssues.map((i) => i.suggestedFix ?? `Fix: ${i.description}`)
+				: [`Complete: ${handoff.whatWasLeftUndone}`],
+		relevantFiles: feature.relevantFiles,
+		sourceKind: "worker-failure",
+		sourceFeatureId: feature.id,
+	});
+
+	return {
+		updatedPlan,
+		updatedState,
+		correction: {
+			fixFeatureId,
+			fixFeatureName: fixName,
+			summary: `Self-correction: auto-created fix feature '${fixName}' (${fixFeatureId}). ${reasonText}`,
+		},
+	};
+}
+
+const DEFAULT_SETUP_TIMEOUT_MS = 60_000;
+
+function runSetupCommand(command: string, cwd: string, timeoutMs: number): Promise<SetupCommandResult> {
+	return new Promise((resolve) => {
+		const proc = spawn("sh", ["-c", command], { cwd, stdio: ["ignore", "pipe", "pipe"] });
+		let stdout = "";
+		let stderr = "";
+		let timedOut = false;
+		proc.stdout.on("data", (chunk: Buffer) => {
+			stdout += chunk.toString();
+		});
+		proc.stderr.on("data", (chunk: Buffer) => {
+			stderr += chunk.toString();
+		});
+		const timeoutId = setTimeout(() => {
+			timedOut = true;
+			proc.kill("SIGTERM");
+		}, timeoutMs);
+		proc.on("close", (code) => {
+			clearTimeout(timeoutId);
+			resolve({ success: !timedOut && code === 0, command, exitCode: timedOut ? null : code, stdout, stderr });
+		});
+		proc.on("error", (err) => {
+			clearTimeout(timeoutId);
+			resolve({ success: false, command, exitCode: null, stdout, stderr: err.message });
+		});
+	});
+}
+
+interface EnvironmentSetupResult {
+	ran: boolean;
+	success: boolean;
+	error?: string;
+}
+
+async function runEnvironmentSetup(
+	basePath: string,
+	projectDir: string,
+	state: MissionState,
+	runSetup: RunSetupCommandFn,
+): Promise<EnvironmentSetupResult> {
+	if (state.environmentSetupComplete) {
+		return { ran: false, success: true };
+	}
+	const env = loadEnvironment(basePath);
+	if (!env?.setupCommands || env.setupCommands.length === 0) {
+		return { ran: false, success: true };
+	}
+	for (const cmd of env.setupCommands) {
+		const result = await runSetup(cmd, projectDir, DEFAULT_SETUP_TIMEOUT_MS);
+		if (!result.success) {
+			return {
+				ran: true,
+				success: false,
+				error: `Environment setup command '${cmd}' failed (exit code ${result.exitCode}): ${result.stderr || result.stdout}`,
+			};
+		}
+	}
+	return { ran: true, success: true };
+}
+
 export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 	const spawnFn: SpawnFn = deps._spawnOverride ?? (spawn as SpawnFn);
 
@@ -418,7 +527,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			return new Text(`${icon} ${output}`, 0, 0);
 		},
 		async execute(_toolCallId, params, signal, onUpdate, ctx) {
-			const state = loadState(deps.basePath);
+			let state = loadState(deps.basePath);
 			if (!state) {
 				return { content: [{ type: "text", text: "Error: no active mission state." }], details: {} };
 			}
@@ -498,6 +607,19 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				}
 			}
 
+			const runSetup = deps._runSetupCommandOverride ?? runSetupCommand;
+			const setupResult = await runEnvironmentSetup(deps.basePath, deps.projectDir, state, runSetup);
+			if (!setupResult.success) {
+				return {
+					content: [{ type: "text", text: `Error: environment setup failed. ${setupResult.error}` }],
+					details: {},
+				};
+			}
+			if (setupResult.ran) {
+				state = { ...state, environmentSetupComplete: true };
+				saveState(deps.basePath, state);
+			}
+
 			const attemptNumber = feature.attempts.length + 1;
 			const runtimeDir = join(deps.basePath, "runtime", feature.id, String(attemptNumber));
 
@@ -505,13 +627,13 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			const completedFeatures = collectCompletedFeatures(plan, feature.id);
 			const skill = generateWorkerSkill(feature, agentsMd, config.promptingMode);
 			const prompt = generateWorkerPrompt(feature, params.additionalContext);
-			const context = generateWorkerContext(agentsMd, completedFeatures);
+			const context = generateWorkerContext(agentsMd, completedFeatures, deps.basePath, deps.projectDir);
 			writeWorkerFiles(deps.basePath, feature.id, attemptNumber, { skill, prompt, context });
 
 			const skillPath = join(runtimeDir, "worker-skill.md");
 			const contextPath = join(runtimeDir, "worker-context.md");
 
-			const workerArgs = buildWorkerArgs(skillPath, contextPath, prompt, workerModel);
+			const workerArgs = buildWorkerArgs(skillPath, contextPath, prompt, workerModel, runtimeDir);
 			const { command, commandArgs } = getPiInvocation(workerArgs);
 
 			let activeState = state;
@@ -665,6 +787,7 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				procResult.exitCode,
 				procResult.signal,
 				startTime,
+				{ projectDir: deps.projectDir },
 			);
 
 			const completedAt = nowISO();
@@ -692,6 +815,16 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 
 			writeRunArtifacts(runtimeDir, procResult.stdout, procResult.stderr, result, metadata);
 
+			const spawnAndLearn = resolveSpawnAndLearn(config);
+			if (
+				learnFromResult(deps.basePath, result, spawnAndLearn, {
+					name: feature.name,
+					description: feature.description,
+				}).learned
+			) {
+				clearProtocolCache();
+			}
+
 			if (result.status === "success") {
 				const validatorResult = await runValidator(feature, result, {
 					basePath: deps.basePath,
@@ -706,7 +839,11 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 						...result,
 						status: "failure",
 						summary: `${result.summary}\n\nValidator: ${validatorResult.feedback}`,
-						error: { kind: "validation", message: `Validator: ${validatorResult.verdict}`, details: validatorResult.feedback },
+						error: {
+							kind: "validation",
+							message: `Validator: ${validatorResult.verdict}`,
+							details: validatorResult.feedback,
+						},
 					};
 				}
 			}
@@ -775,6 +912,18 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				}
 			}
 
+			const autonomy = config.autonomy ?? "medium";
+			const {
+				updatedPlan: correctedPlan,
+				updatedState: correctedState,
+				correction,
+			} = performSelfCorrection(deps.basePath, updatedPlan, activeState, feature, result, autonomy, maxRetries);
+
+			if (correction.fixFeatureId) {
+				updatedPlan = correctedPlan;
+				activeState = correctedState;
+			}
+
 			({ plan: updatedPlan, state: activeState } = autoCompleteMilestone(updatedPlan, activeState, feature.id));
 
 			saveState(deps.basePath, activeState);
@@ -786,17 +935,24 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			const progressDone = activeState.totalFeaturesCompleted + activeState.totalFeaturesSkipped;
 			let completionHint: string;
 			if (result.status !== "success") {
-				completionHint = nextPending ? `Next: ${nextPending.name}.` : "No pending features remain.";
+				if (correction.fixFeatureId) {
+					completionHint = `Self-correction already created fix feature '${correction.fixFeatureName}' (${correction.fixFeatureId}). Call spawn_worker for it. Do NOT call create_fix_feature again for this same failure.`;
+				} else {
+					completionHint = nextPending
+						? `Next: ${nextPending.name}. Action: call create_fix_feature for this failure, then spawn_worker.`
+						: "No pending features remain. Call create_fix_feature to address this failure.";
+				}
 			} else {
 				completionHint = nextPending
 					? `Next: ${nextPending.name}.`
 					: "ALL FEATURES DONE. Call complete_mission now with a summary of what was accomplished.";
 			}
+			const correctionText = correction.summary ? `\n\n${correction.summary}` : "";
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${result.summary}`,
+						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${result.summary}${correctionText}`,
 					},
 				],
 				details: {},

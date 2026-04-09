@@ -58,14 +58,31 @@ describe("parseVerdictFromText", () => {
 		expect(parseVerdictFromText("Verdict: REJECT\nFeedback: bad").verdict).toBe("reject");
 	});
 
-	it("defaults to pass when no VERDICT found", () => {
+	it("defaults to reject when no VERDICT found in strict mode", () => {
+		const result = parseVerdictFromText("Some review text without a structured verdict.", "strict");
+		expect(result.verdict).toBe("reject");
+		expect(result.feedback).toContain("structured verdict");
+	});
+
+	it("defaults to pass when no VERDICT found in lenient mode", () => {
+		const result = parseVerdictFromText("Some review text without a structured verdict.", "lenient");
+		expect(result.verdict).toBe("pass");
+		expect(result.feedback).toContain("assuming pass");
+	});
+
+	it("defaults to pass when no VERDICT found with no strictness specified (default is lenient)", () => {
 		const result = parseVerdictFromText("Some review text without a structured verdict.");
 		expect(result.verdict).toBe("pass");
 		expect(result.feedback).toContain("assuming pass");
 	});
 
-	it("handles empty text", () => {
-		const result = parseVerdictFromText("");
+	it("handles empty text in strict mode", () => {
+		const result = parseVerdictFromText("", "strict");
+		expect(result.verdict).toBe("reject");
+	});
+
+	it("handles empty text in lenient mode", () => {
+		const result = parseVerdictFromText("", "lenient");
 		expect(result.verdict).toBe("pass");
 	});
 
@@ -96,15 +113,32 @@ describe("parseValidatorVerdict", () => {
 		expect(result.feedback).toContain("Missing error handling");
 	});
 
-	it("defaults to pass on empty stdout", () => {
-		const result = parseValidatorVerdict("");
+	it("defaults to reject on empty stdout in strict mode", () => {
+		const result = parseValidatorVerdict("", "strict");
+		expect(result.verdict).toBe("reject");
+	});
+
+	it("defaults to pass on empty stdout in lenient mode", () => {
+		const result = parseValidatorVerdict("", "lenient");
 		expect(result.verdict).toBe("pass");
 	});
 
-	it("defaults to pass when assistant message has no verdict", () => {
+	it("defaults to reject when assistant message has no verdict in strict mode", () => {
 		const stdout = makeStdout([makeMessageEnd("assistant", "Code looks fine to me.")]);
-		const result = parseValidatorVerdict(stdout);
+		const result = parseValidatorVerdict(stdout, "strict");
+		expect(result.verdict).toBe("reject");
+	});
+
+	it("defaults to pass when assistant message has no verdict in lenient mode", () => {
+		const stdout = makeStdout([makeMessageEnd("assistant", "Code looks fine to me.")]);
+		const result = parseValidatorVerdict(stdout, "lenient");
 		expect(result.verdict).toBe("pass");
+	});
+
+	it("explicit VERDICT overrides strictness mode", () => {
+		const stdout = makeStdout([makeMessageEnd("assistant", "VERDICT: PASS\nFEEDBACK: Good.")]);
+		const strictResult = parseValidatorVerdict(stdout, "strict");
+		expect(strictResult.verdict).toBe("pass");
 	});
 });
 
@@ -117,12 +151,19 @@ describe("runValidator", () => {
 			const closeHandlers: Array<(code: number | null, signal: string | null) => void> = [];
 
 			const proc = {
-				stdout: { on: (event: string, handler: (data: Buffer) => void) => { if (event === "data") stdoutHandlers.push(handler); } },
+				stdout: {
+					on: (event: string, handler: (data: Buffer) => void) => {
+						if (event === "data") stdoutHandlers.push(handler);
+					},
+				},
 				stderr: { on: (_event: string, _handler: (data: Buffer) => void) => {} },
 				killed: false,
-				kill: () => { proc.killed = true; },
+				kill: () => {
+					proc.killed = true;
+				},
 				on: (event: string, handler: (...args: unknown[]) => void) => {
-					if (event === "close") closeHandlers.push(handler as (code: number | null, signal: string | null) => void);
+					if (event === "close")
+						closeHandlers.push(handler as (code: number | null, signal: string | null) => void);
 				},
 			};
 
@@ -134,6 +175,32 @@ describe("runValidator", () => {
 
 			return proc;
 		};
+	}
+
+	function makeTimeoutSpawn() {
+		return (_command: string, _args: string[], _options: object) => {
+			let closeHandler: ((code: number | null, signal: string | null) => void) | null = null;
+
+			const proc = {
+				stdout: { on: () => {} },
+				stderr: { on: () => {} },
+				killed: false,
+				pid: 99999,
+				kill: (_signal?: string) => {
+					proc.killed = true;
+					if (closeHandler) setImmediate(() => closeHandler!(null, "SIGTERM"));
+				},
+				on: (event: string, handler: (...args: unknown[]) => void) => {
+					if (event === "close") closeHandler = handler as (code: number | null, signal: string | null) => void;
+				},
+			};
+
+			return proc;
+		};
+	}
+
+	function makeNoVerdictSpawn() {
+		return makeMockSpawn([makeMessageEnd("assistant", "Code looks fine but I could not determine a verdict.")]);
 	}
 
 	beforeEach(() => {
@@ -193,9 +260,7 @@ describe("runValidator", () => {
 		saveState(tmpDir, makeState());
 		savePlan(tmpDir, plan);
 
-		const spawnFn = makeMockSpawn([
-			makeMessageEnd("assistant", "VERDICT: REJECT\nFEEDBACK: Wrong architecture."),
-		]);
+		const spawnFn = makeMockSpawn([makeMessageEnd("assistant", "VERDICT: REJECT\nFEEDBACK: Wrong architecture.")]);
 
 		const result = await runValidator(feature, makeWorkerResult(), {
 			basePath: tmpDir,
@@ -215,9 +280,7 @@ describe("runValidator", () => {
 		savePlan(tmpDir, plan);
 
 		let capturedArgs: string[] = [];
-		const spawnFn = makeMockSpawn([
-			makeMessageEnd("assistant", "VERDICT: PASS\nFEEDBACK: Good."),
-		]);
+		const spawnFn = makeMockSpawn([makeMessageEnd("assistant", "VERDICT: PASS\nFEEDBACK: Good.")]);
 		const wrappedSpawn = (cmd: string, args: string[], opts: object) => {
 			capturedArgs = args;
 			return spawnFn(cmd, args, opts);
@@ -234,5 +297,177 @@ describe("runValidator", () => {
 		expect(capturedArgs).toContain("--model");
 		const modelIdx = capturedArgs.indexOf("--model");
 		expect(capturedArgs[modelIdx + 1]).toBe("my-validator-model");
+	});
+
+	describe("strict mode (default)", () => {
+		it("returns reject on timeout when validatorStrictness is strict", async () => {
+			const feature = makeFeature({ id: "f1" });
+			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
+			saveState(tmpDir, makeState());
+			savePlan(tmpDir, plan);
+
+			const spawnFn = makeTimeoutSpawn();
+
+			const result = await runValidator(feature, makeWorkerResult(), {
+				basePath: tmpDir,
+				projectDir: tmpDir,
+				spawnFn: spawnFn as any,
+				plan,
+				config: { models: { validator: "test-model" }, validatorStrictness: "strict", workerTimeoutMs: 100 },
+				signal: AbortSignal.timeout(10),
+			});
+
+			expect(result.verdict).toBe("reject");
+			expect(result.feedback).toMatch(/timed out|aborted/);
+		});
+
+		it("returns pass on timeout when validatorStrictness is undefined (default is lenient)", async () => {
+			const feature = makeFeature({ id: "f1" });
+			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
+			saveState(tmpDir, makeState());
+			savePlan(tmpDir, plan);
+
+			const spawnFn = makeTimeoutSpawn();
+
+			const result = await runValidator(feature, makeWorkerResult(), {
+				basePath: tmpDir,
+				projectDir: tmpDir,
+				spawnFn: spawnFn as any,
+				plan,
+				config: { models: { validator: "test-model" }, workerTimeoutMs: 100 },
+				signal: AbortSignal.timeout(10),
+			});
+
+			expect(result.verdict).toBe("pass");
+		});
+
+		it("returns reject on abort when validatorStrictness is strict", async () => {
+			const feature = makeFeature({ id: "f1" });
+			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
+			saveState(tmpDir, makeState());
+			savePlan(tmpDir, plan);
+
+			const controller = new AbortController();
+			controller.abort();
+
+			const spawnFn = makeTimeoutSpawn();
+
+			const result = await runValidator(feature, makeWorkerResult(), {
+				basePath: tmpDir,
+				projectDir: tmpDir,
+				spawnFn: spawnFn as any,
+				plan,
+				config: { models: { validator: "test-model" }, validatorStrictness: "strict" },
+				signal: controller.signal,
+			});
+
+			expect(result.verdict).toBe("reject");
+			expect(result.feedback).toMatch(/aborted|timed out/);
+		});
+
+		it("returns reject on missing verdict when validatorStrictness is strict", async () => {
+			const feature = makeFeature({ id: "f1" });
+			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
+			saveState(tmpDir, makeState());
+			savePlan(tmpDir, plan);
+
+			const spawnFn = makeNoVerdictSpawn();
+
+			const result = await runValidator(feature, makeWorkerResult(), {
+				basePath: tmpDir,
+				projectDir: tmpDir,
+				spawnFn: spawnFn as any,
+				plan,
+				config: { models: { validator: "test-model" }, validatorStrictness: "strict" },
+			});
+
+			expect(result.verdict).toBe("reject");
+			expect(result.feedback).toContain("VERDICT");
+		});
+
+		it("returns pass on missing verdict when config has no validatorStrictness (default lenient)", async () => {
+			const feature = makeFeature({ id: "f1" });
+			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
+			saveState(tmpDir, makeState());
+			savePlan(tmpDir, plan);
+
+			const spawnFn = makeNoVerdictSpawn();
+
+			const result = await runValidator(feature, makeWorkerResult(), {
+				basePath: tmpDir,
+				projectDir: tmpDir,
+				spawnFn: spawnFn as any,
+				plan,
+				config: { models: { validator: "test-model" } },
+			});
+
+			expect(result.verdict).toBe("pass");
+		});
+	});
+
+	describe("lenient mode", () => {
+		it("returns pass on timeout when validatorStrictness is lenient", async () => {
+			const feature = makeFeature({ id: "f1" });
+			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
+			saveState(tmpDir, makeState());
+			savePlan(tmpDir, plan);
+
+			const spawnFn = makeTimeoutSpawn();
+
+			const result = await runValidator(feature, makeWorkerResult(), {
+				basePath: tmpDir,
+				projectDir: tmpDir,
+				spawnFn: spawnFn as any,
+				plan,
+				config: { models: { validator: "test-model" }, validatorStrictness: "lenient", workerTimeoutMs: 100 },
+				signal: AbortSignal.timeout(10),
+			});
+
+			expect(result.verdict).toBe("pass");
+			expect(result.feedback).toContain("assuming pass");
+		});
+
+		it("returns pass on abort when validatorStrictness is lenient", async () => {
+			const feature = makeFeature({ id: "f1" });
+			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
+			saveState(tmpDir, makeState());
+			savePlan(tmpDir, plan);
+
+			const controller = new AbortController();
+			controller.abort();
+
+			const spawnFn = makeTimeoutSpawn();
+
+			const result = await runValidator(feature, makeWorkerResult(), {
+				basePath: tmpDir,
+				projectDir: tmpDir,
+				spawnFn: spawnFn as any,
+				plan,
+				config: { models: { validator: "test-model" }, validatorStrictness: "lenient" },
+				signal: controller.signal,
+			});
+
+			expect(result.verdict).toBe("pass");
+		});
+
+		it("returns pass on missing verdict when validatorStrictness is lenient", async () => {
+			const feature = makeFeature({ id: "f1" });
+			const plan = makePlan({ milestones: [makeMilestone({ features: [feature] })] });
+			saveState(tmpDir, makeState());
+			savePlan(tmpDir, plan);
+
+			const spawnFn = makeNoVerdictSpawn();
+
+			const result = await runValidator(feature, makeWorkerResult(), {
+				basePath: tmpDir,
+				projectDir: tmpDir,
+				spawnFn: spawnFn as any,
+				plan,
+				config: { models: { validator: "test-model" }, validatorStrictness: "lenient" },
+			});
+
+			expect(result.verdict).toBe("pass");
+			expect(result.feedback).toContain("assuming pass");
+		});
 	});
 });

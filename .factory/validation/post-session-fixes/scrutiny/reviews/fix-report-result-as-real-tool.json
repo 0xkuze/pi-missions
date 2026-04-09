@@ -1,0 +1,39 @@
+{
+  "featureId": "fix-report-result-as-real-tool",
+  "reviewedAt": "2026-04-07T20:30:00.000Z",
+  "commitId": "80d4e29",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid implementation covering all four expected behaviors. The worker now receives report_result as a real callable tool via --extension flag, and auto-legacy fallback gracefully handles workers that complete work without calling it. The change to result-synthesis.ts is a single-line condition expansion that is correct and well-tested. Worker prompt templates clearly communicate that report_result is a TOOL CALL. 13 new tests cover the critical paths. Two minor non-blocking issues noted.",
+    "issues": [
+      {
+        "file": "extensions/worker-tools/report-result-extension.ts",
+        "line": 1,
+        "severity": "non_blocking",
+        "description": "Dead code: This standalone file is never imported or referenced by any other code. The actual extension source used at runtime is the inline REPORT_RESULT_EXTENSION_SOURCE string in spawn-worker.ts (line 197). This file serves as a reference copy but adds maintenance burden — if the inline source is updated, this file may drift out of sync (they already differ: inline omits 'details: {}' in the return, uses different variable names, and has a less detailed description string)."
+      },
+      {
+        "file": "extensions/tools/spawn-worker.ts",
+        "line": 207,
+        "severity": "non_blocking",
+        "description": "The inline REPORT_RESULT_EXTENSION_SOURCE string and the standalone report-result-extension.ts have divergent implementations: (1) inline uses compact variable names (S, p, _) vs descriptive names in standalone, (2) inline omits 'details: {}' from the return value while standalone includes it, (3) inline has a shorter description string. While functionally equivalent for pi's purposes, having two divergent copies of the same logic is a maintainability risk."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "architecture.md states 'synthesizeWorkerResult defaults to strict mode for report_result extraction. Pass { legacyMode: true } for backward-compat.' This is now partially outdated — the function auto-enables legacy-like behavior when exitCode === 0 && filesChanged.length > 0, meaning strict mode is no longer the true default for workers that produce file changes. The documentation should be updated to reflect auto-legacy fallback.",
+      "evidence": ".factory/library/architecture.md last line of 'Validator Strictness' section vs extensions/tools/result-synthesis.ts:381 condition: `options?.legacyMode || (exitCode === 0 && filesChanged.length > 0)`"
+    },
+    {
+      "area": "conventions",
+      "observation": "AGENTS.md already documents the convention 'Workers are spawned pi processes. They get tools via --extension flag, NOT via registerTool in the main extension.' This was added as part of this commit, showing good shared-state hygiene by the worker.",
+      "evidence": "AGENTS.md Conventions section, 2nd bullet point"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The implementation correctly registers report_result as a real callable tool in worker processes via the --extension flag, adds auto-legacy fallback for graceful degradation, and updates skill templates to clearly instruct TOOL CALL usage. All four expected behaviors are covered by tests. Two non-blocking issues: (1) dead standalone extension file that diverges from the inline source actually used at runtime, (2) architecture.md validator strictness docs are slightly outdated after the auto-legacy change."
+}

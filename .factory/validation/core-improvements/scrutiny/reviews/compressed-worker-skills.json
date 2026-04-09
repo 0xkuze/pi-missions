@@ -1,0 +1,45 @@
+{
+  "featureId": "compressed-worker-skills",
+  "reviewedAt": "2026-04-07T09:15:00.000Z",
+  "commitId": "7a66062",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Clean rewrite of generateWorkerSkill() and generateCavemanWorkerSkill() that successfully compresses worker skills from ~60 non-empty lines to ~18 (default) and ~8 (caveman). Removes verbose Procedure, Completion, and Focus Instructions sections. Adds report_result tool instructions with all five required field names in both modes. Tests thoroughly updated: 16 new tests added covering line count limits, report_result field presence, caveman mode, and caveman-full aliasing. All 57 tests pass, full suite (1935 tests) passes with no regressions. Implementation is well within the <=40 (default) and <=20 (caveman) line limits per validation contract.",
+    "issues": [
+      {
+        "file": "test/orchestrator/worker-prompt.test.ts",
+        "line": 124,
+        "severity": "non_blocking",
+        "description": "Test 'default mode skill with conventions is at most 40 non-empty lines' uses a short 3-line conventions string. With real-world AGENTS.md content (e.g., the 50+ line AGENTS.md in this mission), the combined output would exceed 40 lines. The validation contract (VAL-SKILL-001) explicitly specifies 'no AGENTS.md' for the line count test, so this extra test is overly optimistic. Not blocking since the canonical validation test (without conventions) correctly passes, but this test could become misleading if conventions grow."
+      },
+      {
+        "file": "test/orchestrator/worker-prompt.test.ts",
+        "line": 222,
+        "severity": "non_blocking",
+        "description": "Same issue for caveman: 'caveman mode skill with conventions is at most 20 non-empty lines' uses a 2-line conventions string. With real conventions (e.g., 15+ lines), caveman output would exceed 20 lines. Again, the validation contract (VAL-SKILL-002) says 'no AGENTS.md' for the count, so this is a non-blocking concern about test fragility."
+      },
+      {
+        "file": "extensions/orchestrator/worker-prompt.ts",
+        "line": 34,
+        "severity": "non_blocking",
+        "description": "Caveman mode omits 'Run lint' from verification instructions ('Run tests. Fix if broken.') while default mode includes it ('Run tests. Run lint. Fix if broken.'). This is likely intentional for brevity, but means caveman workers may skip lint. The feature description doesn't explicitly require lint in caveman mode, so this is acceptable."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The implementation appends raw AGENTS.md content to the skill without any truncation or size guard. Since the line count limits (40 default, 20 caveman) are specified without AGENTS.md per the validation contract, there's no enforcement when conventions are included. If a future caller passes a large AGENTS.md, the skill could become very long. This isn't documented as a known limitation.",
+      "evidence": "extensions/orchestrator/worker-prompt.ts:12 — conventionsSection appended verbatim. Verified with bun eval: 15-line conventions + 10 criteria = 43 non-empty lines (exceeds 40)."
+    },
+    {
+      "area": "skills",
+      "observation": "Worker followed the core-worker skill procedure correctly: read relevant files, wrote failing tests first (TDD red phase), implemented, ran full test suite, typecheck, and lint. The skill's procedure matched reality well for this feature.",
+      "evidence": "Transcript shows: Read source → Read tests → Write failing tests → Run tests (16 fail) → Implement → Run tests (57 pass) → Full suite (1935 pass) → tsc → biome. skillFeedback.followedProcedure: true, no deviations."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The implementation correctly compresses worker skills from verbose multi-section templates to lean Droid-style skills. Default mode produces 18 non-empty lines (well under 40 limit), caveman produces 8 (well under 20). Both modes include all five report_result field names. Verbose Procedure, Completion, and Focus Instructions sections are removed. Tests are comprehensive with 57 total (16 new). All validation assertions (VAL-SKILL-001 through VAL-SKILL-006, VAL-HANDOFF-010) are covered. Two non-blocking concerns: (1) convention-inclusive line count tests use short conventions that don't stress-test the limits, and (2) caveman mode omits lint from verification instructions."
+}

@@ -1,0 +1,28 @@
+{
+  "featureId": "stricter-validator",
+  "reviewedAt": "2026-04-07T11:05:00.000Z",
+  "commitId": "7fa725d",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Clean, well-scoped implementation. The `parseVerdictFromText` and `parseValidatorVerdict` functions correctly accept an optional `strictness` parameter defaulting to 'strict'. The `runValidator` function reads `validatorStrictness` from config (defaulting to 'strict') and applies it consistently to timeout/abort and missing-verdict paths. All 5 expectedBehavior items are covered by the 18 new tests. Existing tests were properly updated to opt into 'lenient' mode where they relied on old pass-on-error behavior. The diff is minimal and focused — only `validate-worker.ts` has functional changes; all other file changes are test updates or formatting-only (Biome auto-format). The `validatorStrictness` field was already present in both `MissionConfig` interface and `MissionConfigSchema` (from a precondition/prior feature), so no schema changes were needed in this commit.",
+    "issues": [
+      {
+        "file": "extensions/tools/validate-worker.ts",
+        "line": 137,
+        "severity": "non_blocking",
+        "description": "The lenient-mode fallback message for timeout/abort says 'Validator timed out or was aborted — assuming pass.' regardless of which actually happened. In strict mode, the message correctly distinguishes the two cases via a ternary. This inconsistency is cosmetic and does not affect behavior, but could be confusing in logs."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "When existing tests relied on the old pass-on-error validator behavior, the worker correctly added `saveConfig(basePath, { validatorStrictness: 'lenient' })` calls to preserve their semantics. This pattern (explicitly opting into lenient for backward-compat) is now a testing convention but is not documented in AGENTS.md. Future workers modifying spawn-worker or integration tests that trigger validation should know to either set validatorStrictness in test config or account for the strict default.",
+      "evidence": "test/tools/spawn-worker.test.ts lines 745, 957, 1249, 1315, 1451, 1490, 1520; test/advanced-integration.test.ts lines 220, 627; test/integration.test.ts line 355 — all add saveConfig with validatorStrictness: 'lenient'"
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "The stricter-validator feature is correctly implemented. The core logic in validate-worker.ts adds a strictness parameter to parseVerdictFromText and parseValidatorVerdict (defaulting to 'strict'), and runValidator reads validatorStrictness from config. Strict mode rejects on timeout, abort, and missing verdict; lenient mode preserves the old pass behavior. 18 new tests comprehensively cover all scenarios including default-is-strict. Existing tests properly updated to use lenient mode where needed. The only minor observation is an inconsistent feedback message in the lenient timeout/abort path (cosmetic). All VAL-VALIDATOR assertions (001-003, 005-006) are fulfilled."
+}

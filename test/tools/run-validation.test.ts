@@ -2,9 +2,15 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { savePlan, saveState } from "../../extensions/state/manager.js";
+import { saveContract, savePlan, saveState } from "../../extensions/state/manager.js";
 import { type ExecFn, registerRunValidationTool } from "../../extensions/tools/run-validation.js";
-import type { MissionPlan, MissionState, ValidationResult } from "../../extensions/types.js";
+import type {
+	AssertionResultData,
+	MissionPlan,
+	MissionState,
+	ValidationContract,
+	ValidationResult,
+} from "../../extensions/types.js";
 import {
 	createMockContext,
 	createMockPi,
@@ -15,14 +21,22 @@ import {
 	type ToolResult,
 } from "../helpers/index.js";
 
+const DONE_FEATURE = makeFeature({ status: "done" });
+
+function localMakeMilestone(overrides: Partial<ReturnType<typeof makeMilestone>> = {}) {
+	return makeMilestone({
+		features: [DONE_FEATURE],
+		status: "active",
+		...overrides,
+	});
+}
+
 function localMakePlan(overrides: Partial<MissionPlan> = {}) {
 	return makePlan({
 		milestones: [
-			makeMilestone({
+			localMakeMilestone({
 				name: "Foundation",
 				description: "Core milestone",
-				features: [makeFeature({ status: "done" })],
-				status: "active",
 			}),
 		],
 		validationCommands: ["echo test"],
@@ -143,7 +157,7 @@ describe("registerRunValidationTool", () => {
 		it("executes commands in canonical order (typecheck -> lint -> test -> build) regardless of input order", async () => {
 			const plan = localMakePlan({
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["npm run build", "npm run lint", "npm run typecheck", "npm run test"],
 					}),
 				],
@@ -166,7 +180,7 @@ describe("registerRunValidationTool", () => {
 			const plan = localMakePlan({
 				validationCommands: ["plan-level-command"],
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["echo milestone-test"],
 					}),
 				],
@@ -186,7 +200,7 @@ describe("registerRunValidationTool", () => {
 		it("uses plan-level commands when milestone has no overrides", async () => {
 			const plan = localMakePlan({
 				validationCommands: ["npm run test"],
-				milestones: [makeMilestone({ validationCommands: undefined })],
+				milestones: [localMakeMilestone({ validationCommands: undefined })],
 			});
 			const executedCommands: string[] = [];
 			const exec: ExecFn = async (cmd) => {
@@ -202,7 +216,7 @@ describe("registerRunValidationTool", () => {
 		it("runs all commands even when earlier ones fail (no fail-fast)", async () => {
 			const plan = localMakePlan({
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
 					}),
 				],
@@ -239,7 +253,7 @@ describe("registerRunValidationTool", () => {
 		it("returns fail when any command exits non-zero", async () => {
 			const plan = localMakePlan({
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test"],
 					}),
 				],
@@ -260,7 +274,7 @@ describe("registerRunValidationTool", () => {
 		it("returns fail when any command times out", async () => {
 			const plan = localMakePlan({
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["npm run test"],
 					}),
 				],
@@ -281,7 +295,7 @@ describe("registerRunValidationTool", () => {
 		it("returns pass with explanatory summary when command list is empty", async () => {
 			const plan = localMakePlan({
 				validationCommands: [],
-				milestones: [makeMilestone({ validationCommands: [] })],
+				milestones: [localMakeMilestone({ validationCommands: [] })],
 			});
 			// No package.json in tmpDir, so auto-detect returns empty
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan });
@@ -299,7 +313,7 @@ describe("registerRunValidationTool", () => {
 
 		it("includes per-command results with all required fields", async () => {
 			const plan = localMakePlan({
-				milestones: [makeMilestone({ validationCommands: ["echo test"] })],
+				milestones: [localMakeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan });
 			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
@@ -317,7 +331,7 @@ describe("registerRunValidationTool", () => {
 		it("failingChecks contains labels of failed commands", async () => {
 			const plan = localMakePlan({
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test"],
 					}),
 				],
@@ -338,7 +352,7 @@ describe("registerRunValidationTool", () => {
 	describe("VAL-VAL-003: timeout enforcement", () => {
 		it("passes the configured timeout to runCommand", async () => {
 			const plan = localMakePlan({
-				milestones: [makeMilestone({ validationCommands: ["echo test"] })],
+				milestones: [localMakeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const { writeFileSync: wfs } = await import("node:fs");
 			const { join: pathJoin } = await import("node:path");
@@ -358,7 +372,7 @@ describe("registerRunValidationTool", () => {
 
 		it("uses default timeout of 120000ms when not configured", async () => {
 			const plan = localMakePlan({
-				milestones: [makeMilestone({ validationCommands: ["echo test"] })],
+				milestones: [localMakeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const receivedTimeouts: number[] = [];
 			const exec: ExecFn = async (_cmd, _cwd, timeoutMs) => {
@@ -373,7 +387,7 @@ describe("registerRunValidationTool", () => {
 
 		it("marks command as timedOut:true and exitCode:null when timeout occurs", async () => {
 			const plan = localMakePlan({
-				milestones: [makeMilestone({ validationCommands: ["npm run test"] })],
+				milestones: [localMakeMilestone({ validationCommands: ["npm run test"] })],
 			});
 			const exec: ExecFn = async () => ({
 				exitCode: null,
@@ -408,7 +422,7 @@ describe("registerRunValidationTool", () => {
 
 		it("captures stdout/stderr to per-command files", async () => {
 			const plan = localMakePlan({
-				milestones: [makeMilestone({ validationCommands: ["echo hello"] })],
+				milestones: [localMakeMilestone({ validationCommands: ["echo hello"] })],
 			});
 			const exec: ExecFn = async () => ({
 				exitCode: 0,
@@ -444,7 +458,7 @@ describe("registerRunValidationTool", () => {
 
 		it("appends validation_fail event when commands fail", async () => {
 			const plan = localMakePlan({
-				milestones: [makeMilestone({ validationCommands: ["npm run test"] })],
+				milestones: [localMakeMilestone({ validationCommands: ["npm run test"] })],
 			});
 			const { loadState } = await import("../../extensions/state/manager.js");
 			await callTool(
@@ -471,7 +485,7 @@ describe("registerRunValidationTool", () => {
 	describe("VAL-VAL-006: human-readable summary", () => {
 		it("summary is non-empty and meaningful on pass", async () => {
 			const plan = localMakePlan({
-				milestones: [makeMilestone({ validationCommands: ["echo test"] })],
+				milestones: [localMakeMilestone({ validationCommands: ["echo test"] })],
 			});
 			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan });
 			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
@@ -482,7 +496,7 @@ describe("registerRunValidationTool", () => {
 		it("summary mentions failing checks when commands fail", async () => {
 			const plan = localMakePlan({
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test"],
 					}),
 				],
@@ -561,7 +575,7 @@ describe("registerRunValidationTool", () => {
 		it("runs all three commands even when first fails", async () => {
 			const plan = localMakePlan({
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
 					}),
 				],
@@ -580,7 +594,7 @@ describe("registerRunValidationTool", () => {
 		it("result.json stored to runtime/validation/<milestoneId>/<timestamp>/", async () => {
 			const plan = localMakePlan({
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
 					}),
 				],
@@ -609,7 +623,7 @@ describe("registerRunValidationTool", () => {
 		it("overall status is fail when any command fails", async () => {
 			const plan = localMakePlan({
 				milestones: [
-					makeMilestone({
+					localMakeMilestone({
 						validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
 					}),
 				],
@@ -648,6 +662,368 @@ describe("registerRunValidationTool", () => {
 
 			const lastStatus = widgetCalls[widgetCalls.length - 1];
 			expect(lastStatus).toBe("executing");
+		});
+	});
+
+	describe("VAL-RUNNER-009: contract assertions run after command validation", () => {
+		it("runs commands first, then contract assertions", async () => {
+			const plan = localMakePlan({
+				milestones: [
+					localMakeMilestone({
+						validationCommands: ["echo test"],
+						features: [makeFeature({ id: "f1", status: "done" })],
+					}),
+				],
+			});
+			const callOrder: string[] = [];
+			const exec: ExecFn = async (cmd) => {
+				callOrder.push(cmd);
+				return { exitCode: 0, stdout: "ok", stderr: "", timedOut: false };
+			};
+
+			const contract: ValidationContract = {
+				assertions: [
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "bun test assertion-test",
+						expect: { exitCode: 0 },
+						description: "assertion test",
+						status: "pending",
+					},
+				],
+			};
+			saveContract(tmpDir, contract);
+
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+
+			expect(callOrder[0]).toBe("echo test");
+			expect(callOrder[1]).toBe("bun test assertion-test");
+		});
+
+		it("only runs assertions for features in the current milestone", async () => {
+			const plan = localMakePlan({
+				milestones: [
+					localMakeMilestone({
+						validationCommands: ["echo test"],
+						features: [makeFeature({ id: "f1", status: "done" })],
+					}),
+				],
+			});
+			const execCalls: string[] = [];
+			const exec: ExecFn = async (cmd) => {
+				execCalls.push(cmd);
+				return { exitCode: 0, stdout: "ok", stderr: "", timedOut: false };
+			};
+
+			const contract: ValidationContract = {
+				assertions: [
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "bun test f1-assertion",
+						expect: { exitCode: 0 },
+						description: "f1 assertion",
+						status: "pending",
+					},
+					{
+						id: "a2",
+						featureId: "f-other",
+						type: "command",
+						command: "bun test f-other-assertion",
+						expect: { exitCode: 0 },
+						description: "other feature assertion",
+						status: "pending",
+					},
+				],
+			};
+			saveContract(tmpDir, contract);
+
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+
+			expect(execCalls).toContain("bun test f1-assertion");
+			expect(execCalls).not.toContain("bun test f-other-assertion");
+		});
+	});
+
+	describe("VAL-RUNNER-010: combined results (commands + assertions)", () => {
+		it("status pass when both commands and assertions pass", async () => {
+			const plan = localMakePlan({
+				milestones: [
+					localMakeMilestone({
+						validationCommands: ["echo test"],
+						features: [makeFeature({ id: "f1", status: "done" })],
+					}),
+				],
+			});
+			const exec: ExecFn = async () => ({ exitCode: 0, stdout: "ok", stderr: "", timedOut: false });
+
+			saveContract(tmpDir, {
+				assertions: [
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "echo assertion",
+						expect: { exitCode: 0 },
+						description: "assertion pass",
+						status: "pending",
+					},
+				],
+			});
+
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			expect(parsed.status).toBe("pass");
+			expect(parsed.assertions).toBeDefined();
+			expect(parsed.assertions!.length).toBe(1);
+			expect(parsed.assertions![0]!.status).toBe("pass");
+		});
+
+		it("status fail when commands pass but assertions fail", async () => {
+			const plan = localMakePlan({
+				milestones: [
+					localMakeMilestone({
+						validationCommands: ["echo test"],
+						features: [makeFeature({ id: "f1", status: "done" })],
+					}),
+				],
+			});
+			let callIndex = 0;
+			const exec: ExecFn = async () => {
+				callIndex++;
+				return {
+					exitCode: callIndex > 1 ? 1 : 0,
+					stdout: "ok",
+					stderr: "",
+					timedOut: false,
+				};
+			};
+
+			saveContract(tmpDir, {
+				assertions: [
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "failing-assertion",
+						expect: { exitCode: 0 },
+						description: "will fail",
+						status: "pending",
+					},
+				],
+			});
+
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			expect(parsed.status).toBe("fail");
+			expect(parsed.summary.toLowerCase()).toContain("assertion");
+		});
+
+		it("status fail when commands fail and assertions pass", async () => {
+			const plan = localMakePlan({
+				milestones: [
+					localMakeMilestone({
+						validationCommands: ["failing-command"],
+						features: [makeFeature({ id: "f1", status: "done" })],
+					}),
+				],
+			});
+			let callIndex = 0;
+			const exec: ExecFn = async () => {
+				callIndex++;
+				return {
+					exitCode: callIndex === 1 ? 1 : 0,
+					stdout: "ok",
+					stderr: "",
+					timedOut: false,
+				};
+			};
+
+			saveContract(tmpDir, {
+				assertions: [
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "echo pass",
+						expect: { exitCode: 0 },
+						description: "passing assertion",
+						status: "pending",
+					},
+				],
+			});
+
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			expect(parsed.status).toBe("fail");
+		});
+
+		it("status fail when both commands and assertions fail", async () => {
+			const plan = localMakePlan({
+				milestones: [
+					localMakeMilestone({
+						validationCommands: ["failing-command"],
+						features: [makeFeature({ id: "f1", status: "done" })],
+					}),
+				],
+			});
+			const exec: ExecFn = async () => ({ exitCode: 1, stdout: "", stderr: "error", timedOut: false });
+
+			saveContract(tmpDir, {
+				assertions: [
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "also-failing",
+						expect: { exitCode: 0 },
+						description: "will fail",
+						status: "pending",
+					},
+				],
+			});
+
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			expect(parsed.status).toBe("fail");
+			expect(parsed.summary.toLowerCase()).toContain("fail");
+		});
+
+		it("summary mentions assertion failures when assertions fail", async () => {
+			const plan = localMakePlan({
+				milestones: [
+					localMakeMilestone({
+						validationCommands: ["echo test"],
+						features: [makeFeature({ id: "f1", status: "done" })],
+					}),
+				],
+			});
+			let callIndex = 0;
+			const exec: ExecFn = async () => {
+				callIndex++;
+				return {
+					exitCode: callIndex > 1 ? 1 : 0,
+					stdout: "ok",
+					stderr: "",
+					timedOut: false,
+				};
+			};
+
+			saveContract(tmpDir, {
+				assertions: [
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "fail-cmd",
+						expect: { exitCode: 0 },
+						description: "will fail",
+						status: "pending",
+					},
+				],
+			});
+
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+			expect(parsed.summary.toLowerCase()).toContain("assertion");
+		});
+	});
+
+	describe("VAL-MIGRATION-003: no contract = commands only (backward compat)", () => {
+		it("runs only commands when no contract file exists", async () => {
+			const plan = localMakePlan({
+				milestones: [localMakeMilestone({ validationCommands: ["echo test"] })],
+			});
+			const execCalls: string[] = [];
+			const exec: ExecFn = async (cmd) => {
+				execCalls.push(cmd);
+				return { exitCode: 0, stdout: "ok", stderr: "", timedOut: false };
+			};
+
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+			const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+
+			expect(execCalls).toHaveLength(1);
+			expect(parsed.assertions).toBeUndefined();
+			expect(parsed.status).toBe("pass");
+		});
+
+		it("no assertion errors when contract file missing", async () => {
+			const plan = localMakePlan({
+				milestones: [localMakeMilestone({ validationCommands: ["echo test"] })],
+			});
+			const exec: ExecFn = async () => ({ exitCode: 0, stdout: "ok", stderr: "", timedOut: false });
+
+			const result = await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+			const text = result.content[0].text;
+			expect(text).not.toContain("contract");
+			expect(text).not.toContain("assertion");
+		});
+	});
+
+	describe("VAL-EVIDENCE-002: evidence organized in runtime directory", () => {
+		it("creates assertions directory alongside command timestamp directory", async () => {
+			const plan = localMakePlan({
+				milestones: [
+					localMakeMilestone({
+						validationCommands: ["echo test"],
+						features: [makeFeature({ id: "f1", status: "done" })],
+					}),
+				],
+			});
+			const exec: ExecFn = async () => ({ exitCode: 0, stdout: "output", stderr: "", timedOut: false });
+
+			saveContract(tmpDir, {
+				assertions: [
+					{
+						id: "a1",
+						featureId: "f1",
+						type: "command",
+						command: "echo assertion-output",
+						expect: { exitCode: 0 },
+						description: "evidence test",
+						status: "pending",
+					},
+				],
+			});
+
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+
+			const validationDir = join(tmpDir, "runtime", "validation", "milestone-1");
+			expect(existsSync(validationDir)).toBe(true);
+
+			const { readdirSync } = await import("node:fs");
+			const entries = readdirSync(validationDir);
+			const hasTimestampDir = entries.some((e) => {
+				try {
+					return !e.includes(".");
+				} catch {
+					return false;
+				}
+			});
+			expect(hasTimestampDir).toBe(true);
+
+			const assertionsDir = join(validationDir, "assertions");
+			expect(existsSync(assertionsDir)).toBe(true);
+
+			expect(existsSync(join(assertionsDir, "a1-stdout.log"))).toBe(true);
+			expect(existsSync(join(assertionsDir, "a1-stderr.log"))).toBe(true);
+			expect(existsSync(join(assertionsDir, "a1-result.json"))).toBe(true);
+		});
+
+		it("no assertions directory when no contract exists", async () => {
+			const plan = localMakePlan({
+				milestones: [localMakeMilestone({ validationCommands: ["echo test"] })],
+			});
+			const exec: ExecFn = async () => ({ exitCode: 0, stdout: "ok", stderr: "", timedOut: false });
+
+			await callTool(tmpDir, { milestoneId: "milestone-1" }, { plan, exec });
+
+			const assertionsDir = join(tmpDir, "runtime", "validation", "milestone-1", "assertions");
+			expect(existsSync(assertionsDir)).toBe(false);
 		});
 	});
 });

@@ -1,0 +1,34 @@
+{
+  "featureId": "run-validation-contract-integration",
+  "reviewedAt": "2026-04-07T16:30:00.000Z",
+  "commitId": "ba9eeb9",
+  "transcriptSkeletonReviewed": true,
+  "diffReviewed": true,
+  "status": "pass",
+  "codeReview": {
+    "summary": "Solid implementation of contract assertion integration into run_validation. The worker followed TDD correctly: wrote 11 failing tests first, then implemented. The diff modifies 3 files (run-validation.ts, types.ts, test file) totaling +491/-32 lines. The buildSummary function was refactored from early returns to a parts-array pattern to support assertion summary alongside command summary. The contract loading, milestone feature filtering (including skipped/blocked exclusion), and combined pass/fail status logic are all correct. The assertion results are properly spread into ValidationResult only when present (backward compat). TypeBox schema and interface are structurally aligned. All 2229 tests pass, typecheck clean, biome clean.",
+    "issues": [
+      {
+        "file": "extensions/tools/run-validation.ts",
+        "line": 225,
+        "severity": "non_blocking",
+        "description": "When commands.length === 0, the function returns early without checking for or running contract assertions. If a milestone has no validation commands but does have contract assertions, those assertions are silently skipped. This is a pre-existing early return (not introduced by this commit), but the contract integration was only added to the non-empty commands path. The feature description says 'run contract assertions AFTER command validation' which is ambiguous — could mean 'only if commands ran'. Consider whether empty-commands + contract assertions is a valid scenario."
+      },
+      {
+        "file": "extensions/tools/contract-runner.ts",
+        "line": 8,
+        "severity": "non_blocking",
+        "description": "Duplicate interface: contract-runner.ts defines AssertionResult (local) and types.ts defines AssertionResultData (exported). Both have identical fields. The run-validation.ts imports AssertionResultData from types.ts and assigns the return of runContractAssertions (which returns AssertionResult[]) to it. This works due to structural typing but is conceptual duplication. The contract-runner could import and use AssertionResultData from types.ts instead of defining its own."
+      }
+    ]
+  },
+  "sharedStateObservations": [
+    {
+      "area": "conventions",
+      "observation": "The architecture.md documents 11 registered tools but doesn't mention the validation contract system or that run_validation now runs contract assertions. The new contract integration is a significant behavioral change to tool #3 (run_validation). architecture.md's 'State Files' section lists .pi/missions/ files but doesn't include contract.json or the runtime/validation/{milestoneId}/assertions/ evidence directory.",
+      "evidence": ".factory/library/architecture.md lists run_validation as 'Milestone command validation' and State Files section doesn't mention contract.json or assertions evidence."
+    }
+  ],
+  "addressesFailureFrom": null,
+  "summary": "Pass. The contract assertion integration into run_validation is well-implemented with proper TDD, 11 new tests covering all 4 fulfilled contract assertions (VAL-RUNNER-009, VAL-RUNNER-010, VAL-MIGRATION-003, VAL-EVIDENCE-002), clean typecheck/lint, and no regressions. Two non-blocking issues noted: (1) the pre-existing empty-commands early return path doesn't run contract assertions, (2) duplicate AssertionResult interface between contract-runner.ts and types.ts. Neither is a blocker."
+}

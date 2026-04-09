@@ -1,0 +1,341 @@
+{
+  "groupId": "batch-1",
+  "testedAt": "2026-04-07T00:00:00.000Z",
+  "isolation": {
+    "workingDirectory": "/Users/cristian/tmp/pi-missions",
+    "sharedState": "none — all tests use isolated temp dirs",
+    "testRunner": "bun test (specific files only)"
+  },
+  "toolsUsed": ["bun test"],
+  "assertions": [
+    {
+      "id": "VAL-CONTRACT-001",
+      "title": "Contract schema validation",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/types/validation-contract.test.ts", "expected": "All 18 tests pass", "observed": "18 pass, 0 fail" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/validation-contract-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CONTRACT-002",
+      "title": "Contract created alongside plan during planning",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/submit-plan.test.ts", "expected": "VAL-CONTRACT-002 tagged tests pass", "observed": "3 tests tagged VAL-CONTRACT-002 pass: creates contract when assertions provided, does not create when omitted, does not create when empty array" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/submit-plan-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CONTRACT-003",
+      "title": "submit_plan extended to accept assertions",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/submit-plan.test.ts", "expected": "VAL-CONTRACT-003 tagged tests pass", "observed": "2 tests tagged VAL-CONTRACT-003 pass: accepts assertions with all expect fields, accepts with empty expect object" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/submit-plan-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CONTRACT-004",
+      "title": "Assertion links to features via featureId",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/submit-plan.test.ts", "expected": "VAL-CONTRACT-004 tagged tests pass", "observed": "3 tests tagged VAL-CONTRACT-004 pass: accepts valid featureIds, rejects nonexistent featureId, rejects multiple assertions with one invalid featureId" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/submit-plan-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CONTRACT-005",
+      "title": "Contract persists to filesystem",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/state/manager.test.ts", "expected": "saveContract/loadContract tests pass covering atomic write and schema validation", "observed": "8 tests pass in saveContract/loadContract block: saves and loads correctly, writes pretty-printed JSON, uses atomic write (no tmp file remains), creates directories on demand, returns null when file does not exist, throws on corrupted JSON, throws on valid JSON failing schema validation, round-trips contract with multiple assertions" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/manager-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CONTRACT-006",
+      "title": "State manager CRUD for contract",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/state/manager.test.ts", "expected": "saveContract/loadContract CRUD tests pass", "observed": "8 tests pass covering: null on empty dir, round-trip save/load, corrupted JSON throws, schema mismatch throws, atomic write, directory creation" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/manager-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CONTRACT-007",
+      "title": "Assertion status defaults to pending",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/submit-plan.test.ts", "expected": "VAL-CONTRACT-007 tagged tests pass", "observed": "2 tests pass: forces all assertion statuses to pending regardless of input, forces status to pending even when status is omitted from input" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/submit-plan-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CONTRACT-008",
+      "title": "Contract resubmission replaces previous contract",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/submit-plan.test.ts", "expected": "VAL-CONTRACT-008 tagged tests pass", "observed": "2 tests pass: replaces old contract with new one on resubmission, removes contract when resubmission omits assertions" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/submit-plan-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SAFETY-002",
+      "title": "Validation contract duplicate assertion IDs rejected",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/submit-plan.test.ts", "expected": "Duplicate assertion ID rejection test passes", "observed": "Test 'duplicate assertion ID rejection > rejects assertions with duplicate IDs' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/submit-plan-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-MIGRATION-002",
+      "title": "submit_plan without assertions creates no contract file",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/submit-plan.test.ts", "expected": "Test for submit_plan without assertions passes", "observed": "Tests 'does not create contract file when assertions omitted' and 'does not create contract file when assertions is empty array' both pass" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/submit-plan-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-001",
+      "title": "run_scrutiny tool spawns reviewer pi process",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-SCRUTINY-001 tagged tests pass", "observed": "2 tests pass: spawns pi process with correct arguments, uses reviewer model from config" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-002",
+      "title": "Reviewer receives changed files list",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-SCRUTINY-002 tagged test passes", "observed": "Test 'includes changed files from all features in milestone' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-003",
+      "title": "Reviewer receives plan with criteria and validation contract",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-SCRUTINY-003 tagged test passes", "observed": "Test 'includes milestone description, feature criteria, and contract assertions' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-004",
+      "title": "Reviewer receives library context",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-SCRUTINY-004 tagged test passes", "observed": "Test 'includes pitfalls and conventions from library' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-005",
+      "title": "Reviewer produces structured report",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-SCRUTINY-005 tagged test passes", "observed": "Test 'parses issues with severity, description, location, suggestedFix' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-006",
+      "title": "Scrutiny report written to runtime directory",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-SCRUTINY-006 tagged test passes", "observed": "Test 'writes report.json and stdout.log to runtime/validation/{milestoneId}/scrutiny/' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-007",
+      "title": "Orchestrator protocol includes scrutiny decision instructions",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/orchestrator/protocol.test.ts", "expected": "VAL-SCRUTINY-007 tagged tests pass", "observed": "Tests 'includes run_scrutiny in executing protocol' and 'instructs running scrutiny after validation passes' pass" },
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "Scrutiny tool tests pass", "observed": "All 26 tests pass" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/protocol-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-008",
+      "title": "Scrutiny runs after command validation passes",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/orchestrator/protocol.test.ts", "expected": "VAL-SCRUTINY-008 tagged tests pass", "observed": "Tests 'states validation must pass before scrutiny' and 'includes fix feature instructions for error-severity scrutiny issues' pass" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/protocol-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-009",
+      "title": "Scrutiny handles reviewer timeout gracefully",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-SCRUTINY-009 tagged tests pass", "observed": "2 tests pass: returns warning result on timeout without crashing, calls proc.kill('SIGTERM') on timeout to prevent orphaned processes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-SCRUTINY-010",
+      "title": "Scrutiny parses empty/no-issues output",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-SCRUTINY-010 tagged test passes", "observed": "Test 'returns clean status with empty issues array' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TOOLREG-003",
+      "title": "run_scrutiny tool registered via registerTool",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-TOOLREG-003 tagged test passes", "observed": "Test 'is registered with correct schema requiring milestoneId' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-TOOLREG-004",
+      "title": "run_scrutiny rejects invalid milestone ID",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-TOOLREG-004 tagged test passes", "observed": "Test 'returns error for nonexistent milestone ID' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-EVIDENCE-004",
+      "title": "Scrutiny report stored as evidence",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-EVIDENCE-004 tagged test passes", "observed": "Test 'report.json contains milestoneId, timestamp, issues, reviewerModel, durationMs' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-006",
+      "title": "Scrutiny reviewer has access to validation contract assertions",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-CROSS-006 tagged tests pass", "observed": "2 tests pass: receives contract assertions for current milestone, proceeds without error when no contract file exists" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    },
+    {
+      "id": "VAL-CROSS-009",
+      "title": "Worker handoff data available in milestone scrutiny review",
+      "status": "pass",
+      "steps": [
+        { "action": "Run bun test test/tools/run-scrutiny.test.ts", "expected": "VAL-CROSS-009 tagged test passes", "observed": "Test 'includes worker summaries from completed features' passes" }
+      ],
+      "evidence": {
+        "testOutput": "validation-elevation/batch-1/run-scrutiny-test-output.txt",
+        "consoleErrors": "none"
+      },
+      "issues": null
+    }
+  ],
+  "frictions": [],
+  "blockers": [],
+  "summary": "Tested 25 assertions: 25 passed, 0 failed, 0 blocked. All test files ran successfully with 0 failures across 281 total tests (18 + 44 + 54 + 26 + 139)."
+}

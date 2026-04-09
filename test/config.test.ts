@@ -92,29 +92,30 @@ describe("loadMissionConfig", () => {
 
 describe("resolveValidationCommands", () => {
 	describe("priority chain", () => {
-		it("uses config commands when present (highest priority)", () => {
+		it("uses milestone validationCommands when present (highest priority)", () => {
 			const projectDir = makeProjectDir();
 			const config: MissionConfig = { validation: { commands: ["npm run typecheck", "npm run test"] } };
 			const plan = makePlan({ validationCommands: ["make test"] });
 			const milestone = makeMilestone({ validationCommands: ["cargo test"] });
 			const commands = resolveValidationCommands(config, plan, milestone, projectDir);
+			expect(commands).toContain("cargo test");
+			expect(commands).not.toContain("npm run typecheck");
+			expect(commands).not.toContain("npm run test");
+			expect(commands).not.toContain("make test");
+		});
+
+		it("uses config commands when milestone has none", () => {
+			const projectDir = makeProjectDir();
+			const config: MissionConfig = { validation: { commands: ["npm run typecheck", "npm run test"] } };
+			const plan = makePlan({ validationCommands: ["make test"] });
+			const milestone = makeMilestone();
+			const commands = resolveValidationCommands(config, plan, milestone, projectDir);
 			expect(commands).toContain("npm run typecheck");
 			expect(commands).toContain("npm run test");
 			expect(commands).not.toContain("make test");
-			expect(commands).not.toContain("cargo test");
 		});
 
-		it("uses milestone validationCommands when config has none", () => {
-			const projectDir = makeProjectDir();
-			const config: MissionConfig = {};
-			const plan = makePlan({ validationCommands: ["make test"] });
-			const milestone = makeMilestone({ validationCommands: ["cargo test"] });
-			const commands = resolveValidationCommands(config, plan, milestone, projectDir);
-			expect(commands).toContain("cargo test");
-			expect(commands).not.toContain("make test");
-		});
-
-		it("uses plan-level commands when config and milestone have none", () => {
+		it("uses plan-level commands when milestone and config have none", () => {
 			const projectDir = makeProjectDir();
 			const config: MissionConfig = {};
 			const plan = makePlan({ validationCommands: ["npm run test"] });
@@ -136,6 +137,16 @@ describe("resolveValidationCommands", () => {
 			const config: MissionConfig = {};
 			const commands = resolveValidationCommands(config, null, null, projectDir);
 			expect(commands).toEqual([]);
+		});
+
+		it("milestone overrides config even when both have commands", () => {
+			const projectDir = makeProjectDir();
+			const config: MissionConfig = { validation: { commands: ["npm run test"] } };
+			const milestone = makeMilestone({ validationCommands: ["cargo test", "cargo build"] });
+			const commands = resolveValidationCommands(config, null, milestone, projectDir);
+			expect(commands).toContain("cargo test");
+			expect(commands).toContain("cargo build");
+			expect(commands).not.toContain("npm run test");
 		});
 	});
 

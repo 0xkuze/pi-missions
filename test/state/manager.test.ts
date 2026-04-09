@@ -6,9 +6,11 @@ import {
 	clearStateCache,
 	invalidateCaches,
 	loadConfig,
+	loadContract,
 	loadPlan,
 	loadState,
 	saveConfig,
+	saveContract,
 	savePlan,
 	saveState,
 } from "../../extensions/state/manager.js";
@@ -435,5 +437,100 @@ describe("plan cache", () => {
 		invalidateCaches(dir);
 		const loaded = loadPlan(dir);
 		expect(loaded).toBeNull();
+	});
+});
+
+describe("saveContract / loadContract", () => {
+	const validContract = {
+		assertions: [
+			{
+				id: "a1",
+				featureId: "f1",
+				type: "command" as const,
+				command: "bun test",
+				expect: {
+					exitCode: 0,
+					stdoutContains: "pass",
+					stdoutNotContains: "fail",
+					stderrContains: "",
+				},
+				description: "Tests pass",
+				status: "pending" as const,
+			},
+		],
+	};
+
+	it("saves and loads contract correctly", () => {
+		const dir = makeTmpDir();
+		saveContract(dir, validContract);
+		const loaded = loadContract(dir);
+		expect(loaded).toEqual(validContract);
+	});
+
+	it("writes pretty-printed JSON", () => {
+		const dir = makeTmpDir();
+		saveContract(dir, validContract);
+		const raw = readFileSync(join(dir, "validation-contract.json"), "utf8");
+		expect(raw).toContain("\n");
+		expect(JSON.parse(raw)).toEqual(validContract);
+	});
+
+	it("uses atomic write (no tmp file remains)", () => {
+		const dir = makeTmpDir();
+		saveContract(dir, validContract);
+		expect(existsSync(join(dir, "validation-contract.json.tmp"))).toBe(false);
+		expect(existsSync(join(dir, "validation-contract.json"))).toBe(true);
+	});
+
+	it("creates directories on demand", () => {
+		const dir = join(tmp.path, "deep", "contract", "dir");
+		saveContract(dir, validContract);
+		expect(existsSync(join(dir, "validation-contract.json"))).toBe(true);
+	});
+
+	it("returns null when file does not exist", () => {
+		const dir = makeTmpDir();
+		expect(loadContract(dir)).toBeNull();
+	});
+
+	it("throws on corrupted JSON", () => {
+		const dir = makeTmpDir();
+		writeFileSync(join(dir, "validation-contract.json"), "not json");
+		expect(() => loadContract(dir)).toThrow(/invalid JSON/);
+	});
+
+	it("throws on valid JSON failing schema validation", () => {
+		const dir = makeTmpDir();
+		const invalid = { assertions: [{ id: 123 }] };
+		writeFileSync(join(dir, "validation-contract.json"), JSON.stringify(invalid));
+		expect(() => loadContract(dir)).toThrow(/schema validation/);
+	});
+
+	it("round-trips contract with multiple assertions", () => {
+		const dir = makeTmpDir();
+		const contract = {
+			assertions: [
+				{
+					id: "a1",
+					featureId: "f1",
+					type: "command" as const,
+					command: "bun test",
+					expect: { exitCode: 0 },
+					description: "Unit tests pass",
+					status: "pending" as const,
+				},
+				{
+					id: "a2",
+					featureId: "f2",
+					type: "script" as const,
+					command: "node -e 'console.log(42)'",
+					expect: { stdoutContains: "42" },
+					description: "Script output",
+					status: "pending" as const,
+				},
+			],
+		};
+		saveContract(dir, contract);
+		expect(loadContract(dir)).toEqual(contract);
 	});
 });

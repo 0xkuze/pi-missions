@@ -1,0 +1,59 @@
+{
+	"milestone": "core-improvements",
+	"round": 1,
+	"status": "pass",
+	"validatorsRun": {
+		"test": { "passed": true, "command": "bun test", "exitCode": 0 },
+		"typecheck": { "passed": true, "command": "npx tsc --noEmit", "exitCode": 0 },
+		"lint": { "passed": true, "command": "npx @biomejs/biome check extensions/", "exitCode": 0 }
+	},
+	"validatorFixes": [
+		{
+			"validator": "typecheck",
+			"description": "Fixed 5 type errors in update-state.ts and test/integration.test.ts: removed dead code (unused startMilestone/completeMilestone functions with idempotent property errors), re-added start_milestone/complete_milestone to action union to fix unreachable comparison, fixed onActivate callback type in test"
+		}
+	],
+	"reviewsSummary": {
+		"total": 7,
+		"passed": 7,
+		"failed": 0,
+		"failedFeatures": []
+	},
+	"blockingIssues": [],
+	"appliedUpdates": [
+		{
+			"target": "library",
+			"description": "Added architecture.md entry documenting protocol dynamic section conventions (dual compact thresholds, section headers, validatorStrictness testing convention)",
+			"sourceFeature": "progressive-protocol-injection, plan-context-in-protocol, stricter-validator"
+		}
+	],
+	"suggestedGuidanceUpdates": [
+		{
+			"target": "AGENTS.md",
+			"suggestion": "Add convention: derive TypeScript types from TypeBox schemas using Static<typeof Schema> when both exist, rather than manually duplicating interfaces. Example: WorkerHandoff should be `type WorkerHandoff = Static<typeof ReportResultSchema>` rather than a separate interface.",
+			"evidence": "Feature report-result-schema-and-types defined WorkerHandoff interface manually instead of deriving from ReportResultSchema via Static<>. types.ts exports Static from @sinclair/typebox, showing the pattern is available.",
+			"isSystemic": false
+		},
+		{
+			"target": "AGENTS.md",
+			"suggestion": "Add note about self-correction logic in spawn-worker.ts duplicating create-fix.ts inline. If create_fix_feature tool logic changes, the performSelfCorrection() path must be updated independently. Consider extracting shared logic into a helper function.",
+			"evidence": "Feature self-correction-flow: extensions/tools/spawn-worker.ts lines 400-530 duplicate the core feature-creation logic from extensions/tools/create-fix.ts lines 107-165.",
+			"isSystemic": false
+		}
+	],
+	"rejectedObservations": [
+		{
+			"observation": "Commit bundles biome formatting changes in unrelated files alongside feature implementation",
+			"reason": "already-documented: AGENTS.md already states 'Never mix refactors with fixes in the same commit'"
+		},
+		{
+			"observation": "No truncation/size guard for AGENTS.md conventions content appended to skills",
+			"reason": "ambiguous: This would be a design change rather than a factual observation. The validation contract explicitly tests line counts without AGENTS.md."
+		},
+		{
+			"observation": "Worker followed the core-worker skill procedure correctly for compressed-worker-skills",
+			"reason": "duplicate: Informational observation, not an actionable update"
+		}
+	],
+	"previousRound": null
+}

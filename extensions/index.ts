@@ -1,4 +1,4 @@
-import { exec } from "node:child_process";
+import { exec, spawn } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
@@ -8,46 +8,56 @@ import { resolveModel } from "./config.js";
 import { captureGitSnapshot, ensureGitRepo, isGitAvailable } from "./git.js";
 import { handleMissionInput } from "./input-handler.js";
 import { buildCompactMissionSummary, buildOrchestratorProtocol, clearProtocolCache } from "./orchestrator/protocol.js";
+import { findFeature, hasPendingFeatures } from "./plan-helpers.js";
 import { isOnboardingCompleted, saveGlobalConfig } from "./state/global-config.js";
+import { initLibrary } from "./state/library.js";
 import { acquireLock, getLockConflict, releaseLock } from "./state/lock.js";
-import { invalidateCaches, loadConfig, loadPlan, loadState, savePlan, saveState } from "./state/manager.js";
+import {
+	invalidateCaches,
+	loadConfig,
+	loadContract,
+	loadPlan,
+	loadState,
+	savePlan,
+	saveState,
+} from "./state/manager.js";
 import { appendMutation, clearHistory } from "./state/plan-history.js";
 import { loadRegistry, removeFromRegistry, updateRegistry } from "./state/registry.js";
 import { transitionState } from "./state/transitions.js";
 import { type Question, type QuestionAnswer, registerAskQuestionsTool } from "./tools/ask-questions.js";
 import { registerCommitChangesTool } from "./tools/commit-changes.js";
 import { registerCompleteMissionTool } from "./tools/complete.js";
+import { registerConfigureEnvironmentTool } from "./tools/configure-environment.js";
 import { registerCreateFixTool } from "./tools/create-fix.js";
+import { registerRunScrutinyTool } from "./tools/run-scrutiny.js";
 import { registerRunValidationTool } from "./tools/run-validation.js";
 import { killActiveWorker, registerSpawnWorkerTool } from "./tools/spawn-worker.js";
 import { registerSubmitPlanTool } from "./tools/submit-plan.js";
+import { registerUpdateLibraryTool } from "./tools/update-library.js";
 import { registerUpdateStateTool } from "./tools/update-state.js";
+import { registerWebSearchTool } from "./tools/web-search.js";
 import type { Feature, GlobalConfig, MissionPlan, MissionState, WorkerResult } from "./types.js";
+import { TERMINAL_STATUSES } from "./types.js";
 import { DraftReviewComponent } from "./ui/draft-review.js";
 import { MissionControlComponent } from "./ui/mission-control.js";
 import { OnboardingOverlayComponent } from "./ui/onboarding-overlay.js";
 import { QuestionsOverlayComponent } from "./ui/questions-overlay.js";
-import type { ThemeStyler } from "./ui/widget.js";
+import type { ThemeStyler, WidgetAssertionInfo } from "./ui/widget.js";
 import { buildWidgetLines } from "./ui/widget.js";
 import { generateId, nowISO } from "./utils.js";
 import { checkOrphanedWorker, killOrphanedWorker } from "./worker-pid.js";
 
 const SESSION_CACHE_KEY = "mission-state-cache";
-const TERMINAL_STATUSES = new Set(["completed", "failed", "aborted"]);
+const PAUSABLE_STATUSES = new Set(["planning", "draft_review", "approved", "validating"]);
 
 function cachePayload(state: MissionState): MissionState {
 	return { ...state, progressLog: [] };
 }
 
-function hasPendingFeatures(basePath: string): boolean {
+function hasPendingWork(basePath: string): boolean {
 	const plan = loadPlan(basePath);
 	if (!plan) return false;
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.status === "pending" || feature.status === "active") return true;
-		}
-	}
-	return false;
+	return hasPendingFeatures(plan);
 }
 
 type RecoveryAction =
@@ -68,15 +78,6 @@ function readResultJson(resultPath: string): WorkerResult | null {
 	}
 }
 
-function findFeatureInPlan(plan: MissionPlan, featureId: string): Feature | null {
-	for (const milestone of plan.milestones) {
-		for (const feature of milestone.features) {
-			if (feature.id === featureId) return feature;
-		}
-	}
-	return null;
-}
-
 function determineRecovery(state: MissionState, plan: MissionPlan | null, basePath: string): RecoveryAction {
 	if (state.status === "executing") {
 		const featureId = state.currentFeatureId;
@@ -86,7 +87,7 @@ function determineRecovery(state: MissionState, plan: MissionPlan | null, basePa
 		if (!plan) {
 			return { kind: "mission_failed", reason: "Plan missing during recovery" };
 		}
-		const feature = findFeatureInPlan(plan, featureId);
+		const feature = findFeature(plan, featureId);
 		if (!feature) {
 			return { kind: "missing_feature", featureId };
 		}
@@ -320,8 +321,12 @@ export default function (pi: ExtensionAPI): void {
 		"update_mission_state",
 		"complete_mission",
 		"run_validation",
+		"run_scrutiny",
 		"create_fix_feature",
 		"ask_questions",
+		"update_library",
+		"configure_environment",
+		"web_search",
 	] as const;
 
 	const missionToolSet = new Set<string>(MISSION_TOOL_NAMES);
@@ -373,13 +378,18 @@ export default function (pi: ExtensionAPI): void {
 		return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}|${plan?.planVersion ?? 0}`;
 	}
 
-	function renderMissionWidget(ctx: ExtensionContext, state: MissionState, plan?: MissionPlan): void {
+	function renderMissionWidget(
+		ctx: ExtensionContext,
+		state: MissionState,
+		plan?: MissionPlan,
+		assertionInfo?: WidgetAssertionInfo,
+	): void {
 		const key = widgetCacheKey(state, plan);
 		if (key === lastWidgetKey) return;
 		lastWidgetKey = key;
 		ctx.ui.setWidget("mission", (_tui, theme) => {
 			const styler: ThemeStyler = { fg: theme.fg.bind(theme), bold: theme.bold.bind(theme) };
-			const lines = buildWidgetLines(state, plan, undefined, styler);
+			const lines = buildWidgetLines(state, plan, undefined, styler, assertionInfo);
 			const container = new Container();
 			for (const line of lines) {
 				container.addChild(new Text(line, 1, 0));
@@ -388,9 +398,22 @@ export default function (pi: ExtensionAPI): void {
 		});
 	}
 
+	function computeAssertionInfo(state: MissionState): WidgetAssertionInfo | undefined {
+		if (state.status !== "executing" && state.status !== "validating") return undefined;
+		const contract = loadContract(basePath);
+		if (!contract) return undefined;
+		const completed = contract.assertions.filter(
+			(a) => a.status === "pass" || a.status === "fail" || a.status === "error",
+		);
+		if (completed.length === 0) return undefined;
+		const passed = completed.filter((a) => a.status === "pass").length;
+		return { assertionsPassed: passed, assertionsTotal: completed.length };
+	}
+
 	function updateWidget(state: MissionState, plan?: MissionPlan): void {
+		const assertionInfo = computeAssertionInfo(state);
 		if (latestCtx) {
-			renderMissionWidget(latestCtx, state, plan);
+			renderMissionWidget(latestCtx, state, plan, assertionInfo);
 		}
 		// Mirror every state change to the session entry cache so the widget
 		// can be restored after /compact or a fresh session start.
@@ -538,10 +561,18 @@ export default function (pi: ExtensionAPI): void {
 
 		const plan = loadPlan(basePath);
 		const config = loadConfig(basePath);
-		const isHighUsage = lastContextPercent !== null && lastContextPercent > 70;
-		const protocol = buildOrchestratorProtocol(state, plan ?? undefined, config, isHighUsage);
+		const turnCount = state.turnCount ?? 1;
+		const protocol = buildOrchestratorProtocol(state, plan ?? undefined, config, false, {
+			turnCount,
+			contextUsagePercent: lastContextPercent ?? undefined,
+		});
 
 		if (!protocol) return undefined;
+
+		if (state.status === "executing") {
+			state.turnCount = turnCount + 1;
+			saveState(basePath, state);
+		}
 
 		const recovery = pendingRecoveryContext;
 		pendingRecoveryContext = null;
@@ -555,9 +586,8 @@ export default function (pi: ExtensionAPI): void {
 		if (!missionModeActive) return;
 		const state = loadState(basePath);
 		if (!state) return;
-		const pausableStatuses = new Set(["planning", "draft_review", "approved", "validating"]);
 		const shouldPause =
-			pausableStatuses.has(state.status) || (state.status === "executing" && hasPendingFeatures(basePath));
+			PAUSABLE_STATUSES.has(state.status) || (state.status === "executing" && hasPendingWork(basePath));
 		if (!shouldPause) return;
 		try {
 			const newState = transitionState(state, "paused");
@@ -634,10 +664,9 @@ export default function (pi: ExtensionAPI): void {
 									const newState = transitionState(state, "approved");
 									saveState(basePath, newState);
 									updateWidget(newState, updatedPlan);
-									pi.sendUserMessage(
-										"Plan approved. Call spawn_worker for the first feature.",
-										{ deliverAs: "followUp" },
-									);
+									pi.sendUserMessage("Plan approved. Call spawn_worker for the first feature.", {
+										deliverAs: "followUp",
+									});
 								}
 							},
 						},
@@ -661,7 +690,7 @@ export default function (pi: ExtensionAPI): void {
 		projectDir,
 		updateWidget,
 		refreshWidget: (state: MissionState, plan?: MissionPlan) => {
-			if (latestCtx) renderMissionWidget(latestCtx, state, plan);
+			if (latestCtx) renderMissionWidget(latestCtx, state, plan, computeAssertionInfo(state));
 		},
 		getThinkingLevel: () => pi.getThinkingLevel(),
 		setThinkingLevel: (level) => pi.setThinkingLevel(level),
@@ -684,8 +713,7 @@ export default function (pi: ExtensionAPI): void {
 		updateWidget,
 		exec: async (cmd, cwd, timeoutMs) => {
 			const signal = AbortSignal.timeout(timeoutMs);
-			const [command, ...args] = cmd.split(" ");
-			const result = await pi.exec(command!, args, { cwd, signal });
+			const result = await pi.exec("sh", ["-c", cmd], { cwd, signal });
 			return {
 				exitCode: result.killed ? null : result.code,
 				stdout: result.stdout,
@@ -694,8 +722,17 @@ export default function (pi: ExtensionAPI): void {
 			};
 		},
 	});
+	registerRunScrutinyTool(pi, {
+		basePath,
+		projectDir,
+		updateWidget,
+		spawnFn: spawn as never,
+	});
 	registerCommitChangesTool(pi, { basePath, projectDir, updateWidget });
 	registerCreateFixTool(pi, { basePath, updateWidget });
+	registerUpdateLibraryTool(pi, { basePath });
+	registerConfigureEnvironmentTool(pi, { basePath });
+	registerWebSearchTool(pi, { basePath });
 	registerAskQuestionsTool(pi, {
 		basePath,
 		showQuestions: (questions: Question[]) => {
@@ -831,9 +868,8 @@ export default function (pi: ExtensionAPI): void {
 	function deactivateMissionMode(): void {
 		const state = loadState(basePath);
 		if (state) {
-			const pausableStatuses = new Set(["planning", "draft_review", "approved", "validating"]);
 			const shouldPause =
-				pausableStatuses.has(state.status) || (state.status === "executing" && hasPendingFeatures(basePath));
+				PAUSABLE_STATUSES.has(state.status) || (state.status === "executing" && hasPendingWork(basePath));
 			if (shouldPause) {
 				try {
 					const newState = transitionState(state, "paused");
@@ -907,6 +943,7 @@ export default function (pi: ExtensionAPI): void {
 			gitSnapshot,
 		};
 		saveState(basePath, newState);
+		initLibrary(basePath);
 		missionModeActive = true;
 		enableMissionTools();
 		if (latestCtx) {
@@ -975,7 +1012,7 @@ function cleanupOrphanedWorker(state: MissionState, basePath: string): void {
 	if (state.status !== "executing" || !state.currentFeatureId) return;
 	const plan = loadPlan(basePath);
 	if (!plan) return;
-	const feature = findFeatureInPlan(plan, state.currentFeatureId);
+	const feature = findFeature(plan, state.currentFeatureId);
 	if (!feature) return;
 	const attemptNumber = feature.attempts.length + 1;
 	const workerStatus = checkOrphanedWorker(basePath, state.currentFeatureId, attemptNumber);
