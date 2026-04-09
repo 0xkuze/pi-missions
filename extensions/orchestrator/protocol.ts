@@ -5,6 +5,14 @@ import { getCavemanOutputRule } from "./caveman-rules.js";
 
 const CONTEXT_USAGE_COMPACT_THRESHOLD = 60;
 
+function shouldBeCompact(compact?: boolean, turnCount?: number, contextUsagePercent?: number): boolean {
+	return (
+		!!compact ||
+		(turnCount ?? 1) > 1 ||
+		(contextUsagePercent !== undefined && contextUsagePercent > CONTEXT_USAGE_COMPACT_THRESHOLD)
+	);
+}
+
 export interface ProtocolOptions {
 	turnCount?: number;
 	contextUsagePercent?: number;
@@ -25,8 +33,7 @@ function protocolCacheKey(
 	const pv = state.protocolVersion ?? 0;
 	const tc = options?.turnCount ?? 1;
 	const cu = options?.contextUsagePercent;
-	const isCompact = compact || tc > 1 || (cu !== undefined && cu > CONTEXT_USAGE_COMPACT_THRESHOLD);
-	return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${plan?.planVersion ?? 0}|${autonomy}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}|${isCompact ? "c" : ""}|${mode}|pv${pv}|tc${tc <= 1 ? 1 : 2}|cu${cu ?? 0}`;
+	return `${state.status}|${state.currentFeatureId ?? ""}|${state.currentMilestoneId ?? ""}|${plan?.planVersion ?? 0}|${autonomy}|${state.totalFeaturesCompleted}|${state.totalFeaturesSkipped}|${shouldBeCompact(compact, tc, cu) ? "c" : ""}|${mode}|pv${pv}|tc${tc <= 1 ? 1 : 2}|cu${cu ?? 0}`;
 }
 
 export function clearProtocolCache(): void {
@@ -53,9 +60,10 @@ Scan: package.json/requirements.txt/Cargo.toml, README, AGENTS.md, directory str
 Combine commands: \`ls src/ && cat package.json && head -20 tsconfig.json\`
 Do NOT read implementation files. Summarize your findings to the user.
 
-After analysis, populate the knowledge library using \`update_library\`:
-- Write library/architecture.md with project structure overview, key components, and data flows.
+After analysis, you MUST populate the knowledge library using \`update_library\`:
+- Write library/architecture.md with: system overview, component list (file paths + purpose), data flows, public API surface, key invariants. This document is read by every worker.
 - Write library/conventions.md with coding conventions, naming patterns, and style rules discovered from AGENTS.md and existing code.
+Do NOT call submit_plan until both architecture.md and conventions.md are written. Workers depend on this context.
 
 ### STEP 2: Multi-Round Questioning
 Conduct at least TWO rounds of \`ask_questions\`. Do NOT submit_plan after a single round.
@@ -84,8 +92,10 @@ Each feature description must be a detailed specification:
 - List every test to write with specific test cases
 - List commands to verify the feature works (these become validation assertions)
 - Acceptance criteria must be testable commands, not vague goals
+- Assertion commands that run code (e.g., CLI tools) must target the actual executable entry point (bin script or main file that auto-runs), NOT library files that only export functions. Prefer testing built outputs (node dist/bin.js) over source files (npx tsx src/lib.ts).
 
 When defining milestones, set \`validationCommands\` per milestone when the default commands don't apply.
+Each milestone's validationCommands MUST be runnable using ONLY the code that exists after that milestone completes. Do NOT write curl/HTTP commands for milestones that don't create servers. Use unit test commands for library milestones.
 Group features into milestones that represent validation checkpoints.
 Do NOT create setup-only milestones (project init, config). Include setup as the first feature of the first implementation milestone.
 Each feature should be small enough for one worker to complete in under 30 minutes of wall time.
@@ -229,9 +239,14 @@ Communicate progress concisely after each feature completes: what was done, what
 Match the user's configured output style. No emoji, no filler, no pleasantries unless the user's style uses them.
 CODE REVIEW: For complex features that touch many files or introduce architecture, use create_fix_feature to add a review feature AFTER the implementation feature completes. The review feature worker reads the changed files and checks: code reusability, simplicity, no comments in code, proper error handling, follows AGENTS.md conventions, minimal and performant. Only for substantial changes — skip for trivial features.
 
-SCRUTINY: After run_validation returns status "pass" for a milestone, call run_scrutiny for that milestone. The scrutiny reviewer checks for architectural issues, cross-feature gaps, duplication, and convention violations. If scrutiny finds error-severity issues, create fix features addressing them. Warning/info issues can be noted but do not require fixes. If validation fails, skip scrutiny — fix validation failures first.
+SCRUTINY: After run_validation returns status "pass" for a milestone, call run_scrutiny for that milestone. The scrutiny reviewer checks for architectural issues, cross-feature gaps, duplication, and convention violations. If scrutiny finds error-severity issues, create fix features addressing them. Warning/info issues can be noted but do not require fixes. If validation fails, skip scrutiny — fix validation failures first. If run_scrutiny returns a model error (model not available), ask the user to select a reviewer model using ask_questions, then retry run_scrutiny. Do NOT skip scrutiny for subsequent milestones just because it failed once — always attempt it for each milestone.
 
 VERIFIED WORK COMPLETION: When a worker fails (e.g., didn't call report_result) but you verify the work was actually done (files changed, tests pass, correct behavior via bash/read checks), use \`update_mission_state\` with action \`complete_feature\` (NOT \`skip_feature\`) to mark the feature as completed. This ensures totalFeaturesCompleted is accurate. Use \`skip_feature\` only for features that should genuinely be skipped (not needed, out of scope).
+
+WORKER HANDOFF: After spawn_worker succeeds, read the result carefully. It includes:
+- "Worker reported left undone: ..." — what the worker says it did NOT finish.
+- "Discovered issues: ..." — bugs or problems the worker found.
+YOU decide whether to create a fix feature based on this info. If "left undone" describes work that is genuinely part of this feature's scope and was not completed, create a fix feature. If it describes work that belongs to OTHER features (e.g., "no CLI entry point" when this feature was about config), ignore it — that work is planned elsewhere. Only create fix features for real gaps, not for out-of-scope items the worker mentions for completeness.
 
 RETRY AND STUCK FEATURE HANDLING:
 - Feature fails once \u2192 retry with spawn_worker for the same feature (fresh attempt).
@@ -239,10 +254,6 @@ RETRY AND STUCK FEATURE HANDLING:
 - Feature exhausts retries (3x) \u2192 mark blocked, inform user clearly what went wrong and why.
 - Feature stuck as 'active' after worker completed but state wasn't updated \u2192 use complete_feature if work is verified, or skip_feature if genuinely abandoned.
 - After a fix feature completes successfully, move on to the next pending feature. Do not re-retry the original failed feature.
-
-INTERVENTION PATTERNS:
-- Feature fails twice \u2192 create a targeted fix feature addressing the specific failure.
-- Feature exhausts retries (3x) \u2192 mark blocked, inform user clearly what went wrong and why.
 - Validation fails \u2192 analyze the failing output, create targeted fix features, re-validate after fixes. NEVER call complete_mission after a validation failure without fixing and re-validating first.
 - User sends a redirect message \u2192 pause current plan, acknowledge the new direction, re-plan if scope changed.
 - All features done but validation still fails \u2192 do NOT mark mission complete. Fix first. Create fix features for every failing check.
@@ -289,9 +300,10 @@ ${progress}${warnings}
 
 You boss. No touch code. spawn_worker do work. ONE worker at a time. Wait result before next spawn.
 Worker fail? create_fix_feature then spawn_worker again. NEVER use bash + complete_feature to force-complete. complete_feature REJECTS if last worker failed unless a fix feature resolved it. Using force=true without a fix feature is a protocol violation.
+Worker done? Read result. If "left undone" = stuff from THIS feature not done, create_fix_feature. If "left undone" = other features' work, ignore. Only fix real gaps.
 Big feature done? create_fix_feature for code review — worker reads changed files, checks quality, simplicity, no comments, error handling, AGENTS.md rules. Skip review for trivial features.
 All features done? run_validation. Validation fail? create_fix_feature, spawn_worker, run_validation again. NEVER complete_mission with failing checks.
-Validation pass? run_scrutiny. Scrutiny find error issues? create_fix_feature, fix, re-validate. Warning/info? note, move on.
+Validation pass? run_scrutiny. Scrutiny find error issues? create_fix_feature, fix, re-validate. Warning/info? note, move on. Scrutiny model error? ask user to pick reviewer model, retry. ALWAYS attempt scrutiny for each milestone.
 All milestones done AND validation pass? complete_mission. Go.`;
 }
 
@@ -342,8 +354,7 @@ export function buildOrchestratorProtocol(
 	const mode = resolvePromptingMode(config ?? {});
 	const turnCount = options?.turnCount ?? 1;
 	const contextPercent = options?.contextUsagePercent;
-	const isCompact =
-		compact || turnCount > 1 || (contextPercent !== undefined && contextPercent > CONTEXT_USAGE_COMPACT_THRESHOLD);
+	const isCompact = shouldBeCompact(compact, turnCount, contextPercent);
 	let result: string | null;
 
 	if (isCompact && state.status === "executing") {

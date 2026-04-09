@@ -9,7 +9,14 @@ import {
 	renderOnboardingOverlay,
 } from "../../extensions/ui/onboarding-overlay.js";
 
-const MODELS = ["opus-4.6", "opencode-go/glm-5", "openaicodex/gpt-5.4", "claude-sonnet-4", "gpt-4o", "gemini-pro"];
+const MODELS = [
+	"anthropic/claude-opus-4-6",
+	"opencode-go/glm-5",
+	"anthropic/claude-opus-4-6",
+	"claude-sonnet-4",
+	"gpt-4o",
+	"gemini-pro",
+];
 
 function makeState(overrides: Partial<OnboardingState> = {}): OnboardingState {
 	return { ...createInitialOnboardingState(), ...overrides };
@@ -110,7 +117,7 @@ describe("renderOnboardingOverlay", () => {
 		const text = renderOnboardingOverlay(state, 80, 30, MODELS).join("\n");
 		expect(text).toContain("Select model for: Orchestrator");
 		expect(text).toContain("Search:");
-		expect(text).toContain("opus-4.6");
+		expect(text).toContain("anthropic/claude-opus-4-6");
 	});
 
 	it("model picker shows filtered results", () => {

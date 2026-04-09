@@ -32,7 +32,11 @@ describe("loadGlobalConfig", () => {
 
 	it("returns parsed config when file exists", () => {
 		const config: GlobalConfig = {
-			models: { orchestrator: "opus-4.6", worker: "opencode-go/glm-5", validator: "openaicodex/gpt-5.4" },
+			models: {
+				orchestrator: "anthropic/claude-opus-4-6",
+				worker: "opencode-go/glm-5",
+				validator: "anthropic/claude-opus-4-6",
+			},
 			promptingMode: "caveman",
 			spawnAndLearn: true,
 			onboardingCompleted: true,
@@ -40,7 +44,7 @@ describe("loadGlobalConfig", () => {
 		writeFileSync(configPath, JSON.stringify(config));
 		const loaded = loadGlobalConfig();
 		expect(loaded).not.toBeNull();
-		expect(loaded!.models!.orchestrator).toBe("opus-4.6");
+		expect(loaded!.models!.orchestrator).toBe("anthropic/claude-opus-4-6");
 		expect(loaded!.promptingMode).toBe("caveman");
 		expect(loaded!.spawnAndLearn).toBe(true);
 		expect(loaded!.onboardingCompleted).toBe(true);
@@ -138,9 +142,9 @@ describe("getDefaultGlobalConfig", () => {
 
 	it("returns default models", () => {
 		const config = getDefaultGlobalConfig();
-		expect(config.models!.orchestrator).toBe("opus-4.6");
+		expect(config.models!.orchestrator).toBe("anthropic/claude-opus-4-6");
 		expect(config.models!.worker).toBe("opencode-go/glm-5");
-		expect(config.models!.validator).toBe("openaicodex/gpt-5.4");
+		expect(config.models!.validator).toBe("anthropic/claude-opus-4-6");
 	});
 
 	it("returns onboardingCompleted false", () => {

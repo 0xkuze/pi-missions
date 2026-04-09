@@ -94,9 +94,9 @@ describe("generateWorkerSkill", () => {
 		expect(skill).toContain("TOOL CALL");
 	});
 
-	it("report_result section says You MUST call the report_result tool", () => {
+	it("report_result section says MUST and report_result tool", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toMatch(/MUST call.*report_result.*tool/i);
+		expect(skill).toMatch(/MUST.*report_result.*tool/i);
 	});
 
 	it("report_result instructions include whatWasImplemented field", () => {
@@ -124,9 +124,10 @@ describe("generateWorkerSkill", () => {
 		expect(skill).toContain("discoveredIssues");
 	});
 
-	it("contains verification commands section", () => {
+	it("contains work procedure and validation section", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
-		expect(skill).toContain("## Verification");
+		expect(skill).toContain("## Work Procedure");
+		expect(skill).toContain("## Validation");
 	});
 
 	it("default mode skill is at most 40 non-empty lines", () => {
@@ -165,6 +166,57 @@ describe("generateWorkerSkill", () => {
 			}
 		});
 	});
+
+	describe("TDD work procedure", () => {
+		it("includes TDD step-by-step instructions", () => {
+			const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+			expect(skill).toContain("Write tests FIRST");
+			expect(skill).toContain("Implement the feature");
+			expect(skill).toContain("Run validation commands");
+			expect(skill).toContain("Call report_result");
+		});
+
+		it("includes generic validation when no commands provided", () => {
+			const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES));
+			expect(skill).toContain("Run tests. Run typecheck. Run lint.");
+		});
+	});
+
+	describe("validation commands injection (WorkerSkillOptions)", () => {
+		it("includes specific validation commands when provided", () => {
+			const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), {
+				validationCommands: ["bun test", "bun run typecheck"],
+			});
+			expect(skill).toContain("`bun test`");
+			expect(skill).toContain("`bun run typecheck`");
+			expect(skill).toContain("MUST RUN ALL before report_result");
+		});
+
+		it("numbered validation commands", () => {
+			const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), {
+				validationCommands: ["npm test", "npm run lint"],
+			});
+			expect(skill).toContain("1. `npm test`");
+			expect(skill).toContain("2. `npm run lint`");
+		});
+
+		it("passes agentsMd and promptingMode via options object", () => {
+			const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), {
+				agentsMdContent: "## Custom Conventions\nUse tabs.",
+				promptingMode: "normal",
+				validationCommands: ["npm test"],
+			});
+			expect(skill).toContain("Custom Conventions");
+			expect(skill).toContain("`npm test`");
+		});
+
+		it("instructions to report all validation command results", () => {
+			const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), {
+				validationCommands: ["bun test"],
+			});
+			expect(skill).toContain("Include every validation command you ran");
+		});
+	});
 });
 
 describe("generateWorkerSkill (caveman mode)", () => {
@@ -193,9 +245,9 @@ describe("generateWorkerSkill (caveman mode)", () => {
 		expect(skill).toContain("report_result");
 	});
 
-	it("report_result section states it is a TOOL", () => {
+	it("report_result section emphasizes it must be called", () => {
 		const skill = generateWorkerSkill(makeFeature(JWT_OVERRIDES), undefined, "caveman");
-		expect(skill).toContain("TOOL");
+		expect(skill).toContain("MUST be calling the report_result tool");
 	});
 
 	it("report_result includes whatWasImplemented field", () => {

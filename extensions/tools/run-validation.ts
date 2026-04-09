@@ -144,7 +144,9 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 			const text = result.content?.[0];
 			if (text?.type !== "text") return new Text("(no output)", 0, 0);
 			try {
-				const parsed = JSON.parse(text.text) as {
+				const jsonEnd = (text.text as string).indexOf("\n\n");
+				const jsonStr = jsonEnd === -1 ? text.text : (text.text as string).slice(0, jsonEnd);
+				const parsed = JSON.parse(jsonStr) as {
 					status?: string;
 					summary?: string;
 					commands?: Array<{ exitCode?: number; label?: string }>;
@@ -362,8 +364,13 @@ export function registerRunValidationTool(pi: ExtensionAPI, deps: RunValidationD
 			saveState(deps.basePath, executingState);
 			deps.updateWidget(executingState, plan);
 
+			const nextAction =
+				overallStatus === "pass"
+					? ` Validation passed. NEXT: call run_scrutiny('${params.milestoneId}') for code review.`
+					: " Validation failed. Create fix features and re-validate.";
+
 			return {
-				content: [{ type: "text", text: JSON.stringify(validationResult) }],
+				content: [{ type: "text", text: `${JSON.stringify(validationResult)}\n\n${summary}${nextAction}` }],
 				details: {},
 			};
 		},

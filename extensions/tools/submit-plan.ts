@@ -2,6 +2,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Type } from "@sinclair/typebox";
+import { readLibraryTopic } from "../state/library.js";
 import { loadPlan, loadState, saveContract, savePlan, saveState } from "../state/manager.js";
 import { appendMutation, lastPlanVersion } from "../state/plan-history.js";
 import { transitionState } from "../state/transitions.js";
@@ -72,6 +73,10 @@ function validatePlanParams(params: {
 				return `Duplicate feature ID: '${feature.id}'`;
 			}
 			featureIds.add(feature.id);
+
+			if (!feature.description || feature.description.trim().length < 20) {
+				return `Feature '${feature.id}' description is too short (min 20 chars). Include file paths, functions, and test cases to create.`;
+			}
 
 			if (!feature.acceptanceCriteria || feature.acceptanceCriteria.length === 0) {
 				return `Feature '${feature.id}' must have at least one acceptance criterion`;
@@ -291,6 +296,22 @@ export function registerSubmitPlanTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const existingPlan = loadPlan(deps.basePath);
 			const isResubmission = state.status === "draft_review" && existingPlan !== null;
+
+			if (!isResubmission && existsSync(join(deps.basePath, "library"))) {
+				const HEADER_ONLY_RE = /^#\s+\w+\s*\n?$/;
+				const archContent = readLibraryTopic(deps.basePath, "architecture");
+				if (!archContent || HEADER_ONLY_RE.test(archContent.trim())) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: "Error: library/architecture.md is empty. Call update_library with topic 'architecture' to document the project structure before submitting the plan. Workers depend on this context.",
+							},
+						],
+						details: {},
+					};
+				}
+			}
 			const historyVersion = lastPlanVersion(deps.basePath);
 			const planVersion = isResubmission
 				? Math.max(existingPlan.planVersion + 1, historyVersion + 1)

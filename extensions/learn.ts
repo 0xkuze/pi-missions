@@ -35,6 +35,13 @@ function formatWorkaroundEntry(description: string, suggestedFix?: string): stri
 	return parts.join("\n");
 }
 
+const SYSTEM_NOTE_PATTERNS = ["report_result", "structured handoff", "did not call", "malformed or incomplete"];
+
+function isSystemDiagnostic(note: string): boolean {
+	const lower = note.toLowerCase();
+	return SYSTEM_NOTE_PATTERNS.some((p) => lower.includes(p));
+}
+
 function formatNotesEntry(note: string): string {
 	return `- ${note}`;
 }
@@ -58,9 +65,10 @@ export function learnFromResult(
 
 	if (result.status === "success") {
 		const issues = result.handoff?.discoveredIssues ?? [];
-		const notes = result.notes ?? [];
+		const notes = (result.notes ?? []).filter((n) => !isSystemDiagnostic(n));
+		const failedCmds = result.handoff?.commandsRun?.filter((c) => c.exitCode !== 0) ?? [];
 
-		if (issues.length === 0 && notes.length === 0) {
+		if (issues.length === 0 && notes.length === 0 && failedCmds.length === 0) {
 			return { learned: false };
 		}
 
@@ -69,6 +77,10 @@ export function learnFromResult(
 
 		for (const issue of issues) {
 			parts.push(formatWorkaroundEntry(issue.description, issue.suggestedFix));
+		}
+
+		for (const cmd of failedCmds) {
+			parts.push(`- Command \`${cmd.command}\` failed (exit ${cmd.exitCode}): ${cmd.observation}`);
 		}
 
 		for (const note of notes) {

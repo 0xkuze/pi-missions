@@ -41,6 +41,16 @@ export function countPendingFeatures(plan: MissionPlan): number {
 	return count;
 }
 
+export function countPendingFixFeatures(plan: MissionPlan): number {
+	let count = 0;
+	for (const milestone of plan.milestones) {
+		for (const feature of milestone.features) {
+			if (feature.fixOrigin && (feature.status === "pending" || feature.status === "active")) count++;
+		}
+	}
+	return count;
+}
+
 export function hasSuccessfulFixFeature(plan: MissionPlan, featureId: string): boolean {
 	for (const milestone of plan.milestones) {
 		for (const feature of milestone.features) {

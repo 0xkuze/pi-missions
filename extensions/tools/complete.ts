@@ -1,9 +1,9 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { countPendingFeatures, hasPendingFeatures } from "../plan-helpers.js";
+import { countPendingFeatures, countPendingFixFeatures, hasPendingFeatures } from "../plan-helpers.js";
 import { generateReport, type ReportValidationInfo } from "../report.js";
 import { loadContract, loadPlan, loadState, saveState } from "../state/manager.js";
 import { transitionState } from "../state/transitions.js";
@@ -138,6 +138,21 @@ export function registerCompleteMissionTool(pi: ExtensionAPI, deps: Deps): void 
 				}
 			}
 
+			if (plan && !params.force) {
+				const pendingFixes = countPendingFixFeatures(plan);
+				if (pendingFixes > 0) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error: ${pendingFixes} fix feature(s) are still pending. Execute them with spawn_worker or remove them before completing the mission. Pass force=true to override.`,
+							},
+						],
+						details: {},
+					};
+				}
+			}
+
 			const warnings: string[] = [];
 			if (plan && hasPendingFeatures(plan)) {
 				const pendingCount = countPendingFeatures(plan);
@@ -207,17 +222,38 @@ function buildValidationInfo(basePath: string, plan: MissionPlan): ReportValidat
 		(a) => a.status === "pass" || a.status === "fail" || a.status === "error",
 	);
 	if (assertionResults.length === 0) return undefined;
-	const assertions = assertionResults.map((a) => ({
-		assertionId: a.id,
-		status: a.status as "pass" | "fail" | "error",
-		exitCode: null as number | null,
-		stdout: "",
-		stderr: "",
-		timedOut: false,
-		durationMs: 0,
-		timestamp: "",
-		command: a.command,
-	}));
+	const assertions = assertionResults.map((a) => {
+		const evidencePath = join(basePath, "runtime", "validation", "assertions", `${a.id}-result.json`);
+		if (existsSync(evidencePath)) {
+			try {
+				const raw = JSON.parse(readFileSync(evidencePath, "utf8")) as Record<string, unknown>;
+				return {
+					assertionId: a.id,
+					status: a.status as "pass" | "fail" | "error",
+					exitCode: (raw.exitCode as number | null) ?? null,
+					stdout: (raw.stdout as string) ?? "",
+					stderr: (raw.stderr as string) ?? "",
+					timedOut: (raw.timedOut as boolean) ?? false,
+					durationMs: (raw.durationMs as number) ?? 0,
+					timestamp: (raw.timestamp as string) ?? "",
+					command: a.command,
+				};
+			} catch {
+				// why: evidence file may be corrupted; fall through to synthetic entry
+			}
+		}
+		return {
+			assertionId: a.id,
+			status: a.status as "pass" | "fail" | "error",
+			exitCode: null as number | null,
+			stdout: "",
+			stderr: "",
+			timedOut: false,
+			durationMs: 0,
+			timestamp: "",
+			command: a.command,
+		};
+	});
 	const milestoneIds = plan.milestones.map((m) => m.id);
 	return {
 		assertions,

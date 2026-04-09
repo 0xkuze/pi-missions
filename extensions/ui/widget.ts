@@ -337,17 +337,3 @@ export function buildWidgetLines(
 		}
 	}
 }
-
-export interface WidgetUI {
-	setWidget(name: string, lines: string[]): void;
-}
-
-export function updateWidget(
-	ui: WidgetUI,
-	state: MissionState,
-	plan?: MissionPlan,
-	assertionInfo?: WidgetAssertionInfo,
-): void {
-	const lines = buildWidgetLines(state, plan, undefined, undefined, assertionInfo);
-	ui.setWidget("mission", lines);
-}

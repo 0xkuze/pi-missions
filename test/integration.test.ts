@@ -260,7 +260,8 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 						{
 							id: "f1",
 							name: "User model",
-							description: "Create user entity",
+							description:
+								"Create user entity with email, password hash, and created_at fields in src/models/user.ts",
 							acceptanceCriteria: ["User can be created"],
 							relevantFiles: [],
 							dependencies: [],
@@ -429,7 +430,7 @@ describe("VAL-CROSS-001: full lifecycle", () => {
 						{
 							id: "f1",
 							name: "F1",
-							description: "d",
+							description: "Implement core feature with tests and validation for the lifecycle flow",
 							acceptanceCriteria: ["a"],
 							relevantFiles: [],
 							dependencies: [],

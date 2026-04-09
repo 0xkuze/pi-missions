@@ -4,7 +4,7 @@ import { join } from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { Text } from "@mariozechner/pi-tui";
 import { Type } from "@sinclair/typebox";
-import { resolveModel, resolveSpawnAndLearn } from "../config.js";
+import { resolveModel, resolveSpawnAndLearn, resolveValidationCommands } from "../config.js";
 import { getChangedFiles, isGitAvailable, stageAndCommit } from "../git.js";
 import { learnFromResult } from "../learn.js";
 import { clearProtocolCache } from "../orchestrator/protocol.js";
@@ -366,15 +366,13 @@ function performSelfCorrection(
 		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
 	}
 
-	const hasUndone = handoff.whatWasLeftUndone.trim().length > 0;
 	const highSeverityIssues = handoff.discoveredIssues.filter((i) => i.severity === "high");
 
-	if (!hasUndone && highSeverityIssues.length === 0) {
+	if (highSeverityIssues.length === 0) {
 		return { updatedPlan: plan, updatedState: state, correction: { summary: "" } };
 	}
 
 	const reasons: string[] = [];
-	if (hasUndone) reasons.push(`Undone: ${handoff.whatWasLeftUndone}`);
 	for (const issue of highSeverityIssues) reasons.push(`High-severity: ${issue.description}`);
 	const reasonText = reasons.join("; ");
 
@@ -400,7 +398,6 @@ function performSelfCorrection(
 	}
 
 	const descriptionParts: string[] = [];
-	if (hasUndone) descriptionParts.push(handoff.whatWasLeftUndone);
 	for (const issue of highSeverityIssues) descriptionParts.push(issue.description);
 	const fixName = `fix-${feature.name}`;
 
@@ -625,7 +622,13 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 
 			const agentsMd = readAgentsMd(deps.projectDir);
 			const completedFeatures = collectCompletedFeatures(plan, feature.id);
-			const skill = generateWorkerSkill(feature, agentsMd, config.promptingMode);
+			const featureMilestone = findMilestoneForFeature(plan, feature.id);
+			const validationCmds = resolveValidationCommands(config, plan, featureMilestone ?? null, deps.projectDir);
+			const skill = generateWorkerSkill(feature, {
+				agentsMdContent: agentsMd,
+				promptingMode: config.promptingMode,
+				validationCommands: validationCmds,
+			});
 			const prompt = generateWorkerPrompt(feature, params.additionalContext);
 			const context = generateWorkerContext(agentsMd, completedFeatures, deps.basePath, deps.projectDir);
 			writeWorkerFiles(deps.basePath, feature.id, attemptNumber, { skill, prompt, context });
@@ -698,19 +701,6 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 			}
 
 			if (procResult.timedOut) {
-				activeState = {
-					...activeState,
-					currentFeatureId: undefined,
-					totalFeaturesFailed: activeState.totalFeaturesFailed + 1,
-					progressLog: [
-						...activeState.progressLog,
-						{
-							timestamp: nowISO(),
-							type: "worker_complete" as const,
-							detail: `Worker timed out for '${feature.name}' after ${timeoutMs}ms`,
-						},
-					],
-				};
 				const attempt: WorkerAttempt = {
 					attemptNumber,
 					startedAt: new Date(startTime).toISOString(),
@@ -723,6 +713,23 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 					status: "failure",
 				};
 				updatedPlan = updateFeatureFailure(updatedPlan, feature.id, attempt, maxRetries);
+				const timedOutFeature = findFeature(updatedPlan, feature.id);
+				const timedOutBecameFailed = timedOutFeature?.status === "failed";
+				activeState = {
+					...activeState,
+					currentFeatureId: undefined,
+					totalFeaturesFailed: timedOutBecameFailed
+						? activeState.totalFeaturesFailed + 1
+						: activeState.totalFeaturesFailed,
+					progressLog: [
+						...activeState.progressLog,
+						{
+							timestamp: nowISO(),
+							type: "worker_complete" as const,
+							detail: `Worker timed out for '${feature.name}' after ${timeoutMs}ms`,
+						},
+					],
+				};
 				saveState(deps.basePath, activeState);
 				savePlan(deps.basePath, updatedPlan);
 				deps.updateWidget(activeState, updatedPlan);
@@ -865,10 +872,14 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				};
 			} else {
 				updatedPlan = updateFeatureFailure(updatedPlan, feature.id, attempt, maxRetries);
+				const featureAfterUpdate = findFeature(updatedPlan, feature.id);
+				const becameFailed = featureAfterUpdate?.status === "failed";
 				activeState = {
 					...activeState,
 					currentFeatureId: undefined,
-					totalFeaturesFailed: activeState.totalFeaturesFailed + 1,
+					totalFeaturesFailed: becameFailed
+						? activeState.totalFeaturesFailed + 1
+						: activeState.totalFeaturesFailed,
 					progressLog: [
 						...activeState.progressLog,
 						{
@@ -924,7 +935,14 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 				activeState = correctedState;
 			}
 
+			const preMilestoneStatus = findMilestoneForFeature(updatedPlan, feature.id)?.status;
 			({ plan: updatedPlan, state: activeState } = autoCompleteMilestone(updatedPlan, activeState, feature.id));
+			const postMilestoneStatus = findMilestoneForFeature(updatedPlan, feature.id)?.status;
+			const milestoneJustCompleted =
+				preMilestoneStatus === "active" && (postMilestoneStatus === "done" || postMilestoneStatus === "failed");
+			const completedMilestoneId = milestoneJustCompleted
+				? findMilestoneForFeature(updatedPlan, feature.id)?.id
+				: undefined;
 
 			saveState(deps.basePath, activeState);
 			savePlan(deps.basePath, updatedPlan);
@@ -942,21 +960,42 @@ export function registerSpawnWorkerTool(pi: ExtensionAPI, deps: Deps): void {
 						? `Next: ${nextPending.name}. Action: call create_fix_feature for this failure, then spawn_worker.`
 						: "No pending features remain. Call create_fix_feature to address this failure.";
 				}
+			} else if (milestoneJustCompleted && completedMilestoneId) {
+				const afterValidation = nextPending
+					? ` Then call run_scrutiny('${completedMilestoneId}'). Then spawn_worker for '${nextPending.name}'.`
+					: ` Then call run_scrutiny('${completedMilestoneId}'). Then call complete_mission.`;
+				completionHint = `Milestone '${completedMilestoneId}' auto-completed. REQUIRED: call run_validation('${completedMilestoneId}') now.${afterValidation}`;
 			} else {
 				completionHint = nextPending
 					? `Next: ${nextPending.name}.`
 					: "ALL FEATURES DONE. Call complete_mission now with a summary of what was accomplished.";
 			}
 			const correctionText = correction.summary ? `\n\n${correction.summary}` : "";
+			const handoffSummary = buildHandoffSummary(result);
 			return {
 				content: [
 					{
 						type: "text",
-						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${result.summary}${correctionText}`,
+						text: `Worker ${statusText} for feature '${feature.name}'.\nProgress: ${progressDone}/${allFeatures.size} features done. ${completionHint}\n\n${result.summary}${handoffSummary}${correctionText}`,
 					},
 				],
 				details: {},
 			};
 		},
 	});
+}
+
+function buildHandoffSummary(result: WorkerResult): string {
+	const handoff = result.handoff;
+	if (!handoff) return "";
+	const parts: string[] = [];
+	if (handoff.whatWasLeftUndone.trim().length > 0) {
+		parts.push(`\nWorker reported left undone: ${handoff.whatWasLeftUndone}`);
+	}
+	if (handoff.discoveredIssues.length > 0) {
+		const issueLines = handoff.discoveredIssues.map((i) => `  - [${i.severity}] ${i.description}`);
+		parts.push(`\nDiscovered issues:\n${issueLines.join("\n")}`);
+	}
+	if (parts.length === 0) return "";
+	return `\n${parts.join("\n")}`;
 }

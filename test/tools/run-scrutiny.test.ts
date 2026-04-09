@@ -113,12 +113,15 @@ async function callTool(
 		saveConfig(basePath, { models: { validator: reviewerModel } });
 	}
 
+	const defaultModels = ["anthropic/claude-opus-4-6", "anthropic/claude-opus-4-6", "opencode-go/glm-5"];
+	const models = reviewerModel ? [...defaultModels, reviewerModel] : defaultModels;
 	const { pi, getRegisteredTool } = createMockPi();
 	registerRunScrutinyTool(pi, {
 		basePath,
 		projectDir: basePath,
 		updateWidget,
 		spawnFn: spawnFn ?? createMockSpawn({ stdoutLines: [makeScrutinyNdjson([])] }),
+		availableModels: models,
 	});
 	const tool = getRegisteredTool("run_scrutiny")!;
 	return tool.execute("tool-call-id", params, undefined, undefined, createMockContext()) as Promise<ToolResult>;
@@ -409,6 +412,7 @@ describe("registerRunScrutinyTool", () => {
 				updateWidget: () => {},
 				spawnFn: mockSpawn,
 				_timeoutMs: 50,
+				availableModels: ["anthropic/claude-opus-4-6"],
 			});
 			const tool = getRegisteredTool("run_scrutiny")!;
 			const result = (await tool.execute(
@@ -457,6 +461,7 @@ describe("registerRunScrutinyTool", () => {
 				updateWidget: () => {},
 				spawnFn: mockSpawn,
 				_timeoutMs: 50,
+				availableModels: ["anthropic/claude-opus-4-6"],
 			});
 			const tool = getRegisteredTool("run_scrutiny")!;
 			await tool.execute("tool-call-id", { milestoneId: "ms-1" }, undefined, undefined, createMockContext());
@@ -514,6 +519,7 @@ describe("registerRunScrutinyTool", () => {
 				projectDir: tmpDir,
 				updateWidget: () => {},
 				spawnFn: createMockSpawn(),
+				availableModels: ["anthropic/claude-opus-4-6"],
 			});
 
 			const tool = getRegisteredTool("run_scrutiny");
@@ -539,6 +545,7 @@ describe("registerRunScrutinyTool", () => {
 				projectDir: tmpDir,
 				updateWidget: () => {},
 				spawnFn: createMockSpawn(),
+				availableModels: ["anthropic/claude-opus-4-6"],
 			});
 			const tool = getRegisteredTool("run_scrutiny")!;
 			const result = (await tool.execute(
@@ -576,6 +583,7 @@ describe("registerRunScrutinyTool", () => {
 				projectDir: tmpDir,
 				updateWidget: () => {},
 				spawnFn: createMockSpawn(),
+				availableModels: ["anthropic/claude-opus-4-6"],
 			});
 			const tool = getRegisteredTool("run_scrutiny")!;
 			const result = (await tool.execute(

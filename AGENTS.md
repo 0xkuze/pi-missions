@@ -196,3 +196,4 @@ const proc = spawn(piCommand, [
 - Do not add MCP, sub-agents, or plan mode -- this extension IS the plan mode
 - Do not create README.md, CHANGELOG.md, or documentation files unless explicitly asked
 - Do not add features not in `docs/spec.md` without asking first
+- Do not implement fallback or temporary solutions. Fix the root cause. If the root cause is unclear, investigate further before writing code. A fallback masks the real problem and makes it harder to find later.

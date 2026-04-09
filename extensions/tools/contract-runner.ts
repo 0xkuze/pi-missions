@@ -1,21 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadContract, saveContract } from "../state/manager.js";
-import type { ValidationAssertion } from "../types.js";
+import type { AssertionResultData, ValidationAssertion } from "../types.js";
 import { nowISO } from "../utils.js";
 import type { ExecFn } from "./run-validation.js";
-
-export interface AssertionResult {
-	assertionId: string;
-	status: "pass" | "fail" | "error";
-	exitCode: number | null;
-	stdout: string;
-	stderr: string;
-	timedOut: boolean;
-	durationMs: number;
-	timestamp: string;
-	command: string;
-}
 
 export interface RunContractOptions {
 	basePath: string;
@@ -37,10 +25,7 @@ function checkAssertion(
 	if (result.timedOut) return "error";
 	if (assertion.expect.exitCode !== undefined && result.exitCode !== assertion.expect.exitCode) return "fail";
 	if (assertion.expect.stdoutContains !== undefined) {
-		const found =
-			result.stdout.includes(assertion.expect.stdoutContains) ||
-			result.stderr.includes(assertion.expect.stdoutContains);
-		if (!found) return "fail";
+		if (!result.stdout.includes(assertion.expect.stdoutContains)) return "fail";
 	}
 	if (assertion.expect.stdoutNotContains !== undefined) {
 		if (result.stdout.includes(assertion.expect.stdoutNotContains)) return "fail";
@@ -50,7 +35,7 @@ function checkAssertion(
 	return "pass";
 }
 
-function writeEvidenceFiles(basePath: string, milestoneId: string, result: AssertionResult): void {
+function writeEvidenceFiles(basePath: string, milestoneId: string, result: AssertionResultData): void {
 	const evidenceDir = join(basePath, "runtime", "validation", milestoneId, "assertions");
 	mkdirSync(evidenceDir, { recursive: true });
 	writeFileSync(join(evidenceDir, `${result.assertionId}-stdout.log`), result.stdout, "utf8");
@@ -74,7 +59,7 @@ export async function runContractAssertions(
 	assertions: ValidationAssertion[],
 	exec: ExecFn,
 	options: RunContractOptions,
-): Promise<AssertionResult[]> {
+): Promise<AssertionResultData[]> {
 	const {
 		basePath,
 		milestoneId,
@@ -90,7 +75,7 @@ export async function runContractAssertions(
 		shouldRunAssertion(a, milestoneFeatureIds, skippedFeatureIds, blockedFeatureIds),
 	);
 
-	const results: AssertionResult[] = [];
+	const results: AssertionResultData[] = [];
 
 	for (const assertion of filtered) {
 		const start = Date.now();
@@ -100,7 +85,7 @@ export async function runContractAssertions(
 
 		const status = checkAssertion(assertion, execResult);
 
-		const result: AssertionResult = {
+		const result: AssertionResultData = {
 			assertionId: assertion.id,
 			status,
 			exitCode: execResult.exitCode,

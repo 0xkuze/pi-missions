@@ -30,6 +30,9 @@ export function addFixFeatureToPlan(
 ): AddFixFeatureResult {
 	const featureId = generateId();
 	const milestoneIndex = plan.milestones.findIndex((m) => m.id === params.milestoneId);
+	if (milestoneIndex === -1) {
+		throw new Error(`addFixFeatureToPlan: milestone '${params.milestoneId}' not found in plan.`);
+	}
 	const milestone = plan.milestones[milestoneIndex]!;
 
 	const newFeature: Feature = {

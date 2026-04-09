@@ -33,6 +33,7 @@ export interface RunScrutinyDeps {
 	projectDir: string;
 	updateWidget: (state: MissionState, plan?: MissionPlan) => void;
 	spawnFn: SpawnFn;
+	availableModels: string[] | (() => string[]);
 	_timeoutMs?: number;
 }
 
@@ -178,6 +179,59 @@ function generateScrutinySkill(milestone: Milestone, basePath: string): string {
 	return parts.join("\n");
 }
 
+const VALID_SEVERITIES = new Set(["info", "warning", "error"]);
+
+function parseIssuesArray(arr: unknown[]): ScrutinyIssue[] {
+	const issues: ScrutinyIssue[] = [];
+	for (const item of arr) {
+		if (typeof item !== "object" || item === null) continue;
+		const issue = item as Record<string, unknown>;
+		if (
+			typeof issue.severity === "string" &&
+			typeof issue.description === "string" &&
+			typeof issue.location === "string"
+		) {
+			issues.push({
+				severity: VALID_SEVERITIES.has(issue.severity) ? (issue.severity as ScrutinyIssue["severity"]) : "info",
+				description: issue.description,
+				location: issue.location,
+				suggestedFix: typeof issue.suggestedFix === "string" ? issue.suggestedFix : undefined,
+			});
+		}
+	}
+	return issues;
+}
+
+function tryParseIssuesFromJson(text: string): ScrutinyIssue[] | null {
+	let data: unknown;
+	try {
+		data = JSON.parse(text);
+	} catch {
+		return null;
+	}
+	if (typeof data !== "object" || data === null) return null;
+	const obj = data as Record<string, unknown>;
+	if (!Array.isArray(obj.issues)) return null;
+	return parseIssuesArray(obj.issues);
+}
+
+function extractJsonFromText(text: string): ScrutinyIssue[] | null {
+	const jsonBlockMatch = /```(?:json)?\s*\n?([\s\S]*?)```/.exec(text);
+	if (jsonBlockMatch) {
+		const result = tryParseIssuesFromJson(jsonBlockMatch[1]!.trim());
+		if (result) return result;
+	}
+	const braceStart = text.indexOf("{");
+	if (braceStart === -1) return null;
+	for (let i = text.length - 1; i >= braceStart; i--) {
+		if (text[i] !== "}") continue;
+		const candidate = text.slice(braceStart, i + 1);
+		const result = tryParseIssuesFromJson(candidate);
+		if (result) return result;
+	}
+	return null;
+}
+
 export function parseScrutinyOutput(stdout: string): {
 	issues: ScrutinyIssue[];
 	status: "clean" | "error";
@@ -195,53 +249,56 @@ export function parseScrutinyOutput(stdout: string): {
 		} catch {}
 	}
 
-	if (messageEndText === undefined) {
-		return { issues: [], status: "error" };
-	}
-
-	let data: unknown;
-	try {
-		data = JSON.parse(messageEndText);
-	} catch {
-		return { issues: [], status: "error" };
-	}
-
-	if (typeof data !== "object" || data === null) {
-		return { issues: [], status: "error" };
-	}
-
-	const obj = data as Record<string, unknown>;
-	if (!Array.isArray(obj.issues)) {
-		return { issues: [], status: "error" };
-	}
-
-	const issues: ScrutinyIssue[] = [];
-	for (const item of obj.issues) {
-		if (typeof item !== "object" || item === null) continue;
-		const issue = item as Record<string, unknown>;
-		if (
-			typeof issue.severity === "string" &&
-			typeof issue.description === "string" &&
-			typeof issue.location === "string"
-		) {
-			const validSeverities = new Set(["info", "warning", "error"]);
-			issues.push({
-				severity: validSeverities.has(issue.severity) ? (issue.severity as ScrutinyIssue["severity"]) : "info",
-				description: issue.description,
-				location: issue.location,
-				suggestedFix: typeof issue.suggestedFix === "string" ? issue.suggestedFix : undefined,
-			});
+	if (messageEndText !== undefined) {
+		const direct = tryParseIssuesFromJson(messageEndText);
+		if (direct) {
+			const hasErrors = direct.some((i) => i.severity === "error");
+			return { issues: direct, status: hasErrors ? "error" : "clean" };
+		}
+		const extracted = extractJsonFromText(messageEndText);
+		if (extracted) {
+			const hasErrors = extracted.some((i) => i.severity === "error");
+			return { issues: extracted, status: hasErrors ? "error" : "clean" };
 		}
 	}
 
-	return { issues, status: issues.length === 0 ? "clean" : "clean" };
+	for (const line of [...lines].reverse()) {
+		try {
+			const parsed = JSON.parse(line) as Record<string, unknown>;
+			if (parsed.type === "message_end" && typeof parsed.text === "string") {
+				const extracted = extractJsonFromText(parsed.text);
+				if (extracted) {
+					const hasErrors = extracted.some((i) => i.severity === "error");
+					return { issues: extracted, status: hasErrors ? "error" : "clean" };
+				}
+			}
+		} catch {}
+	}
+
+	const fullText = lines.join("\n");
+	const fromFull = extractJsonFromText(fullText);
+	if (fromFull) {
+		const hasErrors = fromFull.some((i) => i.severity === "error");
+		return { issues: fromFull, status: hasErrors ? "error" : "clean" };
+	}
+
+	return { issues: [], status: "error" };
 }
 
-function writeScrutinyArtifacts(basePath: string, milestoneId: string, report: ScrutinyReport, stdout: string): void {
+function writeScrutinyArtifacts(
+	basePath: string,
+	milestoneId: string,
+	report: ScrutinyReport,
+	stdout: string,
+	stderr?: string,
+): void {
 	const dir = join(basePath, "runtime", "validation", milestoneId, "scrutiny");
 	mkdirSync(dir, { recursive: true });
 	writeFileSync(join(dir, "report.json"), JSON.stringify(report, null, 2), "utf8");
 	writeFileSync(join(dir, "stdout.log"), stdout, "utf8");
+	if (stderr) {
+		writeFileSync(join(dir, "stderr.log"), stderr, "utf8");
+	}
 }
 
 export function loadScrutinyReport(basePath: string, milestoneId: string): ScrutinyReport | null {
@@ -428,6 +485,24 @@ export function registerRunScrutinyTool(pi: ExtensionAPI, deps: RunScrutinyDeps)
 			const config = loadMissionConfig(deps.basePath);
 			const reviewerModel = resolveModel("validator", config, plan);
 
+			if (reviewerModel) {
+				const models = typeof deps.availableModels === "function" ? deps.availableModels() : deps.availableModels;
+				const modelExists = models.some(
+					(m) => m === reviewerModel || m.endsWith(`/${reviewerModel}`) || reviewerModel.endsWith(`/${m}`),
+				);
+				if (!modelExists) {
+					return {
+						content: [
+							{
+								type: "text",
+								text: `Error: Reviewer model '${reviewerModel}' is not available. Ask the user which model to use for scrutiny reviews, then update the mission config with the selected model. Available models: ${models.slice(0, 20).join(", ")}${models.length > 20 ? "..." : ""}`,
+							},
+						],
+						details: {},
+					};
+				}
+			}
+
 			const skillContent = generateScrutinySkill(milestone, deps.basePath);
 
 			const scrutinyDir = join(deps.basePath, "runtime", "validation", params.milestoneId, "scrutiny");
@@ -458,12 +533,36 @@ export function registerRunScrutinyTool(pi: ExtensionAPI, deps: RunScrutinyDeps)
 					durationMs,
 					issues: [],
 				};
-				writeScrutinyArtifacts(deps.basePath, params.milestoneId, report, procResult.stdout);
+				writeScrutinyArtifacts(deps.basePath, params.milestoneId, report, procResult.stdout, procResult.stderr);
 				return {
 					content: [
 						{
 							type: "text",
 							text: JSON.stringify(report),
+						},
+					],
+					details: {},
+				};
+			}
+
+			if (procResult.stdout.trim().length === 0) {
+				const report: ScrutinyReport = {
+					status: "error",
+					milestoneId: params.milestoneId,
+					timestamp: nowISO(),
+					reviewerModel: reviewerModel ?? "",
+					durationMs,
+					issues: [],
+				};
+				writeScrutinyArtifacts(deps.basePath, params.milestoneId, report, procResult.stdout, procResult.stderr);
+				const stderrHint = procResult.stderr.trim()
+					? ` Reviewer stderr: ${procResult.stderr.trim().slice(0, 500)}`
+					: "";
+				return {
+					content: [
+						{
+							type: "text",
+							text: `${JSON.stringify(report)}\n\nScrutiny reviewer produced no output (exit code: ${procResult.exitCode}).${stderrHint} The reviewer process may have failed silently. Check the model '${reviewerModel ?? "default"}' availability.`,
 						},
 					],
 					details: {},
@@ -482,7 +581,7 @@ export function registerRunScrutinyTool(pi: ExtensionAPI, deps: RunScrutinyDeps)
 				issues: parsed.issues,
 			};
 
-			writeScrutinyArtifacts(deps.basePath, params.milestoneId, report, procResult.stdout);
+			writeScrutinyArtifacts(deps.basePath, params.milestoneId, report, procResult.stdout, procResult.stderr);
 
 			return {
 				content: [{ type: "text", text: JSON.stringify(report) }],

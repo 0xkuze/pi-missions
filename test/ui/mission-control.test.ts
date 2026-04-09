@@ -410,9 +410,9 @@ describe("handleKeyboardAction (VAL-UI-006)", () => {
 			expect(action.kind).toBe("pause");
 		});
 
-		it("returns pause when approved", () => {
+		it("returns warn when approved (approved is not pausable)", () => {
 			const action = handleKeyboardAction("p", makeState("approved"));
-			expect(action.kind).toBe("pause");
+			expect(action.kind).toBe("warn");
 		});
 
 		it("returns resume when paused", () => {

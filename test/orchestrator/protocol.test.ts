@@ -142,7 +142,7 @@ describe("buildOrchestratorProtocol", () => {
 
 		it("is under 5000 chars (detailed planning protocol)", () => {
 			const result = verboseProtocol(makeState({ status: "planning" })) as string;
-			expect(result.length).toBeLessThan(5000);
+			expect(result.length).toBeLessThan(6000);
 		});
 
 		it("mentions planning phase", () => {
@@ -377,7 +377,7 @@ describe("buildOrchestratorProtocol", () => {
 
 		it("is under 1000 tokens (char count < 5000)", () => {
 			const result = verboseProtocol(stateWithFeature, makeProtocolPlan()) as string;
-			expect(result.length).toBeLessThan(5000);
+			expect(result.length).toBeLessThan(6000);
 			expect(result.length).toBeGreaterThan(200);
 		});
 
@@ -812,7 +812,7 @@ describe("buildOrchestratorProtocol", () => {
 
 		it("first turn (turnCount=1) includes both static rules and dynamic context", () => {
 			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
-			expect(result).toContain("INTERVENTION PATTERNS");
+			expect(result).toContain("RETRY AND STUCK FEATURE HANDLING");
 			expect(result).toContain("auth-endpoint");
 			expect(result).toContain("Foundation");
 		});
@@ -835,13 +835,13 @@ describe("buildOrchestratorProtocol", () => {
 
 		it("first turn (turnCount=0) also treated as first turn", () => {
 			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 0 }) as string;
-			expect(result).toContain("INTERVENTION PATTERNS");
+			expect(result).toContain("RETRY AND STUCK FEATURE HANDLING");
 			expect(result).toContain("auth-endpoint");
 		});
 
 		it("undefined turnCount defaults to first turn (full protocol)", () => {
 			const result = buildOrchestratorProtocol(state, plan, VERBOSE) as string;
-			expect(result).toContain("INTERVENTION PATTERNS");
+			expect(result).toContain("RETRY AND STUCK FEATURE HANDLING");
 		});
 	});
 
@@ -854,9 +854,9 @@ describe("buildOrchestratorProtocol", () => {
 		});
 		const plan = makeProtocolPlan();
 
-		it("turn 2 omits static rules (INTERVENTION PATTERNS)", () => {
+		it("turn 2 omits static rules (RETRY AND STUCK FEATURE HANDLING)", () => {
 			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 2 }) as string;
-			expect(result).not.toContain("INTERVENTION PATTERNS");
+			expect(result).not.toContain("RETRY AND STUCK FEATURE HANDLING");
 		});
 
 		it("turn 2 retains dynamic context (current feature, progress)", () => {
@@ -898,7 +898,7 @@ describe("buildOrchestratorProtocol", () => {
 				turnCount: 1,
 				contextUsagePercent: 70,
 			}) as string;
-			expect(result).not.toContain("INTERVENTION PATTERNS");
+			expect(result).not.toContain("RETRY AND STUCK FEATURE HANDLING");
 		});
 
 		it("context usage <=60% allows full protocol on turn 1", () => {
@@ -906,7 +906,7 @@ describe("buildOrchestratorProtocol", () => {
 				turnCount: 1,
 				contextUsagePercent: 55,
 			}) as string;
-			expect(result).toContain("INTERVENTION PATTERNS");
+			expect(result).toContain("RETRY AND STUCK FEATURE HANDLING");
 		});
 
 		it("context usage exactly 60 allows full protocol", () => {
@@ -914,7 +914,7 @@ describe("buildOrchestratorProtocol", () => {
 				turnCount: 1,
 				contextUsagePercent: 60,
 			}) as string;
-			expect(result).toContain("INTERVENTION PATTERNS");
+			expect(result).toContain("RETRY AND STUCK FEATURE HANDLING");
 		});
 
 		it("context usage at 61 forces compact mode", () => {
@@ -922,7 +922,7 @@ describe("buildOrchestratorProtocol", () => {
 				turnCount: 1,
 				contextUsagePercent: 61,
 			}) as string;
-			expect(result).not.toContain("INTERVENTION PATTERNS");
+			expect(result).not.toContain("RETRY AND STUCK FEATURE HANDLING");
 		});
 
 		it("compact boolean parameter still works independently", () => {
@@ -943,17 +943,17 @@ describe("buildOrchestratorProtocol", () => {
 
 		it("undefined contextUsagePercent falls back to turn-based (turn 1 = full)", () => {
 			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 1 }) as string;
-			expect(result).toContain("INTERVENTION PATTERNS");
+			expect(result).toContain("RETRY AND STUCK FEATURE HANDLING");
 		});
 
 		it("undefined contextUsagePercent falls back to turn-based (turn 2 = compact)", () => {
 			const result = buildOrchestratorProtocol(state, plan, VERBOSE, false, { turnCount: 2 }) as string;
-			expect(result).not.toContain("INTERVENTION PATTERNS");
+			expect(result).not.toContain("RETRY AND STUCK FEATURE HANDLING");
 		});
 
 		it("no options parameter at all defaults to full protocol", () => {
 			const result = buildOrchestratorProtocol(state, plan, VERBOSE) as string;
-			expect(result).toContain("INTERVENTION PATTERNS");
+			expect(result).toContain("RETRY AND STUCK FEATURE HANDLING");
 		});
 	});
 

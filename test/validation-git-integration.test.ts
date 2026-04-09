@@ -3,6 +3,13 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+
+function parseValidationResult(text: string): ValidationResult {
+	const jsonEnd = text.indexOf("\n\n");
+	const jsonStr = jsonEnd === -1 ? text : text.slice(0, jsonEnd);
+	return JSON.parse(jsonStr) as ValidationResult;
+}
+
 import { loadPlan, loadState, savePlan, saveState } from "../extensions/state/manager.js";
 import { readHistory } from "../extensions/state/plan-history.js";
 import { registerCommitChangesTool } from "../extensions/tools/commit-changes.js";
@@ -109,7 +116,7 @@ describe("VAL-CROSS-004: validation failure -> fix feature -> re-validation", ()
 
 		const result = await invokeTool(tools, "run_validation", { milestoneId: "m1" });
 
-		const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+		const parsed = parseValidationResult(result.content[0].text);
 		expect(parsed.status).toBe("fail");
 		expect(parsed.failingChecks.length).toBeGreaterThan(0);
 		expect(parsed.milestoneId).toBe("m1");
@@ -245,7 +252,7 @@ describe("VAL-CROSS-004: validation failure -> fix feature -> re-validation", ()
 
 		// First validation fails
 		const firstResult = await invokeTool(tools, "run_validation", { milestoneId: "m1" });
-		const firstParsed = JSON.parse(firstResult.content[0].text) as ValidationResult;
+		const firstParsed = parseValidationResult(firstResult.content[0].text);
 		expect(firstParsed.status).toBe("fail");
 
 		// Create fix feature
@@ -264,7 +271,7 @@ describe("VAL-CROSS-004: validation failure -> fix feature -> re-validation", ()
 
 		// Re-run validation (passes on second call)
 		const secondResult = await invokeTool(tools, "run_validation", { milestoneId: "m1" });
-		const secondParsed = JSON.parse(secondResult.content[0].text) as ValidationResult;
+		const secondParsed = parseValidationResult(secondResult.content[0].text);
 		expect(secondParsed.status).toBe("pass");
 
 		// plan history has the add-fix-feature mutation
@@ -336,9 +343,9 @@ describe("VAL-CROSS-004: validation failure -> fix feature -> re-validation", ()
 		);
 
 		// 1. Validation fails
-		const v1 = JSON.parse(
+		const v1 = parseValidationResult(
 			(await invokeTool(tools, "run_validation", { milestoneId: "m1" })).content[0].text,
-		) as ValidationResult;
+		);
 		expect(v1.status).toBe("fail");
 
 		// 2. Create fix feature
@@ -356,9 +363,9 @@ describe("VAL-CROSS-004: validation failure -> fix feature -> re-validation", ()
 		expect(stateAfterFix?.totalFixFeaturesCreated).toBe(1);
 
 		// 4. Re-validation passes
-		const v2 = JSON.parse(
+		const v2 = parseValidationResult(
 			(await invokeTool(tools, "run_validation", { milestoneId: "m1" })).content[0].text,
-		) as ValidationResult;
+		);
 		expect(v2.status).toBe("pass");
 
 		// 5. Progress log has validation_start, validation_fail, fix_feature_created, validation_start, validation_pass
@@ -608,7 +615,7 @@ describe("VAL-CROSS-010: dirty repo handling through full lifecycle", () => {
 		// Validation should proceed even with dirty repo
 		const result = await invokeTool(tools, "run_validation", { milestoneId: "m1" });
 
-		const parsed = JSON.parse(result.content[0].text) as ValidationResult;
+		const parsed = parseValidationResult(result.content[0].text);
 		expect(parsed.status).toBe("pass");
 	});
 

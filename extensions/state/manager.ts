@@ -161,7 +161,10 @@ function mergeConfig(defaults: MissionConfig, overrides: MissionConfig): Mission
 	return {
 		...defaults,
 		...overrides,
-		models: overrides.models ?? defaults.models,
+		models: overrides.models ? { ...defaults.models, ...overrides.models } : defaults.models,
+		modelByComplexity: overrides.modelByComplexity
+			? { ...defaults.modelByComplexity, ...overrides.modelByComplexity }
+			: defaults.modelByComplexity,
 		validation: overrides.validation ? { ...defaults.validation, ...overrides.validation } : defaults.validation,
 		git: overrides.git ? { ...defaults.git, ...overrides.git } : defaults.git,
 	};

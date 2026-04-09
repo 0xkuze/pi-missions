@@ -53,11 +53,14 @@ function normalizeFilePaths(files: string[], projectDir?: string): string[] {
 
 function extractFilesChanged(events: ParsedEvent[]): string[] {
 	const files = new Set<string>();
+	const startArgs = buildStartArgsMap(events);
 	for (const event of events) {
 		if (event.type !== "tool_execution_end") continue;
 		const toolName = event.toolName as string | undefined;
 		if (toolName !== "write" && toolName !== "edit") continue;
-		const args = event.args as Record<string, unknown> | undefined;
+		const endArgs = event.args as Record<string, unknown> | undefined;
+		const callId = event.toolCallId as string | undefined;
+		const args = endArgs ?? (callId ? startArgs.get(callId) : undefined);
 		if (typeof args?.path === "string") {
 			files.add(args.path);
 			continue;
@@ -68,6 +71,20 @@ function extractFilesChanged(events: ParsedEvent[]): string[] {
 	return Array.from(files);
 }
 
+function extractExitCodeFromText(text: string): number | null {
+	const patterns = [
+		/Command exited with code (\d+)/,
+		/exit code:?\s*(\d+)/i,
+		/exited with:?\s*(\d+)/i,
+		/\bexit\s+(\d+)\b/,
+	];
+	for (const pattern of patterns) {
+		const match = pattern.exec(text);
+		if (match) return Number.parseInt(match[1]!, 10);
+	}
+	return null;
+}
+
 function extractCommandFromResult(event: ParsedEvent): { command: string; exitCode: number | null } | null {
 	const result = event.result as Record<string, unknown> | undefined;
 	if (!result) return null;
@@ -75,9 +92,7 @@ function extractCommandFromResult(event: ParsedEvent): { command: string; exitCo
 	if (!Array.isArray(content)) return null;
 	for (const block of content) {
 		if (block.type !== "text" || typeof block.text !== "string") continue;
-		const text = block.text;
-		const exitMatch = /Command exited with code (\d+)/.exec(text);
-		const exitCode = exitMatch ? Number.parseInt(exitMatch[1], 10) : null;
+		const exitCode = extractExitCodeFromText(block.text);
 		return { command: "(unknown)", exitCode };
 	}
 	return null;
@@ -107,7 +122,20 @@ function extractCommandsRun(events: ParsedEvent[]): Array<{ command: string; exi
 			| undefined;
 		if (typeof args?.command === "string") {
 			const result = event.result as Record<string, unknown> | undefined;
-			const exitCode = typeof result?.exitCode === "number" ? result.exitCode : null;
+			let exitCode: number | null = null;
+			if (typeof result?.exitCode === "number") exitCode = result.exitCode;
+			else if (typeof result?.code === "number") exitCode = result.code;
+			if (exitCode === null) {
+				const content = result?.content as Array<Record<string, unknown>> | undefined;
+				if (Array.isArray(content)) {
+					for (const block of content) {
+						if (block.type === "text" && typeof block.text === "string") {
+							exitCode = extractExitCodeFromText(block.text);
+							if (exitCode !== null) break;
+						}
+					}
+				}
+			}
 			commands.push({ command: args.command, exitCode });
 			continue;
 		}
@@ -248,10 +276,14 @@ function appendStderrToSummary(summary: string, stderr: string): string {
 }
 
 function extractHandoffArgs(events: ParsedEvent[]): Record<string, unknown> | null {
+	const startArgs = buildStartArgsMap(events);
 	for (const event of events) {
 		if (event.type !== "tool_execution_end") continue;
 		if (event.toolName !== "report_result") continue;
-		const args = event.args;
+		if (event.isError === true) return null;
+		const endArgs = event.args;
+		const callId = event.toolCallId as string | undefined;
+		const args = endArgs ?? (callId ? startArgs.get(callId) : undefined);
 		if (args !== null && args !== undefined && typeof args === "object" && !Array.isArray(args)) {
 			return args as Record<string, unknown>;
 		}
@@ -282,21 +314,27 @@ function validateHandoff(args: Record<string, unknown>): WorkerHandoff | null {
 	const discoveredIssues = coerceArrayField(args.discoveredIssues);
 
 	const validSeverities = new Set(["low", "medium", "high"]);
-	for (const cmd of commandsRun as Array<Record<string, unknown>>) {
-		if (typeof cmd.command !== "string" || typeof cmd.exitCode !== "number" || typeof cmd.observation !== "string") {
+	for (const cmd of commandsRun) {
+		if (typeof cmd !== "object" || cmd === null) return null;
+		const c = cmd as Record<string, unknown>;
+		if (typeof c.command !== "string" || typeof c.exitCode !== "number" || typeof c.observation !== "string") {
 			return null;
 		}
 	}
-	for (const test of testsAdded as Array<Record<string, unknown>>) {
-		if (typeof test.file !== "string" || !Array.isArray(test.cases)) return null;
-		for (const c of test.cases as unknown[]) {
+	for (const test of testsAdded) {
+		if (typeof test !== "object" || test === null) return null;
+		const t = test as Record<string, unknown>;
+		if (typeof t.file !== "string" || !Array.isArray(t.cases)) return null;
+		for (const c of t.cases as unknown[]) {
 			if (typeof c !== "string") return null;
 		}
 	}
-	for (const issue of discoveredIssues as Array<Record<string, unknown>>) {
-		if (typeof issue.severity !== "string" || !validSeverities.has(issue.severity)) return null;
-		if (typeof issue.description !== "string") return null;
-		if (issue.suggestedFix !== undefined && typeof issue.suggestedFix !== "string") return null;
+	for (const issue of discoveredIssues) {
+		if (typeof issue !== "object" || issue === null) return null;
+		const iss = issue as Record<string, unknown>;
+		if (typeof iss.severity !== "string" || !validSeverities.has(iss.severity)) return null;
+		if (typeof iss.description !== "string") return null;
+		if (iss.suggestedFix !== undefined && typeof iss.suggestedFix !== "string") return null;
 	}
 
 	return {

@@ -421,27 +421,10 @@ describe("buildWidgetLines", () => {
 		});
 	});
 
-	describe("updateWidget export", () => {
-		it("updateWidget is exported from widget module", async () => {
+	describe("updateWidget export (removed)", () => {
+		it("updateWidget is no longer exported (dead code removed)", async () => {
 			const mod = await import("../../extensions/ui/widget.js");
-			expect(typeof mod.updateWidget).toBe("function");
-		});
-
-		it("updateWidget calls setWidget with mission name and widget lines", () => {
-			const { updateWidget } = require("../../extensions/ui/widget.js");
-			const setWidget = (() => {
-				const calls: Array<[string, string[]]> = [];
-				return {
-					calls,
-					fn: (name: string, lines: string[]) => calls.push([name, lines]),
-				};
-			})();
-			const ui = { setWidget: setWidget.fn };
-			const state = makeState("planning");
-			updateWidget(ui, state);
-			expect(setWidget.calls.length).toBe(1);
-			expect(setWidget.calls[0]![0]).toBe("mission");
-			expect(Array.isArray(setWidget.calls[0]![1])).toBe(true);
+			expect((mod as Record<string, unknown>).updateWidget).toBeUndefined();
 		});
 	});
 

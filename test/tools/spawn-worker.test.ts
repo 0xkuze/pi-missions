@@ -790,7 +790,7 @@ describe("registerSpawnWorkerTool", () => {
 			expect(savedPlan?.milestones[0].features[0].completedAt).toBeDefined();
 		});
 
-		it("on failure: feature stays active and increments totalFeaturesFailed", async () => {
+		it("on failure: feature stays active, totalFeaturesFailed not incremented until retries exhausted", async () => {
 			const failMock = makeMockSpawn({
 				stdoutLines: [makeMessageEndLine("assistant", "Failed.")],
 				exitCode: 1,
@@ -805,9 +805,9 @@ describe("registerSpawnWorkerTool", () => {
 			const { loadState, loadPlan } = await import("../../extensions/state/manager.js");
 			const savedState = loadState(testDir);
 			const savedPlan = loadPlan(testDir);
-			expect(savedState?.totalFeaturesFailed).toBe(1);
+			expect(savedState?.totalFeaturesFailed).toBe(0);
 			const feat = savedPlan?.milestones[0].features[0];
-			expect(feat?.status === "active" || feat?.status === "failed").toBe(true);
+			expect(feat?.status).toBe("active");
 		});
 
 		it("on failure with retries exhausted: feature status becomes failed", async () => {
@@ -1277,7 +1277,7 @@ describe("registerSpawnWorkerTool", () => {
 			expect(result.content[0].text).toContain("Feature Two");
 		});
 
-		it("instructs to call complete_mission when no more pending features", async () => {
+		it("instructs to call run_validation then complete_mission when milestone auto-completes", async () => {
 			const state = localMakeState({ status: "executing" });
 			saveState(testDir, state);
 			const feat1 = localMakeFeature({ id: "feat-1", name: "Feature One", status: "pending" });
@@ -1286,7 +1286,8 @@ describe("registerSpawnWorkerTool", () => {
 			saveConfig(testDir, { validatorStrictness: "lenient" });
 			registerTool(mockSpawnFn);
 			const result = await executeFn!("id", { featureId: "feat-1" });
-			expect(result.content[0].text).toContain("ALL FEATURES DONE");
+			expect(result.content[0].text).toContain("run_validation");
+			expect(result.content[0].text).toContain("run_scrutiny");
 			expect(result.content[0].text).toContain("complete_mission");
 		});
 
@@ -1654,7 +1655,7 @@ describe("registerSpawnWorkerTool", () => {
 		});
 	});
 
-	describe("VAL-SELFCORR-001: non-empty whatWasLeftUndone triggers fix feature at medium/high autonomy", () => {
+	describe("VAL-SELFCORR-001: whatWasLeftUndone is surfaced in result text but does NOT auto-create fix features", () => {
 		function makeReportResultWithUndone(whatWasLeftUndone: string): string {
 			return JSON.stringify({
 				type: "tool_execution_end",
@@ -1671,7 +1672,7 @@ describe("registerSpawnWorkerTool", () => {
 			});
 		}
 
-		it("creates fix feature when whatWasLeftUndone is non-empty and autonomy is high", async () => {
+		it("surfaces whatWasLeftUndone in result text for orchestrator to decide", async () => {
 			const spawnWithUndone = makeMockSpawn({
 				stdoutLines: [
 					makeReportResultWithUndone("Error logging not implemented"),
@@ -1689,19 +1690,16 @@ describe("registerSpawnWorkerTool", () => {
 			registerTool(spawnWithUndone);
 
 			const result = await executeFn!("id", { featureId: "feat-1" });
-			expect(result.content[0].text).toContain("Self-correction");
-			expect(result.content[0].text).toContain("fix feature");
+			expect(result.content[0].text).toContain("left undone");
+			expect(result.content[0].text).toContain("Error logging not implemented");
 
 			const { loadPlan } = await import("../../extensions/state/manager.js");
 			const savedPlan = loadPlan(testDir)!;
 			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
-			expect(fixFeatures.length).toBe(1);
-			expect(fixFeatures[0].fixOrigin!.sourceKind).toBe("worker-failure");
-			expect(fixFeatures[0].fixOrigin!.sourceFeatureId).toBe("feat-1");
-			expect(fixFeatures[0].description).toContain("Error logging not implemented");
+			expect(fixFeatures.length).toBe(0);
 		});
 
-		it("creates fix feature when whatWasLeftUndone is non-empty and autonomy is medium", async () => {
+		it("does NOT create fix feature even with non-empty whatWasLeftUndone at medium autonomy", async () => {
 			const spawnWithUndone = makeMockSpawn({
 				stdoutLines: [
 					makeReportResultWithUndone("Missing edge case handling"),
@@ -1718,13 +1716,12 @@ describe("registerSpawnWorkerTool", () => {
 			saveConfig(testDir, { autonomy: "medium" });
 			registerTool(spawnWithUndone);
 
-			const result = await executeFn!("id", { featureId: "feat-1" });
-			expect(result.content[0].text).toContain("Self-correction");
+			await executeFn!("id", { featureId: "feat-1" });
 
 			const { loadPlan } = await import("../../extensions/state/manager.js");
 			const savedPlan = loadPlan(testDir)!;
 			const fixFeatures = savedPlan.milestones[0].features.filter((f) => f.fixOrigin !== undefined);
-			expect(fixFeatures.length).toBe(1);
+			expect(fixFeatures.length).toBe(0);
 		});
 
 		it("does NOT create fix feature when whatWasLeftUndone is empty", async () => {
@@ -1830,16 +1827,16 @@ describe("registerSpawnWorkerTool", () => {
 	});
 
 	describe("VAL-SELFCORR-003: self-correction respects autonomy level", () => {
-		function makeReportResultWithUndone(whatWasLeftUndone: string): string {
+		function makeReportResultWithHighIssue(description: string): string {
 			return JSON.stringify({
 				type: "tool_execution_end",
 				toolName: "report_result",
 				args: {
 					whatWasImplemented: "Partial implementation",
-					whatWasLeftUndone,
+					whatWasLeftUndone: "",
 					commandsRun: [],
 					testsAdded: [],
-					discoveredIssues: [],
+					discoveredIssues: [{ severity: "high", description }],
 				},
 				result: { content: [{ type: "text", text: "Report submitted." }] },
 				isError: false,
@@ -1847,9 +1844,9 @@ describe("registerSpawnWorkerTool", () => {
 		}
 
 		it("low autonomy: does NOT auto-create fix, includes issue details in return text", async () => {
-			const spawnWithUndone = makeMockSpawn({
+			const spawnWithIssue = makeMockSpawn({
 				stdoutLines: [
-					makeReportResultWithUndone("Error handling not done"),
+					makeReportResultWithHighIssue("Error handling not done"),
 					makeMessageEndLine("assistant", "Partial work."),
 				],
 				exitCode: 0,
@@ -1861,7 +1858,7 @@ describe("registerSpawnWorkerTool", () => {
 			saveState(testDir, state);
 			savePlan(testDir, plan);
 			saveConfig(testDir, { autonomy: "low" });
-			registerTool(spawnWithUndone);
+			registerTool(spawnWithIssue);
 
 			const result = await executeFn!("id", { featureId: "feat-1" });
 			expect(result.content[0].text).toContain("Self-correction");
@@ -1873,9 +1870,9 @@ describe("registerSpawnWorkerTool", () => {
 			expect(fixFeatures.length).toBe(0);
 		});
 
-		it("medium autonomy: auto-creates fix feature", async () => {
-			const spawnWithUndone = makeMockSpawn({
-				stdoutLines: [makeReportResultWithUndone("Missing tests"), makeMessageEndLine("assistant", "Partial.")],
+		it("medium autonomy: auto-creates fix feature for high-severity issue", async () => {
+			const spawnWithIssue = makeMockSpawn({
+				stdoutLines: [makeReportResultWithHighIssue("Missing tests"), makeMessageEndLine("assistant", "Partial.")],
 				exitCode: 0,
 			});
 			const state = localMakeState({ status: "executing", currentMilestoneId: "milestone-1" });
@@ -1885,7 +1882,7 @@ describe("registerSpawnWorkerTool", () => {
 			saveState(testDir, state);
 			savePlan(testDir, plan);
 			saveConfig(testDir, { autonomy: "medium" });
-			registerTool(spawnWithUndone);
+			registerTool(spawnWithIssue);
 
 			await executeFn!("id", { featureId: "feat-1" });
 
@@ -1895,10 +1892,10 @@ describe("registerSpawnWorkerTool", () => {
 			expect(fixFeatures.length).toBe(1);
 		});
 
-		it("high autonomy: auto-creates fix feature", async () => {
-			const spawnWithUndone = makeMockSpawn({
+		it("high autonomy: auto-creates fix feature for high-severity issue", async () => {
+			const spawnWithIssue = makeMockSpawn({
 				stdoutLines: [
-					makeReportResultWithUndone("Incomplete feature"),
+					makeReportResultWithHighIssue("Incomplete feature"),
 					makeMessageEndLine("assistant", "Partial."),
 				],
 				exitCode: 0,
@@ -1910,7 +1907,7 @@ describe("registerSpawnWorkerTool", () => {
 			saveState(testDir, state);
 			savePlan(testDir, plan);
 			saveConfig(testDir, { autonomy: "high" });
-			registerTool(spawnWithUndone);
+			registerTool(spawnWithIssue);
 
 			await executeFn!("id", { featureId: "feat-1" });
 
@@ -1920,10 +1917,10 @@ describe("registerSpawnWorkerTool", () => {
 			expect(fixFeatures.length).toBe(1);
 		});
 
-		it("default autonomy (undefined): auto-creates fix feature", async () => {
-			const spawnWithUndone = makeMockSpawn({
+		it("default autonomy (undefined): auto-creates fix feature for high-severity issue", async () => {
+			const spawnWithIssue = makeMockSpawn({
 				stdoutLines: [
-					makeReportResultWithUndone("Incomplete feature"),
+					makeReportResultWithHighIssue("Incomplete feature"),
 					makeMessageEndLine("assistant", "Partial."),
 				],
 				exitCode: 0,
@@ -1934,7 +1931,7 @@ describe("registerSpawnWorkerTool", () => {
 			const plan = localMakePlan([milestone]);
 			saveState(testDir, state);
 			savePlan(testDir, plan);
-			registerTool(spawnWithUndone);
+			registerTool(spawnWithIssue);
 
 			await executeFn!("id", { featureId: "feat-1" });
 
@@ -2013,7 +2010,6 @@ describe("registerSpawnWorkerTool", () => {
 				(f) => f.fixOrigin !== undefined && f.id !== "feat-1",
 			);
 			expect(fixFeature).toBeDefined();
-			expect(fixFeature!.description).toContain("Missing error handling");
 			expect(fixFeature!.description).toContain("Race condition in cache");
 		});
 
@@ -2085,16 +2081,16 @@ describe("registerSpawnWorkerTool", () => {
 	});
 
 	describe("self-correction ordering: performSelfCorrection before autoCompleteMilestone", () => {
-		function makeReportResultWithUndone(whatWasLeftUndone: string): string {
+		function makeReportResultWithHighSeverity(description: string): string {
 			return JSON.stringify({
 				type: "tool_execution_end",
 				toolName: "report_result",
 				args: {
 					whatWasImplemented: "Partial implementation",
-					whatWasLeftUndone,
+					whatWasLeftUndone: "",
 					commandsRun: [],
 					testsAdded: [],
-					discoveredIssues: [],
+					discoveredIssues: [{ severity: "high", description }],
 				},
 				result: { content: [{ type: "text", text: "Report submitted." }] },
 				isError: false,
@@ -2102,9 +2098,9 @@ describe("registerSpawnWorkerTool", () => {
 		}
 
 		it("milestone is NOT auto-completed when self-correction creates a fix feature (pending fix feature remains)", async () => {
-			const spawnWithUndone = makeMockSpawn({
+			const spawnWithIssue = makeMockSpawn({
 				stdoutLines: [
-					makeReportResultWithUndone("Error logging not implemented"),
+					makeReportResultWithHighSeverity("Error logging not implemented"),
 					makeMessageEndLine("assistant", "Worker completed with partial work."),
 				],
 				exitCode: 0,
@@ -2116,7 +2112,7 @@ describe("registerSpawnWorkerTool", () => {
 			saveState(testDir, state);
 			savePlan(testDir, plan);
 			saveConfig(testDir, { autonomy: "high" });
-			registerTool(spawnWithUndone);
+			registerTool(spawnWithIssue);
 
 			await executeFn!("id", { featureId: "feat-1" });
 
